@@ -1060,11 +1060,53 @@ Would you like to know more about his academic performance this week?</div>
 
 <script>
 // ——— View switcher ———
+let adminToken = null;
+
 function switchView(view) {
+  if (view === 'dashboard' && !adminToken) {
+    showAdminLogin();
+    return;
+  }
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(view + '-view').classList.add('active');
   event.target.classList.add('active');
+}
+
+function showAdminLogin() {
+  document.getElementById('admin-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('admin-password-input').focus(), 100);
+}
+
+function hideAdminLogin() {
+  document.getElementById('admin-modal').style.display = 'none';
+  document.getElementById('admin-password-input').value = '';
+  document.getElementById('admin-login-error').style.display = 'none';
+}
+
+async function submitAdminLogin() {
+  const password = document.getElementById('admin-password-input').value;
+  if (!password) return;
+  try {
+    const res = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    const data = await res.json();
+    if (data.success) {
+      adminToken = data.token;
+      hideAdminLogin();
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('dashboard-view').classList.add('active');
+      document.querySelectorAll('.tab-btn')[1].classList.add('active');
+    } else {
+      document.getElementById('admin-login-error').style.display = 'block';
+    }
+  } catch(e) {
+    document.getElementById('admin-login-error').style.display = 'block';
+  }
 }
 
 // ——— Contact selection ———
@@ -1211,5 +1253,28 @@ function autoResize(el) {
   el.style.height = Math.min(el.scrollHeight, 100) + 'px';
 }
 </script>
+
+<!-- Admin Login Modal -->
+<div id="admin-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:white; border-radius:16px; padding:32px; width:340px; box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+    <div style="text-align:center; margin-bottom:24px;">
+      <div style="font-size:36px; margin-bottom:8px;">🔒</div>
+      <div style="font-size:18px; font-weight:600; color:#111b21;">Admin Access</div>
+      <div style="font-size:13px; color:#667781; margin-top:4px;">Enter your password to continue</div>
+    </div>
+    <input id="admin-password-input" type="password" placeholder="Enter admin password"
+      style="width:100%; padding:12px 16px; border:1.5px solid #e9edef; border-radius:8px; font-size:14px; font-family:DM Sans,sans-serif; outline:none; margin-bottom:8px;"
+      onkeydown="if(event.key==='Enter') submitAdminLogin()">
+    <div id="admin-login-error" style="display:none; color:#e53935; font-size:12px; margin-bottom:8px;">Wrong password. Try again.</div>
+    <button onclick="submitAdminLogin()"
+      style="width:100%; background:#1a7a4a; color:white; border:none; border-radius:8px; padding:12px; font-size:14px; font-weight:600; font-family:DM Sans,sans-serif; cursor:pointer; margin-bottom:8px;">
+      Login
+    </button>
+    <button onclick="hideAdminLogin()"
+      style="width:100%; background:none; color:#667781; border:1px solid #e9edef; border-radius:8px; padding:10px; font-size:13px; font-family:DM Sans,sans-serif; cursor:pointer;">
+      Cancel
+    </button>
+  </div>
+</div>
 </body>
 </html>

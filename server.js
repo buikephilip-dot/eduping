@@ -84,9 +84,8 @@ async function callAnthropic(prompt, messages) {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is missing');
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const response = await client.messages.create({
-    model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest',
+    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
     max_tokens: 500,
-    temperature: 0.4,
     system: prompt,
     messages
   });
@@ -118,11 +117,31 @@ async function askAI(userMessage, history = []) {
   return { reply, student };
 }
 
+// Admin auth middleware
+function checkAdmin(req, res, next) {
+  const token = req.headers['x-admin-token'] || req.query.token;
+  const password = process.env.ADMIN_PASSWORD || 'admin';
+  if (token !== password) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+}
+
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, service: 'EduPing MVP', time: new Date().toISOString() });
 });
 
-app.get('/api/dashboard', async (req, res, next) => {
+// Admin login
+app.post('/api/admin/login', (req, res) => {
+  const { password } = req.body;
+  const adminPassword = process.env.ADMIN_PASSWORD || 'admin';
+  if (password === adminPassword) {
+    res.json({ success: true, token: adminPassword });
+  } else {
+    res.status(401).json({ error: 'Wrong password' });
+  }
+});
+
+// Protected dashboard
+app.get('/api/dashboard', checkAdmin, async (req, res, next) => {
   try {
     const db = await readDb();
     const outstanding = db.students.filter(s => s.fees.outstanding !== '₦0').length;
@@ -139,7 +158,7 @@ app.get('/api/dashboard', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-app.get('/api/students/:id', async (req, res, next) => {
+app.get('/api/students/:id', checkAdmin, async (req, res, next) => {
   try {
     const db = await readDb();
     const student = db.students.find(s => s.id === req.params.id);
@@ -157,7 +176,7 @@ app.post('/api/chat', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-app.post('/api/broadcast', async (req, res, next) => {
+app.post('/api/broadcast', checkAdmin, async (req, res, next) => {
   try {
     const { message, to } = req.body;
     if (!message) return res.status(400).json({ error: 'message is required' });
