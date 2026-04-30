@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EduPing — School AI Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Playfair+Display:wght@600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green: #1a7a4a;
+    --green-light: #25a865;
+    --green-pale: #e8f5ee;
+    --green-bubble: #dcf8c6;
+    --gray-bg: #f0f2f5;
+    --gray-bubble: #ffffff;
+    --text: #111b21;
+    --text-muted: #667781;
+    --accent: #128c7e;
+    --gold: #c9a84c;
+    --sidebar-bg: #ffffff;
+    --header-bg: #1a7a4a;
+    --danger: #e53935;
+    --warning: #f59e0b;
+    --info: #3b82f6;
+    --radius: 10px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--gray-bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* TOP NAV */
+  .topnav {
+    background: var(--header-bg);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    height: 56px;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    z-index: 100;
+  }
+  .topnav-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .topnav-logo {
+    width: 32px; height: 32px;
+    background: white;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .topnav-name {
+    font-family: 'Playfair Display', serif;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .topnav-school {
+    font-size: 12px;
+    opacity: 0.8;
+    margin-top: -2px;
+  }
+  .topnav-tabs {
+    display: flex;
+    gap: 4px;
+  }
+  .tab-btn {
+    background: rgba(255,255,255,0.15);
+    border: none;
+    color: white;
+    padding: 7px 18px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+  }
+  .tab-btn.active {
+    background: white;
+    color: var(--green);
+  }
+  .tab-btn:hover:not(.active) {
+    background: rgba(255,255,255,0.25);
+  }
+
+  /* MAIN LAYOUT */
+  .main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* VIEWS */
+  .view { display: none; width: 100%; }
+  .view.active { display: flex; }
+
+  /* ==============================
+     CHAT VIEW
+  ============================== */
+  .chat-view {
+    display: flex;
+    width: 100%;
+  }
+
+  /* Contacts sidebar */
+  .contacts-panel {
+    width: 340px;
+    flex-shrink: 0;
+    background: white;
+    border-right: 1px solid #e9edef;
+    display: flex;
+    flex-direction: column;
+  }
+  .contacts-header {
+    padding: 16px;
+    border-bottom: 1px solid #e9edef;
+  }
+  .contacts-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: var(--text);
+  }
+  .search-box {
+    background: var(--gray-bg);
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    width: 100%;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    color: var(--text);
+    outline: none;
+  }
+  .contacts-list {
+    flex: 1;
+    overflow-y: auto;
+  }
+  .contact-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f2f5;
+    transition: background 0.15s;
+  }
+  .contact-item:hover, .contact-item.active {
+    background: var(--green-pale);
+  }
+  .contact-avatar {
+    width: 46px; height: 46px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    font-weight: 600;
+    color: white;
+    flex-shrink: 0;
+    font-size: 16px;
+  }
+  .contact-info { flex: 1; min-width: 0; }
+  .contact-name { font-weight: 500; font-size: 14px; }
+  .contact-preview {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+  }
+  .contact-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+  .contact-time { font-size: 11px; color: var(--text-muted); }
+  .unread-badge {
+    background: var(--green-light);
+    color: white;
+    border-radius: 50%;
+    width: 18px; height: 18px;
+    font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600;
+  }
+
+  /* Chat area */
+  .chat-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #efeae2;
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d9d3c9' fill-opacity='0.3'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
+  .chat-header {
+    background: var(--header-bg);
+    color: white;
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .chat-header-avatar {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  .chat-header-name { font-weight: 600; font-size: 15px; }
+  .chat-header-status { font-size: 12px; opacity: 0.8; }
+  .chat-header-right { margin-left: auto; display: flex; gap: 12px; }
+  .header-icon-btn {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 18px;
+    opacity: 0.9;
+  }
+
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .date-divider {
+    text-align: center;
+    margin: 12px 0;
+  }
+  .date-divider span {
+    background: rgba(255,255,255,0.85);
+    padding: 4px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  }
+
+  .msg {
+    max-width: 65%;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .msg.sent { align-self: flex-end; }
+  .msg.received { align-self: flex-start; }
+
+  .msg-bubble {
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.5;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    position: relative;
+    white-space: pre-wrap;
+  }
+  .msg.sent .msg-bubble {
+    background: var(--green-bubble);
+    border-top-right-radius: 2px;
+  }
+  .msg.received .msg-bubble {
+    background: white;
+    border-top-left-radius: 2px;
+  }
+  .msg-time {
+    font-size: 11px;
+    color: var(--text-muted);
+    align-self: flex-end;
+  }
+  .msg.received .msg-time { align-self: flex-start; }
+  .msg-tick { color: #53bdeb; font-size: 13px; }
+
+  .typing-indicator {
+    display: none;
+    align-self: flex-start;
+  }
+  .typing-indicator.show { display: flex; }
+  .typing-bubble {
+    background: white;
+    border-radius: 18px;
+    padding: 10px 14px;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  }
+  .typing-dot {
+    width: 7px; height: 7px;
+    background: #90a0aa;
+    border-radius: 50%;
+    animation: typingBounce 1.2s infinite;
+  }
+  .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typingBounce {
+    0%,60%,100% { transform: translateY(0); }
+    30% { transform: translateY(-6px); }
+  }
+
+  .chat-input-bar {
+    background: var(--gray-bg);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .chat-input {
+    flex: 1;
+    background: white;
+    border: none;
+    border-radius: 24px;
+    padding: 10px 18px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    outline: none;
+    color: var(--text);
+    resize: none;
+    max-height: 100px;
+    line-height: 1.5;
+  }
+  .send-btn {
+    width: 46px; height: 46px;
+    background: var(--green);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .send-btn:hover { background: var(--green-light); }
+
+  .quick-replies {
+    padding: 8px 16px 0;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .qr-btn {
+    background: white;
+    border: 1.5px solid var(--green);
+    color: var(--green);
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: 12px;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+  }
+  .qr-btn:hover {
+    background: var(--green);
+    color: white;
+  }
+
+  /* ==============================
+     DASHBOARD VIEW
+  ============================== */
+  .dashboard-view {
+    width: 100%;
+    overflow-y: auto;
+    padding: 28px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .dash-welcome {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .dash-welcome h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 24px;
+    color: var(--text);
+  }
+  .dash-welcome p { color: var(--text-muted); font-size: 14px; margin-top: 4px; }
+  .dash-date {
+    background: white;
+    padding: 8px 16px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    color: var(--text-muted);
+    box-shadow: var(--shadow);
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+  .stat-card {
+    background: white;
+    border-radius: var(--radius);
+    padding: 20px;
+    box-shadow: var(--shadow);
+    border-left: 4px solid transparent;
+    transition: transform 0.2s;
+  }
+  .stat-card:hover { transform: translateY(-2px); }
+  .stat-card.green { border-color: var(--green); }
+  .stat-card.gold { border-color: var(--gold); }
+  .stat-card.blue { border-color: var(--info); }
+  .stat-card.red { border-color: var(--danger); }
+  .stat-icon { font-size: 24px; margin-bottom: 10px; }
+  .stat-value { font-size: 28px; font-weight: 600; color: var(--text); }
+  .stat-label { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+  .stat-change { font-size: 12px; margin-top: 6px; }
+  .stat-change.up { color: var(--green); }
+  .stat-change.down { color: var(--danger); }
+
+  .dash-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  .dash-card {
+    background: white;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .dash-card-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #f0f2f5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .dash-card-title { font-weight: 600; font-size: 15px; }
+  .dash-card-action {
+    font-size: 12px;
+    color: var(--green);
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .dash-card-body { padding: 16px 20px; }
+
+  /* Recent conversations */
+  .convo-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f5f5f5;
+  }
+  .convo-item:last-child { border-bottom: none; }
+  .convo-avatar {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600;
+    font-size: 14px;
+    color: white;
+    flex-shrink: 0;
+  }
+  .convo-name { font-weight: 500; font-size: 14px; }
+  .convo-msg { font-size: 12px; color: var(--text-muted); }
+  .convo-time { font-size: 11px; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
+  .convo-tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-weight: 500;
+    margin-left: 8px;
+  }
+  .tag-fee { background: #fef3c7; color: #92400e; }
+  .tag-result { background: #d1fae5; color: #065f46; }
+  .tag-attend { background: #dbeafe; color: #1e3a8a; }
+  .tag-admit { background: #ede9fe; color: #4c1d95; }
+
+  /* Weekly report table */
+  .report-table { width: 100%; border-collapse: collapse; }
+  .report-table th {
+    text-align: left;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+    padding: 6px 8px;
+    border-bottom: 1px solid #f0f2f5;
+  }
+  .report-table td {
+    padding: 10px 8px;
+    font-size: 13px;
+    border-bottom: 1px solid #f9fafb;
+  }
+  .report-table tr:last-child td { border-bottom: none; }
+  .score-pill {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .score-a { background: #d1fae5; color: #065f46; }
+  .score-b { background: #dbeafe; color: #1e3a8a; }
+  .score-c { background: #fef3c7; color: #92400e; }
+
+  /* Attendance chart */
+  .attend-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    height: 120px;
+    padding-top: 10px;
+  }
+  .attend-bar-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    height: 100%;
+    justify-content: flex-end;
+  }
+  .attend-bar {
+    width: 100%;
+    background: var(--green-pale);
+    border-radius: 4px 4px 0 0;
+    position: relative;
+    transition: all 0.3s;
+    cursor: pointer;
+  }
+  .attend-bar:hover { background: var(--green-light); }
+  .attend-bar-fill {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: var(--green);
+    border-radius: 4px 4px 0 0;
+    transition: height 0.5s ease;
+  }
+  .attend-label { font-size: 11px; color: var(--text-muted); }
+  .attend-pct { font-size: 11px; font-weight: 600; color: var(--green); }
+
+  /* Pending alerts */
+  .alert-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+  }
+  .alert-item:last-child { margin-bottom: 0; }
+  .alert-item.fee { background: #fef3c7; }
+  .alert-item.admit { background: #ede9fe; }
+  .alert-item.report { background: #d1fae5; }
+  .alert-icon { font-size: 20px; flex-shrink: 0; }
+  .alert-text { font-size: 13px; }
+  .alert-title { font-weight: 600; margin-bottom: 2px; }
+  .alert-sub { color: var(--text-muted); font-size: 12px; }
+  .alert-action {
+    margin-left: auto;
+    background: var(--green);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Broadcast panel */
+  .broadcast-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .form-select, .form-textarea {
+    width: 100%;
+    background: var(--gray-bg);
+    border: 1px solid #e9edef;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    color: var(--text);
+    outline: none;
+  }
+  .form-textarea { height: 80px; resize: none; }
+  .broadcast-btn {
+    background: var(--green);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .broadcast-btn:hover { background: var(--green-light); }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--text);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.3s;
+    z-index: 999;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+
+  /* Loading shimmer */
+  @keyframes shimmer {
+    0% { background-position: -600px 0; }
+    100% { background-position: 600px 0; }
+  }
+  .shimmer {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 600px 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 8px;
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP NAV -->
+<div class="topnav">
+  <div class="topnav-brand">
+    <div class="topnav-logo">🏫</div>
+    <div>
+      <div class="topnav-name">EduPing</div>
+      <div class="topnav-school">Greenfield Academy, Abuja</div>
+    </div>
+  </div>
+  <div class="topnav-tabs">
+    <button class="tab-btn active" onclick="switchView('chat')">💬 Parent Chat</button>
+    <button class="tab-btn" onclick="switchView('dashboard')">📊 Admin Dashboard</button>
+  </div>
+  <div style="font-size:13px; opacity:0.8; display:flex; align-items:center; gap:6px;">
+    <span style="width:8px;height:8px;background:#4ade80;border-radius:50%;display:inline-block;"></span>
+    AI Online
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- CHAT VIEW -->
+  <div id="chat-view" class="view active">
+    <div class="chat-view" style="width:100%">
+
+      <!-- Contacts -->
+      <div class="contacts-panel">
+        <div class="contacts-header">
+          <div class="contacts-title">Chats</div>
+          <input class="search-box" placeholder="🔍  Search conversations..." />
+        </div>
+        <div class="contacts-list">
+          <div class="contact-item active" onclick="selectContact(this, 'Mrs Adaeze Okonkwo', '👩🏾', '#1a7a4a', 'Emeka — JSS2A')">
+            <div class="contact-avatar" style="background:#1a7a4a">AO</div>
+            <div class="contact-info">
+              <div class="contact-name">Mrs Adaeze Okonkwo</div>
+              <div class="contact-preview">What is Emeka's attendance this week?</div>
+            </div>
+            <div class="contact-meta">
+              <div class="contact-time">10:42 AM</div>
+              <div class="unread-badge">2</div>
+            </div>
+          </div>
+          <div class="contact-item" onclick="selectContact(this, 'Mr Babatunde Hassan', '👨🏿', '#c9a84c', 'Fatima — SS1B')">
+            <div class="contact-avatar" style="background:#c9a84c">BH</div>
+            <div class="contact-info">
+              <div class="contact-name">Mr Babatunde Hassan</div>
+              <div class="contact-preview">When is the next fee deadline?</div>
+            </div>
+            <div class="contact-meta">
+              <div class="contact-time">9:15 AM</div>
+            </div>
+          </div>
+          <div class="contact-item" onclick="selectContact(this, 'Dr Ngozi Eze', '👩🏾', '#3b82f6', 'Chidi — JSS1C')">
+            <div class="contact-avatar" style="background:#3b82f6">NE</div>
+            <div class="contact-info">
+              <div class="contact-name">Dr Ngozi Eze</div>
+              <div class="contact-preview">How did Chidi do in Mathematics?</div>
+            </div>
+            <div class="contact-meta">
+              <div class="contact-time">Yesterday</div>
+            </div>
+          </div>
+          <div class="contact-item" onclick="selectContact(this, 'Mrs Funke Adeleke', '👩🏽', '#7c3aed', 'Tolu — JSS3A')">
+            <div class="contact-avatar" style="background:#7c3aed">FA</div>
+            <div class="contact-info">
+              <div class="contact-name">Mrs Funke Adeleke</div>
+              <div class="contact-preview">I'd like to enroll my daughter</div>
+            </div>
+            <div class="contact-meta">
+              <div class="contact-time">Yesterday</div>
+            </div>
+          </div>
+          <div class="contact-item" onclick="selectContact(this, 'Mr Chukwuemeka Ibe', '👨🏿', '#e53935', 'Obiora — SS2A')">
+            <div class="contact-avatar" style="background:#e53935">CI</div>
+            <div class="contact-info">
+              <div class="contact-name">Mr Chukwuemeka Ibe</div>
+              <div class="contact-preview">Weekly report for Obiora please</div>
+            </div>
+            <div class="contact-meta">
+              <div class="contact-time">Mon</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat area -->
+      <div style="flex:1; display:flex; flex-direction:column;">
+        <div class="chat-header">
+          <div class="chat-header-avatar">👩🏾</div>
+          <div>
+            <div class="chat-header-name" id="chat-name">Mrs Adaeze Okonkwo</div>
+            <div class="chat-header-status" id="chat-sub">Parent of Emeka — JSS2A</div>
+          </div>
+          <div class="chat-header-right">
+            <button class="header-icon-btn">🔍</button>
+            <button class="header-icon-btn">⋮</button>
+          </div>
+        </div>
+
+        <div class="chat-messages" id="chat-messages">
+          <div class="date-divider"><span>Today</span></div>
+
+          <div class="msg received">
+            <div class="msg-bubble">Hello, I'd like to know Emeka's attendance this week please</div>
+            <div class="msg-time">10:40 AM</div>
+          </div>
+
+          <div class="msg sent">
+            <div class="msg-bubble">Hello Mrs Okonkwo! 👋
+
+Here's Emeka's attendance for this week:
+
+📅 Monday — ✅ Present
+📅 Tuesday — ✅ Present
+📅 Wednesday — ❌ Absent
+📅 Thursday — ✅ Present
+📅 Friday — ✅ Present
+
+Overall this week: 4/5 days (80%)
+This term so far: 92% attendance ⭐
+
+Would you like to know more about his academic performance this week?</div>
+            <div class="msg-time">10:41 AM <span class="msg-tick">✓✓</span></div>
+          </div>
+
+          <div class="msg received">
+            <div class="msg-bubble">Yes please, how did he do in his subjects?</div>
+            <div class="msg-time">10:42 AM</div>
+          </div>
+        </div>
+
+        <div class="typing-indicator" id="typing">
+          <div class="typing-bubble">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+          </div>
+        </div>
+
+        <div class="quick-replies" id="quick-replies">
+          <button class="qr-btn" onclick="sendQuick('Check fee balance')">💰 Fee balance</button>
+          <button class="qr-btn" onclick="sendQuick('Show this week attendance')">📅 Attendance</button>
+          <button class="qr-btn" onclick="sendQuick('Send weekly performance report')">📊 Weekly report</button>
+          <button class="qr-btn" onclick="sendQuick('What are upcoming school events?')">📢 Events</button>
+          <button class="qr-btn" onclick="sendQuick('I want to make a fee payment')">💳 Pay fees</button>
+        </div>
+
+        <div class="chat-input-bar">
+          <textarea class="chat-input" id="chat-input" placeholder="Type a message..." rows="1"
+            onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          <button class="send-btn" onclick="sendMessage()">➤</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD VIEW -->
+  <div id="dashboard-view" class="view">
+    <div class="dashboard-view">
+
+      <div class="dash-welcome">
+        <div>
+          <h1>Good morning, Admin 👋</h1>
+          <p>Here's what's happening at Greenfield Academy today</p>
+        </div>
+        <div class="dash-date" id="dash-date"></div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-grid">
+        <div class="stat-card green">
+          <div class="stat-icon">💬</div>
+          <div class="stat-value">47</div>
+          <div class="stat-label">Conversations today</div>
+          <div class="stat-change up">↑ 12% from yesterday</div>
+        </div>
+        <div class="stat-card gold">
+          <div class="stat-icon">💰</div>
+          <div class="stat-value">₦2.4M</div>
+          <div class="stat-label">Fees outstanding</div>
+          <div class="stat-change down">↓ 8% this week</div>
+        </div>
+        <div class="stat-card blue">
+          <div class="stat-icon">🏫</div>
+          <div class="stat-value">91%</div>
+          <div class="stat-label">Today's attendance</div>
+          <div class="stat-change up">↑ 3% from last Friday</div>
+        </div>
+        <div class="stat-card red">
+          <div class="stat-icon">📋</div>
+          <div class="stat-value">8</div>
+          <div class="stat-label">Admission inquiries</div>
+          <div class="stat-change up">↑ 3 new today</div>
+        </div>
+      </div>
+
+      <!-- Two column grid -->
+      <div class="dash-grid">
+
+        <!-- Recent conversations -->
+        <div class="dash-card">
+          <div class="dash-card-header">
+            <div class="dash-card-title">Recent AI Conversations</div>
+            <div class="dash-card-action">View all →</div>
+          </div>
+          <div class="dash-card-body">
+            <div class="convo-item">
+              <div class="convo-avatar" style="background:#1a7a4a">AO</div>
+              <div>
+                <div class="convo-name">Mrs Adaeze Okonkwo <span class="convo-tag tag-attend">Attendance</span></div>
+                <div class="convo-msg">Emeka's attendance this week?</div>
+              </div>
+              <div class="convo-time">10:42 AM</div>
+            </div>
+            <div class="convo-item">
+              <div class="convo-avatar" style="background:#c9a84c">BH</div>
+              <div>
+                <div class="convo-name">Mr Babatunde Hassan <span class="convo-tag tag-fee">Fee</span></div>
+                <div class="convo-msg">Next fee payment deadline?</div>
+              </div>
+              <div class="convo-time">9:15 AM</div>
+            </div>
+            <div class="convo-item">
+              <div class="convo-avatar" style="background:#3b82f6">NE</div>
+              <div>
+                <div class="convo-name">Dr Ngozi Eze <span class="convo-tag tag-result">Results</span></div>
+                <div class="convo-msg">Chidi's Maths score this term</div>
+              </div>
+              <div class="convo-time">Yesterday</div>
+            </div>
+            <div class="convo-item">
+              <div class="convo-avatar" style="background:#7c3aed">FA</div>
+              <div>
+                <div class="convo-name">Mrs Funke Adeleke <span class="convo-tag tag-admit">Admission</span></div>
+                <div class="convo-msg">Enrollment inquiry for daughter</div>
+              </div>
+              <div class="convo-time">Yesterday</div>
+            </div>
+            <div class="convo-item">
+              <div class="convo-avatar" style="background:#e53935">CI</div>
+              <div>
+                <div class="convo-name">Mr Chukwuemeka Ibe <span class="convo-tag tag-result">Results</span></div>
+                <div class="convo-msg">Weekly report for Obiora</div>
+              </div>
+              <div class="convo-time">Mon</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pending alerts -->
+        <div class="dash-card">
+          <div class="dash-card-header">
+            <div class="dash-card-title">Action Required</div>
+            <div class="dash-card-action">Dismiss all</div>
+          </div>
+          <div class="dash-card-body">
+            <div class="alert-item fee">
+              <div class="alert-icon">💰</div>
+              <div class="alert-text">
+                <div class="alert-title">Fee deadline in 3 days</div>
+                <div class="alert-sub">34 parents haven't paid 2nd term fees</div>
+              </div>
+              <button class="alert-action" onclick="showToast('Broadcast sent to 34 parents! 📨')">Send reminder</button>
+            </div>
+            <div class="alert-item admit">
+              <div class="alert-icon">📋</div>
+              <div class="alert-text">
+                <div class="alert-title">3 new admission inquiries</div>
+                <div class="alert-sub">AI has collected details, needs review</div>
+              </div>
+              <button class="alert-action" onclick="showToast('Opening admission queue...')">Review</button>
+            </div>
+            <div class="alert-item report">
+              <div class="alert-icon">📊</div>
+              <div class="alert-text">
+                <div class="alert-title">Weekly reports ready</div>
+                <div class="alert-sub">312 reports queued for Saturday delivery</div>
+              </div>
+              <button class="alert-action" onclick="showToast('Reports scheduled! ✅')">Schedule send</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Attendance chart -->
+        <div class="dash-card">
+          <div class="dash-card-header">
+            <div class="dash-card-title">Weekly Attendance</div>
+            <div class="dash-card-action">This week</div>
+          </div>
+          <div class="dash-card-body">
+            <div class="attend-bars" id="attend-chart"></div>
+          </div>
+        </div>
+
+        <!-- Broadcast -->
+        <div class="dash-card">
+          <div class="dash-card-header">
+            <div class="dash-card-title">Send Broadcast</div>
+            <div class="dash-card-action">Templates</div>
+          </div>
+          <div class="dash-card-body">
+            <div class="broadcast-form">
+              <select class="form-select">
+                <option>All parents</option>
+                <option>JSS parents only</option>
+                <option>SS parents only</option>
+                <option>Debtors only</option>
+                <option>Specific class</option>
+              </select>
+              <textarea class="form-textarea" placeholder="Type your message to send via WhatsApp to all selected parents..."></textarea>
+              <button class="broadcast-btn" onclick="sendBroadcast()">
+                📤 Send via WhatsApp AI
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Top subjects / performance -->
+        <div class="dash-card" style="grid-column: span 2;">
+          <div class="dash-card-header">
+            <div class="dash-card-title">JSS2A — Weekly Performance Summary (Sample Class)</div>
+            <div class="dash-card-action">All classes →</div>
+          </div>
+          <div class="dash-card-body">
+            <table class="report-table">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Maths</th>
+                  <th>English</th>
+                  <th>Science</th>
+                  <th>Social Studies</th>
+                  <th>Attendance</th>
+                  <th>Report sent</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Emeka Okonkwo</strong></td>
+                  <td><span class="score-pill score-b">78%</span></td>
+                  <td><span class="score-pill score-a">85%</span></td>
+                  <td><span class="score-pill score-b">72%</span></td>
+                  <td><span class="score-pill score-a">88%</span></td>
+                  <td>80%</td>
+                  <td>✅ Sent</td>
+                </tr>
+                <tr>
+                  <td><strong>Blessing Adeyemi</strong></td>
+                  <td><span class="score-pill score-a">92%</span></td>
+                  <td><span class="score-pill score-a">90%</span></td>
+                  <td><span class="score-pill score-a">95%</span></td>
+                  <td><span class="score-pill score-a">88%</span></td>
+                  <td>100%</td>
+                  <td>✅ Sent</td>
+                </tr>
+                <tr>
+                  <td><strong>Taiwo Balogun</strong></td>
+                  <td><span class="score-pill score-c">58%</span></td>
+                  <td><span class="score-pill score-b">67%</span></td>
+                  <td><span class="score-pill score-c">55%</span></td>
+                  <td><span class="score-pill score-b">70%</span></td>
+                  <td>75%</td>
+                  <td>✅ Sent</td>
+                </tr>
+                <tr>
+                  <td><strong>Chioma Eze</strong></td>
+                  <td><span class="score-pill score-b">74%</span></td>
+                  <td><span class="score-pill score-a">82%</span></td>
+                  <td><span class="score-pill score-b">79%</span></td>
+                  <td><span class="score-pill score-b">76%</span></td>
+                  <td>95%</td>
+                  <td>✅ Sent</td>
+                </tr>
+                <tr>
+                  <td><strong>Uche Nwosu</strong></td>
+                  <td><span class="score-pill score-a">88%</span></td>
+                  <td><span class="score-pill score-b">75%</span></td>
+                  <td><span class="score-pill score-a">91%</span></td>
+                  <td><span class="score-pill score-b">73%</span></td>
+                  <td>90%</td>
+                  <td>✅ Sent</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ——— View switcher ———
+function switchView(view) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(view + '-view').classList.add('active');
+  event.target.classList.add('active');
+}
+
+// ——— Contact selection ———
+function selectContact(el, name, emoji, color, childInfo) {
+  document.querySelectorAll('.contact-item').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  el.querySelector('.unread-badge')?.remove();
+  document.getElementById('chat-name').textContent = name;
+  document.getElementById('chat-sub').textContent = 'Parent of ' + childInfo;
+  document.querySelector('.chat-header-avatar').textContent = emoji;
+
+  const msgs = document.getElementById('chat-messages');
+  msgs.innerHTML = `<div class="date-divider"><span>Today</span></div>
+  <div class="msg received">
+    <div class="msg-bubble">Hello! I have a question about my child.</div>
+    <div class="msg-time">Just now</div>
+  </div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+// ——— Attendance chart ———
+const days = [
+  { label: 'Mon', pct: 94 },
+  { label: 'Tue', pct: 88 },
+  { label: 'Wed', pct: 91 },
+  { label: 'Thu', pct: 96 },
+  { label: 'Fri', pct: 91 },
+];
+const chart = document.getElementById('attend-chart');
+days.forEach(d => {
+  chart.innerHTML += `
+    <div class="attend-bar-wrap">
+      <div class="attend-pct">${d.pct}%</div>
+      <div class="attend-bar" style="height:90px">
+        <div class="attend-bar-fill" style="height:${d.pct}%"></div>
+      </div>
+      <div class="attend-label">${d.label}</div>
+    </div>`;
+});
+
+// ——— Date ———
+const now = new Date();
+document.getElementById('dash-date').textContent =
+  now.toLocaleDateString('en-NG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+// ——— Toast ———
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+
+async function sendBroadcast() {
+  const textarea = document.querySelector('.form-textarea');
+  const message = textarea.value.trim();
+  if (!message) return showToast('Type a broadcast message first.');
+  try {
+    const res = await fetch(`${API_BASE}/api/broadcast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message })
+    });
+    const data = await res.json();
+    showToast(data.testMode ? `Test queued for ${data.count} parents` : `Broadcast sent to ${data.count} parents`);
+  } catch (err) {
+    showToast('Broadcast failed. Check backend setup.');
+  }
+}
+
+// ——— AI Chat ———
+const API_BASE = window.location.origin;
+
+async function callAI(userMessage, history) {
+  const res = await fetch(`${API_BASE}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: userMessage, history })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Backend request failed');
+  }
+  const data = await res.json();
+  return data.reply || "Sorry, I couldn't process that. Please try again.";
+}
+
+let chatHistory = [];
+
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  autoResize(input);
+  appendMsg(text, 'sent');
+  chatHistory.push({ role: 'user', content: text });
+
+  // Show typing
+  const typing = document.getElementById('typing');
+  typing.classList.add('show');
+  scrollChat();
+
+  try {
+    const reply = await callAI(text, chatHistory.slice(0, -1));
+    typing.classList.remove('show');
+    appendMsg(reply, 'received');
+    chatHistory.push({ role: 'assistant', content: reply });
+  } catch(e) {
+    typing.classList.remove('show');
+    appendMsg("Sorry, I'm having trouble connecting. Please try again shortly.", 'received');
+  }
+}
+
+function sendQuick(text) {
+  document.getElementById('chat-input').value = text;
+  sendMessage();
+}
+
+function appendMsg(text, type) {
+  const msgs = document.getElementById('chat-messages');
+  const now = new Date().toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' });
+  const tick = type === 'sent' ? '<span class="msg-tick">✓✓</span>' : '';
+  const div = document.createElement('div');
+  div.className = `msg ${type}`;
+  div.innerHTML = `<div class="msg-bubble">${text.replace(/\n/g,'<br>')}</div>
+    <div class="msg-time">${now} ${tick}</div>`;
+  msgs.appendChild(div);
+  scrollChat();
+}
+
+function scrollChat() {
+  const msgs = document.getElementById('chat-messages');
+  setTimeout(() => msgs.scrollTop = msgs.scrollHeight, 50);
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+}
+</script>
+</body>
+</html>

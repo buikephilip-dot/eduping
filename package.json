@@ -1,0 +1,26 @@
+{
+  "name": "eduping-mvp",
+  "version": "1.0.0",
+  "description": "EduPing MVP backend with AI chat and Twilio WhatsApp sandbox support",
+  "main": "server.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "morgan": "^1.10.0",
+    "openai": "^4.77.0",
+    "twilio": "^5.4.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}

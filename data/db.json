@@ -1,0 +1,53 @@
+{
+  "school": {
+    "name": "Greenfield Academy",
+    "city": "Abuja",
+    "currentTerm": "2nd Term 2024/2025",
+    "fees": "₦85,000 per term",
+    "feeDeadline": "15th of each month at term start",
+    "events": [
+      { "title": "Mid term break", "date": "Feb 10 to 14" },
+      { "title": "Sports Day", "date": "Feb 22" },
+      { "title": "PTA Meeting", "date": "Mar 1" }
+    ]
+  },
+  "students": [
+    {
+      "id": "emeka-okonkwo",
+      "name": "Emeka Okonkwo",
+      "className": "JSS2A",
+      "parentName": "Mrs Adaeze Okonkwo",
+      "parentPhone": "whatsapp:+2348010000001",
+      "attendanceThisWeek": "80%",
+      "attendanceTerm": "92%",
+      "weeklyAttendance": { "Monday": "Present", "Tuesday": "Present", "Wednesday": "Absent", "Thursday": "Present", "Friday": "Present" },
+      "scores": { "Maths": "78%", "English": "85%", "Science": "72%", "Social Studies": "88%" },
+      "fees": { "status": "PAID", "outstanding": "₦0" }
+    },
+    {
+      "id": "fatima-hassan",
+      "name": "Fatima Hassan",
+      "className": "SS1B",
+      "parentName": "Mr Babatunde Hassan",
+      "parentPhone": "whatsapp:+2348010000002",
+      "attendanceThisWeek": "95%",
+      "attendanceTerm": "95%",
+      "weeklyAttendance": { "Monday": "Present", "Tuesday": "Present", "Wednesday": "Present", "Thursday": "Present", "Friday": "Present" },
+      "scores": { "Biology": "88%", "Chemistry": "76%", "English": "82%" },
+      "fees": { "status": "PART PAYMENT", "outstanding": "₦42,500" }
+    },
+    {
+      "id": "chidi-eze",
+      "name": "Chidi Eze",
+      "className": "JSS1C",
+      "parentName": "Dr Ngozi Eze",
+      "parentPhone": "whatsapp:+2348010000003",
+      "attendanceThisWeek": "100%",
+      "attendanceTerm": "98%",
+      "weeklyAttendance": { "Monday": "Present", "Tuesday": "Present", "Wednesday": "Present", "Thursday": "Present", "Friday": "Present" },
+      "scores": { "Maths": "91%", "English": "79%", "Science": "85%" },
+      "fees": { "status": "PAID", "outstanding": "₦0" }
+    }
+  ],
+  "messages": []
+}
