@@ -4,13 +4,115 @@
     "city": "Abuja",
     "currentTerm": "2nd Term 2024/2025",
     "fees": "₦85,000 per term",
-    "feeDeadline": "15th of each month at term start",
+    "feeDeadline": "15th January 2025",
+    "landmark": "the school gate with the green Greenfield Academy signboard",
+    "landmarkDescription": "Green metal gate with white signboard reading Greenfield Academy",
     "events": [
       { "title": "Mid term break", "date": "Feb 10 to 14" },
       { "title": "Sports Day", "date": "Feb 22" },
-      { "title": "PTA Meeting", "date": "Mar 1" }
-    ]
+      { "title": "PTA Meeting", "date": "Mar 1" },
+      { "title": "Second Term Exams", "date": "Mar 10 to 21" }
+    ],
+    "workingHours": { "start": "07:30", "end": "15:00" },
+    "lateThreshold": "08:00"
   },
+  "staff": [
+    {
+      "id": "staff-001",
+      "name": "Mrs Adaeze Okonkwo",
+      "role": "class_teacher",
+      "subject": "English Language",
+      "class": "JSS2A",
+      "phone": "whatsapp:+2348011111001",
+      "performanceScore": 92,
+      "signinLog": [
+        { "date": "2025-04-28", "time": "07:42", "status": "on_time" },
+        { "date": "2025-04-29", "time": "07:38", "status": "on_time" },
+        { "date": "2025-04-30", "time": "08:15", "status": "late" }
+      ],
+      "attendanceSubmissions": 18,
+      "scoresUploaded": 12,
+      "homeworkAssigned": 8,
+      "absences": 1,
+      "staffOfWeekCount": 2
+    },
+    {
+      "id": "staff-002",
+      "name": "Mr Emeka Nwosu",
+      "role": "subject_teacher",
+      "subject": "Mathematics",
+      "class": "JSS1A,JSS2A,JSS3A",
+      "phone": "whatsapp:+2348011111002",
+      "performanceScore": 78,
+      "signinLog": [
+        { "date": "2025-04-28", "time": "07:55", "status": "on_time" },
+        { "date": "2025-04-29", "time": "08:22", "status": "late" },
+        { "date": "2025-04-30", "time": "07:48", "status": "on_time" }
+      ],
+      "attendanceSubmissions": 14,
+      "scoresUploaded": 10,
+      "homeworkAssigned": 6,
+      "absences": 2,
+      "staffOfWeekCount": 0
+    },
+    {
+      "id": "staff-003",
+      "name": "Mrs Funke Adeleke",
+      "role": "subject_teacher",
+      "subject": "Biology",
+      "class": "SS1A,SS1B,SS2A",
+      "phone": "whatsapp:+2348011111003",
+      "performanceScore": 88,
+      "signinLog": [
+        { "date": "2025-04-28", "time": "07:30", "status": "on_time" },
+        { "date": "2025-04-29", "time": "07:35", "status": "on_time" },
+        { "date": "2025-04-30", "time": "07:40", "status": "on_time" }
+      ],
+      "attendanceSubmissions": 19,
+      "scoresUploaded": 15,
+      "homeworkAssigned": 10,
+      "absences": 0,
+      "staffOfWeekCount": 1
+    },
+    {
+      "id": "staff-004",
+      "name": "Nurse Blessing Eze",
+      "role": "nurse",
+      "subject": null,
+      "class": null,
+      "phone": "whatsapp:+2348011111004",
+      "performanceScore": 85,
+      "signinLog": [
+        { "date": "2025-04-28", "time": "07:45", "status": "on_time" },
+        { "date": "2025-04-29", "time": "07:50", "status": "on_time" },
+        { "date": "2025-04-30", "time": "08:05", "status": "late" }
+      ],
+      "attendanceSubmissions": 0,
+      "scoresUploaded": 0,
+      "homeworkAssigned": 0,
+      "absences": 0,
+      "staffOfWeekCount": 0
+    },
+    {
+      "id": "staff-005",
+      "name": "Mr Tunde Security",
+      "role": "security",
+      "subject": null,
+      "class": null,
+      "phone": "whatsapp:+2348011111005",
+      "performanceScore": 80,
+      "signinLog": [
+        { "date": "2025-04-28", "time": "06:55", "status": "on_time" },
+        { "date": "2025-04-29", "time": "07:00", "status": "on_time" },
+        { "date": "2025-04-30", "time": "07:02", "status": "on_time" }
+      ],
+      "attendanceSubmissions": 0,
+      "scoresUploaded": 0,
+      "homeworkAssigned": 0,
+      "absences": 0,
+      "staffOfWeekCount": 0
+    }
+  ],
   "students": [
     {
       "id": "emeka-okonkwo",
@@ -22,7 +124,12 @@
       "attendanceTerm": "92%",
       "weeklyAttendance": { "Monday": "Present", "Tuesday": "Present", "Wednesday": "Absent", "Thursday": "Present", "Friday": "Present" },
       "scores": { "Maths": "78%", "English": "85%", "Science": "72%", "Social Studies": "88%" },
-      "fees": { "status": "PAID", "outstanding": "₦0" }
+      "fees": { "status": "PAID", "outstanding": "₦0" },
+      "behaviourNotes": [],
+      "homeworks": [],
+      "sickbayVisits": [],
+      "studentOfWeekCount": 1,
+      "weeklyPerformanceScore": 83
     },
     {
       "id": "fatima-hassan",
@@ -34,7 +141,12 @@
       "attendanceTerm": "95%",
       "weeklyAttendance": { "Monday": "Present", "Tuesday": "Present", "Wednesday": "Present", "Thursday": "Present", "Friday": "Present" },
       "scores": { "Biology": "88%", "Chemistry": "76%", "English": "82%" },
-      "fees": { "status": "PART PAYMENT", "outstanding": "₦42,500" }
+      "fees": { "status": "PART PAYMENT", "outstanding": "₦42,500" },
+      "behaviourNotes": [],
+      "homeworks": [],
+      "sickbayVisits": [],
+      "studentOfWeekCount": 0,
+      "weeklyPerformanceScore": 82
     },
     {
       "id": "chidi-eze",
@@ -46,8 +158,61 @@
       "attendanceTerm": "98%",
       "weeklyAttendance": { "Monday": "Present", "Tuesday": "Present", "Wednesday": "Present", "Thursday": "Present", "Friday": "Present" },
       "scores": { "Maths": "91%", "English": "79%", "Science": "85%" },
-      "fees": { "status": "PAID", "outstanding": "₦0" }
+      "fees": { "status": "PAID", "outstanding": "₦0" },
+      "behaviourNotes": [],
+      "homeworks": [],
+      "sickbayVisits": [],
+      "studentOfWeekCount": 2,
+      "weeklyPerformanceScore": 91
+    },
+    {
+      "id": "blessing-adeyemi",
+      "name": "Blessing Adeyemi",
+      "className": "JSS2A",
+      "parentName": "Mrs Tope Adeyemi",
+      "parentPhone": "whatsapp:+2348010000004",
+      "attendanceThisWeek": "100%",
+      "attendanceTerm": "100%",
+      "weeklyAttendance": { "Monday": "Present", "Tuesday": "Present", "Wednesday": "Present", "Thursday": "Present", "Friday": "Present" },
+      "scores": { "Maths": "92%", "English": "90%", "Science": "95%", "Social Studies": "88%" },
+      "fees": { "status": "PAID", "outstanding": "₦0" },
+      "behaviourNotes": [],
+      "homeworks": [],
+      "sickbayVisits": [],
+      "studentOfWeekCount": 3,
+      "weeklyPerformanceScore": 91
+    },
+    {
+      "id": "taiwo-balogun",
+      "name": "Taiwo Balogun",
+      "className": "JSS2A",
+      "parentName": "Mr Rasheed Balogun",
+      "parentPhone": "whatsapp:+2348010000005",
+      "attendanceThisWeek": "75%",
+      "attendanceTerm": "80%",
+      "weeklyAttendance": { "Monday": "Present", "Tuesday": "Absent", "Wednesday": "Present", "Thursday": "Absent", "Friday": "Present" },
+      "scores": { "Maths": "58%", "English": "67%", "Science": "55%", "Social Studies": "70%" },
+      "fees": { "status": "UNPAID", "outstanding": "₦85,000" },
+      "behaviourNotes": ["Disruptive in class on Monday"],
+      "homeworks": [],
+      "sickbayVisits": [],
+      "studentOfWeekCount": 0,
+      "weeklyPerformanceScore": 63
     }
   ],
-  "messages": []
+  "homeworks": [],
+  "announcements": [],
+  "staffOfWeek": { "current": "staff-001", "history": [] },
+  "studentOfWeek": {
+    "JSS2A": { "current": "blessing-adeyemi", "history": [] },
+    "JSS1C": { "current": "chidi-eze", "history": [] },
+    "SS1B": { "current": "fatima-hassan", "history": [] }
+  },
+  "sickbayLog": [],
+  "messages": [],
+  "admissionInquiries": [
+    { "id": "adm-001", "name": "Mrs Kemi Lawson", "phone": "+2348099001122", "childName": "David Lawson", "class": "JSS1", "status": "pending", "date": "2025-04-28" },
+    { "id": "adm-002", "name": "Mr Chucks Obi", "phone": "+2348099003344", "childName": "Grace Obi", "class": "SS1", "status": "scheduled_visit", "date": "2025-04-29" },
+    { "id": "adm-003", "name": "Mrs Hauwa Musa", "phone": "+2348099005566", "childName": "Ahmad Musa", "class": "JSS2", "status": "pending", "date": "2025-04-30" }
+  ]
 }
