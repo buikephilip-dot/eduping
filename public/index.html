@@ -315,11 +315,11 @@ Would you like to know more about his academic performance?</div>
           <div class="msg-bubble">Yes please, how did he do in his subjects?</div>
           <div class="msg-time">10:42 AM</div>
         </div>
-      </div>
       <div class="typing-indicator" id="typing">
         <div class="typing-bubble">
           <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
         </div>
+      </div>
       </div>
       <div class="quick-replies">
         <button class="qr-btn" onclick="sendQuick('Check fee balance')">💰 Fee balance</button>
@@ -837,16 +837,16 @@ async function sendMessage() {
   appendMsg(text, 'sent');
   chatHistory.push({role:'user', content:text});
   const typing = document.getElementById('typing');
-  typing.classList.add('show'); scrollChat();
+  if(typing) { typing.classList.add('show'); } scrollChat();
   try {
     const res = await fetch('/api/chat', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,history:chatHistory.slice(0,-1)})});
     const data = await res.json();
-    typing.classList.remove('show');
+    if(typing) typing.classList.remove('show');
     const reply = data.reply || 'Sorry, I could not process that.';
     appendMsg(reply, 'received');
     chatHistory.push({role:'assistant', content:reply});
   } catch(e) {
-    typing.classList.remove('show');
+    if(typing) typing.classList.remove('show');
     // Fallback smart responses
     const fallback = getFallbackResponse(text);
     appendMsg(fallback, 'received');
@@ -873,11 +873,11 @@ function appendMsg(text, type) {
   const div = document.createElement('div');
   div.className = `msg ${type}`;
   div.innerHTML = `<div class="msg-bubble">${text.replace(/\n/g,'<br>')}</div><div class="msg-time">${now} ${tick}</div>`;
-  msgs.insertBefore(div, document.getElementById('typing'));
+  msgs.appendChild(div);
   scrollChat();
 }
 
-function scrollChat() { const m=document.getElementById('chat-messages'); setTimeout(()=>m.scrollTop=m.scrollHeight,50); }
+function scrollChat() { const m=document.getElementById('chat-messages'); if(m) setTimeout(()=>m.scrollTop=m.scrollHeight,50); }
 function handleKey(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();} }
 function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,100)+'px'; }
 
