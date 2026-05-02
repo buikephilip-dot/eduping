@@ -426,6 +426,30 @@ app.post('/api/broadcast', checkAdmin, async (req, res, next) => {
   } catch(err) { next(err); }
 });
 
+// ─── Super Admin route ─────────────────────────────────────
+app.get('/superadmin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'superadmin.html'));
+});
+
+app.post('/api/superadmin/login', (req, res) => {
+  const { password } = req.body;
+  const superPassword = process.env.SUPER_ADMIN_PASSWORD || 'superadmin';
+  if (password === superPassword) {
+    res.json({ success: true, token: superPassword });
+  } else {
+    res.status(401).json({ error: 'Wrong password' });
+  }
+});
+
+// ─── First-message disclaimer ──────────────────────────────
+function buildDisclaimer(schoolName) {
+  return `👋 Welcome to ${schoolName}'s AI assistant — EduPing!\n\nBefore we continue, please note:\n\n📋 Your conversations and your child's school data (attendance, results, fees) are processed by our AI system to answer your questions.\n\n🔒 Your data is kept private and only used to provide information about your child. It is never sold or shared with third parties.\n\n🤖 This service is powered by AI. For urgent matters please contact the school directly.\n\nBy continuing to chat you agree to this. Type anything to get started! 😊\n\n${schoolName} 🏫`;
+}
+
+function isFirstMessage(db, phone) {
+  return !db.messages.some(m => m.from === phone || m.from === `whatsapp:${phone}`);
+}
+
 // ─── WhatsApp Webhook (Twilio) ─────────────────────────────
 app.post('/webhooks/twilio/whatsapp', async (req, res) => {
   const twiml = new twilio.twiml.MessagingResponse();
@@ -452,15 +476,24 @@ app.post('/webhooks/twilio/whatsapp', async (req, res) => {
     let reply = '';
 
     if (staff) {
+      // Staff never get disclaimer — they are internal
       reply = await processTeacherMessage(staff, incoming, imageBase64, db);
+
     } else if (parentStudent) {
-      reply = await askParentAI(incoming, [], db, parentStudent);
+      const firstTime = isFirstMessage(db, from);
+      const aiReply = await askParentAI(incoming, [], db, parentStudent);
+      reply = firstTime ? buildDisclaimer(db.school.name) + '\n\n─────────────────\n\n' + aiReply : aiReply;
       db.messages.push({ channel: 'whatsapp', from, studentId: parentStudent.id, userMessage: incoming, assistantReply: reply, createdAt: new Date().toISOString() });
       await writeDb(db);
+
     } else {
-      // Unknown number — treat as prospective parent / admission inquiry
+      // Unknown number — prospective parent / admission inquiry
+      const firstTime = isFirstMessage(db, from);
       const admissionSystem = `You are EduPing, the WhatsApp AI assistant for ${db.school.name} in ${db.school.city}. Someone is contacting us for the first time. Help them with admission inquiries, school information, fees (${db.school.fees}), and current term info. Keep replies warm and professional. End with: ${db.school.name} 🏫`;
-      reply = await callAI(admissionSystem, [{ role: 'user', content: incoming }]);
+      const aiReply = await callAI(admissionSystem, [{ role: 'user', content: incoming }]);
+      reply = firstTime ? buildDisclaimer(db.school.name) + '\n\n─────────────────\n\n' + aiReply : aiReply;
+      db.messages.push({ channel: 'whatsapp', from, studentId: null, userMessage: incoming, assistantReply: reply, createdAt: new Date().toISOString() });
+      await writeDb(db);
     }
 
     twiml.message(reply);
