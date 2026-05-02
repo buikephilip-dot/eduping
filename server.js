@@ -272,7 +272,48 @@ async function requireSchool(req, res, next) {
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/superadmin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'superadmin.html')));
-app.get('/health', async (req, res) => { await q('SELECT 1'); json(res, { ok: true, db: true, ai: hasAi(), twilio: hasTwilio() }); });
+app.get('/status', (req, res) => res.sendFile(path.join(__dirname, 'public', 'status.html')));
+
+async function getSystemStatus() {
+  const checkedAt = new Date().toISOString();
+  const services = {
+    ai: { label: 'EduPing AI', status: 'online', detail: 'Claude API key configured' },
+    whatsapp: { label: 'WhatsApp', status: 'connected', detail: 'Twilio credentials configured' },
+    database: { label: 'Database', status: 'healthy', detail: 'PostgreSQL responding' }
+  };
+
+  if (!hasAi()) {
+    services.ai.status = 'demo';
+    services.ai.detail = 'AI key not configured. Demo fallback is active.';
+  }
+
+  if (!hasTwilio()) {
+    services.whatsapp.status = 'not_configured';
+    services.whatsapp.detail = 'Twilio credentials are missing.';
+  }
+
+  try {
+    await q('SELECT 1');
+  } catch (err) {
+    services.database.status = 'offline';
+    services.database.detail = 'PostgreSQL health check failed.';
+  }
+
+  const ok = services.database.status === 'healthy' && ['online', 'demo'].includes(services.ai.status) && ['connected', 'not_configured'].includes(services.whatsapp.status);
+  return { ok, checked_at: checkedAt, services };
+}
+
+app.get('/health', async (req, res) => {
+  const status = await getSystemStatus();
+  json(res, {
+    ok: status.ok,
+    db: status.services.database.status === 'healthy',
+    ai: hasAi(),
+    twilio: hasTwilio(),
+    checked_at: status.checked_at
+  });
+});
+app.get('/api/status', async (req, res) => json(res, await getSystemStatus()));
 app.post('/webhook/whatsapp', (req, res, next) => handleIncomingWhatsApp(req, res).catch(next));
 
 app.post('/api/super/login', (req, res) => json(res, { ok: req.body.password === process.env.SUPER_ADMIN_PASSWORD }));
