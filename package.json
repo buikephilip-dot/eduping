@@ -1,11 +1,9 @@
 {
-  "name": "eduping-mvp",
-  "version": "1.0.0",
-  "description": "EduPing MVP backend with AI chat and Twilio WhatsApp sandbox support",
+  "name": "eduping-multitenant",
+  "version": "2.0.0",
+  "description": "EduPing multi tenant school WhatsApp AI assistant for Nigerian schools",
   "main": "server.js",
-  "engines": {
-    "node": ">=20.0.0"
-  },
+  "engines": { "node": ">=20.0.0" },
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js"
@@ -17,10 +15,9 @@
     "express": "^4.21.2",
     "helmet": "^8.0.0",
     "morgan": "^1.10.0",
-    "openai": "^4.77.0",
+    "node-cron": "^3.0.3",
+    "pg": "^8.13.1",
     "twilio": "^5.4.0"
   },
-  "devDependencies": {
-    "nodemon": "^3.1.9"
-  }
+  "devDependencies": { "nodemon": "^3.1.9" }
 }

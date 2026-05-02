@@ -6,55 +6,37 @@
 <title>EduPing — Super Admin</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
-:root {
-  --green:#1a7a4a; --green-light:#25a865; --green-pale:#e8f5ee;
-  --dark:#0f1923; --panel:#1a2535; --card:#1e2d40;
-  --border:#2a3a50; --text:#e2e8f0; --text-muted:#7a8fa6;
-  --gold:#f0b429; --danger:#ef4444; --info:#3b82f6; --purple:#8b5cf6;
-  --radius:12px; --shadow:0 4px 24px rgba(0,0,0,0.3);
-}
+:root{--green:#1a7a4a;--green-light:#25a865;--dark:#0f1923;--panel:#1a2535;--card:#1e2d40;--border:#2a3a50;--text:#e2e8f0;--text-muted:#7a8fa6;--gold:#f0b429;--danger:#ef4444;--info:#3b82f6;--purple:#8b5cf6;--radius:12px;--shadow:0 4px 24px rgba(0,0,0,.3);}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'DM Sans',sans-serif;background:var(--dark);color:var(--text);min-height:100vh;display:flex;flex-direction:column;}
-
-/* TOP NAV */
 .topnav{background:var(--panel);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
 .nav-brand{display:flex;align-items:center;gap:10px;}
 .nav-logo{width:36px;height:36px;background:var(--green);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;}
 .nav-name{font-family:'Playfair Display',serif;font-size:18px;color:white;}
-.nav-badge{background:rgba(240,180,41,0.15);border:1px solid rgba(240,180,41,0.4);color:var(--gold);font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600;letter-spacing:0.5px;}
+.nav-badge{background:rgba(240,180,41,.15);border:1px solid rgba(240,180,41,.4);color:var(--gold);font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600;}
 .nav-right{display:flex;align-items:center;gap:16px;}
 .nav-user{font-size:13px;color:var(--text-muted);}
 .nav-user span{color:var(--text);font-weight:500;}
-.logout-btn{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#ef4444;padding:6px 14px;border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;}
-
-/* LAYOUT */
+.logout-btn{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#ef4444;padding:6px 14px;border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;}
 .layout{display:flex;flex:1;overflow:hidden;}
-
-/* SIDEBAR */
-.sidebar{width:220px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;padding:20px 0;}
+.sidebar{width:220px;background:var(--panel);border-right:1px solid var(--border);padding:20px 0;flex-shrink:0;}
 .sidebar-section{padding:0 12px;margin-bottom:24px;}
 .sidebar-label{font-size:10px;color:var(--text-muted);letter-spacing:1.5px;text-transform:uppercase;padding:0 8px;margin-bottom:8px;}
-.sidebar-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer;transition:all 0.15s;font-size:13px;color:var(--text-muted);}
-.sidebar-item:hover{background:rgba(255,255,255,0.05);color:var(--text);}
-.sidebar-item.active{background:rgba(26,122,74,0.2);color:var(--green-light);}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer;transition:all .15s;font-size:13px;color:var(--text-muted);}
+.sidebar-item:hover{background:rgba(255,255,255,.05);color:var(--text);}
+.sidebar-item.active{background:rgba(26,122,74,.2);color:var(--green-light);}
 .sidebar-item-icon{font-size:16px;width:20px;text-align:center;}
 .sidebar-count{margin-left:auto;background:var(--green);color:white;border-radius:20px;padding:1px 7px;font-size:10px;font-weight:600;}
-
-/* MAIN */
 .main-content{flex:1;overflow-y:auto;padding:28px;}
-
-/* PAGE HEADER */
 .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
 .page-title{font-family:'Playfair Display',serif;font-size:22px;color:white;}
 .page-sub{font-size:13px;color:var(--text-muted);margin-top:3px;}
 .header-actions{display:flex;gap:10px;}
-.btn{padding:9px 18px;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;font-weight:600;cursor:pointer;border:none;transition:all 0.2s;}
+.btn{padding:9px 18px;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;font-weight:600;cursor:pointer;border:none;transition:all .2s;}
 .btn-primary{background:var(--green);color:white;}
 .btn-primary:hover{background:var(--green-light);}
 .btn-secondary{background:var(--card);color:var(--text);border:1px solid var(--border);}
-.btn-danger{background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);}
-
-/* STATS */
+.btn-danger{background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.3);}
 .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
 .stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;border-left:3px solid transparent;}
 .stat-card.green{border-left-color:var(--green);}
@@ -64,55 +46,31 @@ body{font-family:'DM Sans',sans-serif;background:var(--dark);color:var(--text);m
 .stat-icon{font-size:22px;margin-bottom:10px;}
 .stat-value{font-size:28px;font-weight:700;color:white;font-family:'Playfair Display',serif;}
 .stat-label{font-size:12px;color:var(--text-muted);margin-top:3px;}
-.stat-change{font-size:11px;margin-top:6px;}
-.stat-change.up{color:var(--green-light);}
-.stat-change.down{color:var(--danger);}
-
-/* TABLE */
 .table-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:20px;}
 .table-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
 .table-title{font-weight:600;font-size:15px;color:white;}
-.table-search{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:7px 14px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text);outline:none;width:220px;}
-.table-search::placeholder{color:var(--text-muted);}
 table{width:100%;border-collapse:collapse;}
-th{text-align:left;font-size:11px;color:var(--text-muted);font-weight:500;padding:10px 16px;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:0.5px;}
-td{padding:12px 16px;font-size:13px;border-bottom:1px solid rgba(255,255,255,0.04);}
+th{text-align:left;font-size:11px;color:var(--text-muted);font-weight:500;padding:10px 16px;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.5px;}
+td{padding:12px 16px;font-size:13px;border-bottom:1px solid rgba(255,255,255,.04);}
 tr:last-child td{border-bottom:none;}
-tr:hover td{background:rgba(255,255,255,0.02);}
-
-/* PILLS */
+tr:hover td{background:rgba(255,255,255,.02);}
 .pill{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}
-.pill-green{background:rgba(26,122,74,0.2);color:#4ade80;}
-.pill-gold{background:rgba(240,180,41,0.15);color:var(--gold);}
-.pill-red{background:rgba(239,68,68,0.15);color:#f87171;}
-.pill-blue{background:rgba(59,130,246,0.15);color:#60a5fa;}
-.pill-gray{background:rgba(255,255,255,0.08);color:var(--text-muted);}
-.pill-purple{background:rgba(139,92,246,0.15);color:#a78bfa;}
+.pill-green{background:rgba(26,122,74,.2);color:#4ade80;}
+.pill-gold{background:rgba(240,180,41,.15);color:var(--gold);}
+.pill-red{background:rgba(239,68,68,.15);color:#f87171;}
+.pill-blue{background:rgba(59,130,246,.15);color:#60a5fa;}
+.pill-gray{background:rgba(255,255,255,.08);color:var(--text-muted);}
 .pill-dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
-
-/* ACTION BUTTONS */
-.action-btn{background:none;border:1px solid var(--border);color:var(--text-muted);padding:4px 10px;border-radius:6px;font-size:11px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all 0.15s;}
+.action-btn{background:none;border:1px solid var(--border);color:var(--text-muted);padding:4px 10px;border-radius:6px;font-size:11px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s;}
 .action-btn:hover{border-color:var(--green);color:var(--green-light);}
 .action-btn.danger:hover{border-color:var(--danger);color:#f87171;}
-
-/* MODAL */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;}
-.modal-overlay.show{display:flex;}
-.modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:480px;box-shadow:var(--shadow);}
-.modal-title{font-family:'Playfair Display',serif;font-size:18px;color:white;margin-bottom:6px;}
-.modal-sub{font-size:13px;color:var(--text-muted);margin-bottom:24px;}
-.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
-.form-grid.single{grid-template-columns:1fr;}
 .form-group{display:flex;flex-direction:column;gap:5px;}
-.form-label{font-size:11px;color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;}
-.form-input,.form-select{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text);outline:none;transition:border 0.2s;}
+.form-label{font-size:11px;color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:.5px;}
+.form-input,.form-select{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text);outline:none;}
 .form-input:focus,.form-select:focus{border-color:var(--green);}
 .form-input::placeholder{color:var(--text-muted);}
-.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;}
-
-/* ACTIVITY FEED */
-.activity-feed{display:flex;flex-direction:column;gap:0;}
-.activity-item{display:flex;gap:14px;padding:14px 20px;border-bottom:1px solid rgba(255,255,255,0.04);align-items:flex-start;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.activity-item{display:flex;gap:14px;padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.04);align-items:flex-start;}
 .activity-item:last-child{border-bottom:none;}
 .activity-dot{width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0;}
 .activity-dot.green{background:var(--green-light);}
@@ -122,69 +80,54 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 .activity-text{font-size:13px;color:var(--text);flex:1;}
 .activity-text span{color:white;font-weight:500;}
 .activity-time{font-size:11px;color:var(--text-muted);white-space:nowrap;}
-
-/* REVENUE CHART */
-.revenue-bars{display:flex;align-items:flex-end;gap:8px;height:120px;padding:10px 0;}
+.rev-bars{display:flex;align-items:flex-end;gap:8px;height:120px;padding:10px 0;}
 .rev-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end;}
-.rev-bar{width:100%;background:rgba(26,122,74,0.2);border-radius:4px 4px 0 0;position:relative;transition:all 0.3s;}
-.rev-bar:hover{background:rgba(26,122,74,0.4);}
+.rev-bar{width:100%;background:rgba(26,122,74,.2);border-radius:4px 4px 0 0;position:relative;}
 .rev-bar-fill{position:absolute;bottom:0;left:0;right:0;background:var(--green);border-radius:4px 4px 0 0;}
 .rev-label{font-size:10px;color:var(--text-muted);}
 .rev-value{font-size:10px;color:var(--green-light);font-weight:600;}
-
-/* SECTION VIEWS */
 .section{display:none;}
 .section.active{display:block;}
-
-/* SCHOOL ROW DETAILS */
-.school-url{font-size:11px;color:var(--text-muted);margin-top:2px;}
-.school-name-wrap{display:flex;flex-direction:column;}
-
-/* PLAN BADGE */
-.plan-small{background:rgba(26,122,74,0.15);color:#4ade80;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;}
-.plan-medium{background:rgba(59,130,246,0.15);color:#60a5fa;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;}
-.plan-large{background:rgba(139,92,246,0.15);color:#a78bfa;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;}
-
-/* TOAST */
-.toast{position:fixed;bottom:24px;right:24px;background:var(--green);color:white;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:500;box-shadow:var(--shadow);transform:translateY(80px);opacity:0;transition:all 0.3s;z-index:999;}
-.toast.show{transform:translateY(0);opacity:1;}
-
-/* LOGIN */
-.login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--dark);}
+.school-sub{font-size:11px;color:var(--text-muted);margin-top:2px;}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center;}
+.modal-overlay.show{display:flex;}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:480px;box-shadow:var(--shadow);}
+.modal-title{font-family:'Playfair Display',serif;font-size:18px;color:white;margin-bottom:6px;}
+.modal-sub{font-size:13px;color:var(--text-muted);margin-bottom:20px;}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;}
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;}
 .login-box{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:40px;width:380px;text-align:center;}
 .login-logo{width:56px;height:56px;background:var(--green);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px;}
 .login-title{font-family:'Playfair Display',serif;font-size:22px;color:white;margin-bottom:6px;}
-.login-sub{font-size:13px;color:var(--text-muted);margin-bottom:28px;}
-.login-badge{background:rgba(240,180,41,0.15);border:1px solid rgba(240,180,41,0.3);color:var(--gold);font-size:11px;padding:4px 12px;border-radius:20px;display:inline-block;margin-bottom:20px;}
-
+.login-sub{font-size:13px;color:var(--text-muted);margin-bottom:24px;}
+.login-badge{background:rgba(240,180,41,.15);border:1px solid rgba(240,180,41,.3);color:var(--gold);font-size:11px;padding:4px 12px;border-radius:20px;display:inline-block;margin-bottom:16px;}
+.loading{color:var(--text-muted);font-size:13px;padding:20px;text-align:center;}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--green);color:white;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:500;box-shadow:var(--shadow);transform:translateY(80px);opacity:0;transition:all .3s;z-index:999;}
+.toast.show{transform:translateY(0);opacity:1;}
 ::-webkit-scrollbar{width:4px;}
-::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:#2a3a50;border-radius:4px;}
 </style>
 </head>
 <body>
 
-<!-- LOGIN SCREEN -->
+<!-- LOGIN -->
 <div class="login-screen" id="login-screen">
   <div class="login-box">
     <div class="login-logo">🏫</div>
     <div class="login-badge">⚡ Super Admin Access</div>
     <div class="login-title">EduPing Control Panel</div>
-    <div class="login-sub">Sign in to manage all schools on the platform</div>
-    <div class="form-group" style="text-align:left;margin-bottom:14px;">
+    <div class="login-sub">Manage all schools on the platform</div>
+    <div class="form-group" style="text-align:left;margin-bottom:12px;">
       <label class="form-label">Super Admin Password</label>
-      <input class="form-input" id="super-password" type="password" placeholder="Enter password" onkeydown="if(event.key==='Enter')superLogin()">
+      <input class="form-input" id="super-pw" type="password" placeholder="Enter password" onkeydown="if(event.key==='Enter')superLogin()">
     </div>
-    <div style="color:#ef4444;font-size:12px;margin-bottom:12px;display:none;" id="login-err">Wrong password. Try again.</div>
-    <button class="btn btn-primary" style="width:100%;padding:12px;" onclick="superLogin()">Login to Super Admin</button>
-    <div style="font-size:11px;color:var(--text-muted);margin-top:16px;">Demo password: <strong style="color:var(--text)">superadmin</strong></div>
+    <div style="color:#ef4444;font-size:12px;margin-bottom:12px;display:none;" id="login-err">Wrong password.</div>
+    <button class="btn btn-primary" style="width:100%;padding:12px;" onclick="superLogin()">Login</button>
   </div>
 </div>
 
-<!-- MAIN APP (hidden until login) -->
+<!-- APP -->
 <div id="app" style="display:none;flex-direction:column;flex:1;">
-
-<!-- NAV -->
 <div class="topnav">
   <div class="nav-brand">
     <div class="nav-logo">🏫</div>
@@ -198,532 +141,188 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 </div>
 
 <div class="layout">
-
-<!-- SIDEBAR -->
 <div class="sidebar">
   <div class="sidebar-section">
     <div class="sidebar-label">Overview</div>
-    <div class="sidebar-item active" onclick="showSection('overview',this)">
-      <span class="sidebar-item-icon">📊</span> Dashboard
-    </div>
-    <div class="sidebar-item" onclick="showSection('revenue',this)">
-      <span class="sidebar-item-icon">💰</span> Revenue
-    </div>
+    <div class="sidebar-item active" onclick="showSection('overview',this)"><span class="sidebar-item-icon">📊</span>Dashboard</div>
+    <div class="sidebar-item" onclick="showSection('revenue',this)"><span class="sidebar-item-icon">💰</span>Revenue</div>
   </div>
   <div class="sidebar-section">
     <div class="sidebar-label">Schools</div>
-    <div class="sidebar-item" onclick="showSection('schools',this)">
-      <span class="sidebar-item-icon">🏫</span> All Schools
-      <span class="sidebar-count" id="school-count">3</span>
-    </div>
-    <div class="sidebar-item" onclick="showSection('onboard',this)">
-      <span class="sidebar-item-icon">➕</span> Add School
-    </div>
-    <div class="sidebar-item" onclick="showSection('pending',this)">
-      <span class="sidebar-item-icon">⏳</span> Pending Setup
-      <span class="sidebar-count" style="background:var(--gold)">1</span>
-    </div>
-  </div>
-  <div class="sidebar-section">
-    <div class="sidebar-label">Billing</div>
-    <div class="sidebar-item" onclick="showSection('billing',this)">
-      <span class="sidebar-item-icon">🧾</span> Subscriptions
-    </div>
-    <div class="sidebar-item" onclick="showSection('overdue',this)">
-      <span class="sidebar-item-icon">⚠️</span> Overdue
-      <span class="sidebar-count" style="background:var(--danger)">1</span>
-    </div>
+    <div class="sidebar-item" onclick="showSection('schools',this)"><span class="sidebar-item-icon">🏫</span>All Schools<span class="sidebar-count" id="school-count">—</span></div>
+    <div class="sidebar-item" onclick="showSection('add',this)"><span class="sidebar-item-icon">➕</span>Add School</div>
   </div>
   <div class="sidebar-section">
     <div class="sidebar-label">System</div>
-    <div class="sidebar-item" onclick="showSection('activity',this)">
-      <span class="sidebar-item-icon">📡</span> Activity Log
-    </div>
-    <div class="sidebar-item" onclick="showSection('settings',this)">
-      <span class="sidebar-item-icon">⚙️</span> Settings
-    </div>
+    <div class="sidebar-item" onclick="showSection('activity',this)"><span class="sidebar-item-icon">📡</span>Activity</div>
+    <div class="sidebar-item" onclick="showSection('settings',this)"><span class="sidebar-item-icon">⚙️</span>Settings</div>
   </div>
 </div>
 
-<!-- MAIN CONTENT -->
 <div class="main-content">
 
-  <!-- ── OVERVIEW ── -->
+  <!-- OVERVIEW -->
   <div id="section-overview" class="section active">
     <div class="page-header">
-      <div>
-        <div class="page-title">Good morning, Philip 👋</div>
-        <div class="page-sub">Here's your EduPing platform overview</div>
-      </div>
-      <div class="header-actions">
-        <button class="btn btn-secondary" onclick="showSection('activity',null)">📡 Activity log</button>
-        <button class="btn btn-primary" onclick="showSection('onboard',null);document.querySelectorAll('.sidebar-item').forEach(i=>i.classList.remove('active'));document.querySelectorAll('.sidebar-item')[3].classList.add('active')">➕ Add school</button>
-      </div>
+      <div><div class="page-title">Platform Overview</div><div class="page-sub" id="overview-sub">Loading...</div></div>
+      <button class="btn btn-primary" onclick="showSection('add',null)">➕ Add school</button>
     </div>
-
     <div class="stats-grid">
-      <div class="stat-card green">
-        <div class="stat-icon">🏫</div>
-        <div class="stat-value">3</div>
-        <div class="stat-label">Active schools</div>
-        <div class="stat-change up">↑ 1 added this month</div>
-      </div>
-      <div class="stat-card gold">
-        <div class="stat-icon">💰</div>
-        <div class="stat-value">₦360k</div>
-        <div class="stat-label">Monthly recurring revenue</div>
-        <div class="stat-change up">↑ ₦120k from last month</div>
-      </div>
-      <div class="stat-card blue">
-        <div class="stat-icon">👨‍👩‍👧</div>
-        <div class="stat-value">847</div>
-        <div class="stat-label">Total parents on platform</div>
-        <div class="stat-change up">↑ 312 this month</div>
-      </div>
-      <div class="stat-card purple">
-        <div class="stat-icon">💬</div>
-        <div class="stat-value">4.2k</div>
-        <div class="stat-label">AI conversations this month</div>
-        <div class="stat-change up">↑ 38% from last month</div>
-      </div>
+      <div class="stat-card green"><div class="stat-icon">🏫</div><div class="stat-value" id="stat-schools">—</div><div class="stat-label">Active schools</div></div>
+      <div class="stat-card gold"><div class="stat-icon">💰</div><div class="stat-value" id="stat-mrr">—</div><div class="stat-label">Monthly recurring revenue</div></div>
+      <div class="stat-card blue"><div class="stat-icon">👨‍👩‍👧</div><div class="stat-value" id="stat-students">—</div><div class="stat-label">Total students</div></div>
+      <div class="stat-card purple"><div class="stat-icon">💬</div><div class="stat-value" id="stat-convos">—</div><div class="stat-label">AI conversations</div></div>
     </div>
-
     <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:20px;">
       <div class="table-card">
-        <div class="table-header">
-          <div class="table-title">Schools at a glance</div>
-          <button class="btn btn-secondary" style="padding:6px 14px;font-size:12px;" onclick="showSection('schools',null)">View all</button>
-        </div>
-        <table>
-          <thead><tr><th>School</th><th>Plan</th><th>Status</th><th>MRR</th></tr></thead>
-          <tbody>
-            <tr>
-              <td><div class="school-name-wrap"><strong>Winrose Group of Schools</strong><div class="school-url">winrose.edupingai.com</div></div></td>
-              <td><span class="plan-medium">Medium</span></td>
-              <td><span class="pill pill-green"><span class="pill-dot"></span>Active</span></td>
-              <td style="color:#4ade80;font-weight:600;">₦150,000</td>
-            </tr>
-            <tr>
-              <td><div class="school-name-wrap"><strong>Greenfield Academy</strong><div class="school-url">greenfield.edupingai.com</div></div></td>
-              <td><span class="plan-small">Small</span></td>
-              <td><span class="pill pill-green"><span class="pill-dot"></span>Active</span></td>
-              <td style="color:#4ade80;font-weight:600;">₦80,000</td>
-            </tr>
-            <tr>
-              <td><div class="school-name-wrap"><strong>Sunrise International</strong><div class="school-url">sunrise.edupingai.com</div></div></td>
-              <td><span class="plan-small">Small</span></td>
-              <td><span class="pill pill-red"><span class="pill-dot"></span>Overdue</span></td>
-              <td style="color:#f87171;font-weight:600;">₦80,000</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-header"><div class="table-title">Schools</div></div>
+        <div id="schools-overview"><div class="loading">Loading...</div></div>
       </div>
-
       <div class="table-card">
         <div class="table-header"><div class="table-title">Recent Activity</div></div>
-        <div class="activity-feed">
-          <div class="activity-item">
-            <div class="activity-dot green"></div>
-            <div class="activity-text"><span>Winrose</span> — 47 parent conversations today</div>
-            <div class="activity-time">Now</div>
-          </div>
-          <div class="activity-item">
-            <div class="activity-dot blue"></div>
-            <div class="activity-text"><span>Greenfield</span> — Mrs Adaeze signed in at 7:42am</div>
-            <div class="activity-time">2h ago</div>
-          </div>
-          <div class="activity-item">
-            <div class="activity-dot gold"></div>
-            <div class="activity-text"><span>Sunrise</span> — payment overdue by 5 days</div>
-            <div class="activity-time">5d ago</div>
-          </div>
-          <div class="activity-item">
-            <div class="activity-dot green"></div>
-            <div class="activity-text"><span>Winrose</span> — onboarded successfully</div>
-            <div class="activity-time">1w ago</div>
-          </div>
-          <div class="activity-item">
-            <div class="activity-dot blue"></div>
-            <div class="activity-text"><span>Greenfield</span> — 312 parents connected</div>
-            <div class="activity-time">2w ago</div>
-          </div>
+        <div id="activity-feed-overview">
+          <div class="activity-item"><div class="activity-dot green"></div><div class="activity-text">Platform started successfully</div><div class="activity-time">Now</div></div>
+          <div class="activity-item"><div class="activity-dot blue"></div><div class="activity-text">Database connected and migrated</div><div class="activity-time">Now</div></div>
+          <div class="activity-item"><div class="activity-dot gold"></div><div class="activity-text">Cron jobs scheduled (Friday reports, daily fee reminders)</div><div class="activity-time">Now</div></div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- ── ALL SCHOOLS ── -->
+  <!-- ALL SCHOOLS -->
   <div id="section-schools" class="section">
     <div class="page-header">
-      <div>
-        <div class="page-title">All Schools</div>
-        <div class="page-sub">Manage every school on the EduPing platform</div>
-      </div>
-      <div class="header-actions">
-        <button class="btn btn-primary" onclick="showSection('onboard',null)">➕ Add school</button>
-      </div>
+      <div><div class="page-title">All Schools</div><div class="page-sub">Manage every school on the platform</div></div>
+      <button class="btn btn-primary" onclick="showSection('add',null)">➕ Add school</button>
     </div>
     <div class="table-card">
-      <div class="table-header">
-        <div class="table-title">3 schools</div>
-        <input class="table-search" placeholder="🔍 Search schools...">
-      </div>
-      <table>
-        <thead><tr><th>School</th><th>Plan</th><th>Students</th><th>Staff</th><th>Parents</th><th>Status</th><th>Next payment</th><th>Actions</th></tr></thead>
-        <tbody>
-          <tr>
-            <td><div class="school-name-wrap"><strong>Winrose Group of Schools</strong><div class="school-url">Abuja • Added Apr 28, 2025</div></div></td>
-            <td><span class="plan-medium">Medium ₦150k/mo</span></td>
-            <td>312</td><td>18</td><td>289</td>
-            <td><span class="pill pill-green"><span class="pill-dot"></span>Active</span></td>
-            <td>May 28, 2025</td>
-            <td>
-              <div style="display:flex;gap:6px;">
-                <button class="action-btn" onclick="showToast('Opening Winrose dashboard...')">View</button>
-                <button class="action-btn" onclick="showToast('Winrose settings opened')">Edit</button>
-                <button class="action-btn danger" onclick="confirmRemove('Winrose Group of Schools')">Remove</button>
-              </div>
-            </td>
-          </tr>
-          <tr>
-            <td><div class="school-name-wrap"><strong>Greenfield Academy</strong><div class="school-url">Abuja • Added Mar 15, 2025</div></div></td>
-            <td><span class="plan-small">Small ₦80k/mo</span></td>
-            <td>185</td><td>12</td><td>178</td>
-            <td><span class="pill pill-green"><span class="pill-dot"></span>Active</span></td>
-            <td>May 15, 2025</td>
-            <td>
-              <div style="display:flex;gap:6px;">
-                <button class="action-btn" onclick="showToast('Opening Greenfield dashboard...')">View</button>
-                <button class="action-btn" onclick="showToast('Greenfield settings opened')">Edit</button>
-                <button class="action-btn danger" onclick="confirmRemove('Greenfield Academy')">Remove</button>
-              </div>
-            </td>
-          </tr>
-          <tr>
-            <td><div class="school-name-wrap"><strong>Sunrise International</strong><div class="school-url">Abuja • Added Feb 1, 2025</div></div></td>
-            <td><span class="plan-small">Small ₦80k/mo</span></td>
-            <td>246</td><td>15</td><td>230</td>
-            <td><span class="pill pill-red"><span class="pill-dot"></span>Overdue</span></td>
-            <td><span style="color:#f87171;">Overdue 5 days</span></td>
-            <td>
-              <div style="display:flex;gap:6px;">
-                <button class="action-btn" onclick="showToast('Payment reminder sent to Sunrise! 📨')">Remind</button>
-                <button class="action-btn danger" onclick="confirmSuspend('Sunrise International')">Suspend</button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="table-header"><div class="table-title" id="schools-count-title">Schools</div></div>
+      <div id="schools-table-wrap"><div class="loading">Loading...</div></div>
     </div>
   </div>
 
-  <!-- ── ADD SCHOOL ── -->
-  <div id="section-onboard" class="section">
+  <!-- ADD SCHOOL -->
+  <div id="section-add" class="section">
     <div class="page-header">
-      <div>
-        <div class="page-title">Add New School</div>
-        <div class="page-sub">Onboard a new school to the EduPing platform</div>
-      </div>
+      <div><div class="page-title">Add New School</div><div class="page-sub">Onboard a school to EduPing</div></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
       <div class="table-card" style="overflow:visible;">
-        <div class="table-header"><div class="table-title">Step 1 — School Information</div></div>
+        <div class="table-header"><div class="table-title">School Information</div></div>
         <div style="padding:20px;display:flex;flex-direction:column;gap:14px;">
-          <div class="form-group">
-            <label class="form-label">School Name</label>
-            <input class="form-input" id="new-school-name" placeholder="e.g. Winrose Group of Schools">
-          </div>
+          <div class="form-group"><label class="form-label">School Name *</label><input class="form-input" id="ns-name" placeholder="Winrose Group of Schools"></div>
           <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label">City</label>
-              <input class="form-input" id="new-school-city" placeholder="Abuja">
-            </div>
-            <div class="form-group">
-              <label class="form-label">State</label>
-              <input class="form-input" id="new-school-state" placeholder="FCT">
-            </div>
+            <div class="form-group"><label class="form-label">City *</label><input class="form-input" id="ns-city" placeholder="Abuja"></div>
+            <div class="form-group"><label class="form-label">Plan</label><select class="form-select" id="ns-plan" onchange="updatePricing()"><option value="starter">Starter — Small</option><option value="medium">Medium</option><option value="enterprise">Enterprise — Large</option><option value="beta">Beta Partner</option></select></div>
           </div>
-          <div class="form-group">
-            <label class="form-label">School WhatsApp Number</label>
-            <input class="form-input" id="new-school-phone" placeholder="+2348012345678">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Admin Email</label>
-            <input class="form-input" id="new-school-email" placeholder="admin@schoolname.com">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Admin Password</label>
-            <input class="form-input" id="new-school-password" type="text" placeholder="Set a strong password">
-          </div>
-          <div class="form-group">
-            <label class="form-label">School Landmark (for teacher sign-in)</label>
-            <input class="form-input" id="new-school-landmark" placeholder="Green gate with school signboard">
-          </div>
+          <div class="form-group"><label class="form-label">School WhatsApp Number</label><input class="form-input" id="ns-wa" placeholder="+2348012345678"></div>
+          <div class="form-group"><label class="form-label">Twilio Number (for routing)</label><input class="form-input" id="ns-twilio" placeholder="+14155238886"></div>
+          <div class="form-group"><label class="form-label">Admin Password *</label><input class="form-input" id="ns-password" placeholder="Set a strong password"></div>
+          <div class="form-group"><label class="form-label">Landmark (for teacher sign-in)</label><input class="form-input" id="ns-landmark" placeholder="Green gate with school signboard"></div>
+          <div class="form-group"><label class="form-label">School Fees</label><input class="form-input" id="ns-fees" placeholder="85000 per term"></div>
+          <div class="form-group"><label class="form-label">Current Term</label><input class="form-input" id="ns-term" placeholder="2nd Term 2024/2025"></div>
         </div>
       </div>
-
-      <div style="display:flex;flex-direction:column;gap:20px;">
-        <div class="table-card" style="overflow:visible;">
-          <div class="table-header"><div class="table-title">Step 2 — Plan & Pricing</div></div>
-          <div style="padding:20px;display:flex;flex-direction:column;gap:14px;">
-            <div class="form-group">
-              <label class="form-label">Plan</label>
-              <select class="form-select" id="new-school-plan" onchange="updatePricing()">
-                <option value="small">Small — up to 200 students</option>
-                <option value="medium">Medium — up to 500 students</option>
-                <option value="large">Large — 500+ students</option>
-                <option value="beta">Beta — discounted partner</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Setup Fee</label>
-              <input class="form-input" id="new-school-setup" value="₦150,000">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Monthly Retainer</label>
-              <input class="form-input" id="new-school-monthly" value="₦80,000/month">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Billing Start Date</label>
-              <input class="form-input" type="date" id="new-school-billing">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Notes</label>
-              <input class="form-input" id="new-school-notes" placeholder="Any special arrangements...">
+      <div class="table-card" style="overflow:visible;">
+        <div class="table-header"><div class="table-title">Pricing</div></div>
+        <div style="padding:20px;display:flex;flex-direction:column;gap:14px;">
+          <div class="form-group"><label class="form-label">Setup Fee (₦)</label><input class="form-input" id="ns-setup" value="150000"></div>
+          <div class="form-group"><label class="form-label">Monthly Retainer (₦)</label><input class="form-input" id="ns-monthly" value="80000"></div>
+          <div class="form-group"><label class="form-label">Billing Start Date</label><input class="form-input" type="date" id="ns-billing"></div>
+          <div style="background:rgba(26,122,74,.1);border:1px solid rgba(26,122,74,.3);border-radius:10px;padding:16px;margin-top:8px;">
+            <div style="font-size:13px;color:white;font-weight:600;margin-bottom:8px;">After saving:</div>
+            <div style="font-size:12px;color:var(--text-muted);line-height:2;">
+              ① Copy the school ID from the schools list<br>
+              ② Give school admin their ID + password<br>
+              ③ They log in at <strong style="color:var(--text);">your-url.railway.app/</strong><br>
+              ④ Connect their Twilio number for WhatsApp<br>
+              ⑤ Add their students and staff
             </div>
           </div>
-        </div>
-
-        <div class="table-card" style="overflow:visible;">
-          <div class="table-header"><div class="table-title">Step 3 — Deploy</div></div>
-          <div style="padding:20px;display:flex;flex-direction:column;gap:10px;">
-            <div style="font-size:13px;color:var(--text-muted);line-height:1.6;">After saving, you'll get a checklist to:</div>
-            <div style="font-size:13px;color:var(--text);line-height:2;">
-              <span style="color:var(--green-light);">①</span> Fork GitHub repo for this school<br>
-              <span style="color:var(--green-light);">②</span> Deploy to Railway with their data<br>
-              <span style="color:var(--green-light);">③</span> Connect Twilio WhatsApp number<br>
-              <span style="color:var(--green-light);">④</span> Add API keys to Railway variables<br>
-              <span style="color:var(--green-light);">⑤</span> Test and hand over to school admin
-            </div>
-            <button class="btn btn-primary" style="margin-top:8px;" onclick="addSchool()">🏫 Add School & Generate Checklist</button>
-          </div>
+          <button class="btn btn-primary" style="margin-top:8px;padding:12px;" onclick="addSchool()">🏫 Add School</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- ── PENDING ── -->
-  <div id="section-pending" class="section">
-    <div class="page-header">
-      <div><div class="page-title">Pending Setup</div><div class="page-sub">Schools added but not yet fully deployed</div></div>
-    </div>
-    <div class="table-card">
-      <div class="table-header"><div class="table-title">1 school pending</div></div>
-      <table>
-        <thead><tr><th>School</th><th>Added</th><th>Plan</th><th>Setup Progress</th><th>Actions</th></tr></thead>
-        <tbody>
-          <tr>
-            <td><strong>Excel Heights Academy</strong></td>
-            <td>Today</td>
-            <td><span class="plan-small">Small</span></td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px;">
-                <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden;">
-                  <div style="width:40%;height:100%;background:var(--green);border-radius:3px;"></div>
-                </div>
-                <span style="font-size:12px;color:var(--text-muted);">40%</span>
-              </div>
-              <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Repo forked ✅ · Railway deploying... · Twilio pending</div>
-            </td>
-            <td>
-              <div style="display:flex;gap:6px;">
-                <button class="action-btn" onclick="showToast('Opening setup checklist...')">Continue setup</button>
-                <button class="action-btn danger" onclick="showToast('Excel Heights removed')">Cancel</button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- ── BILLING ── -->
-  <div id="section-billing" class="section">
-    <div class="page-header">
-      <div><div class="page-title">Subscriptions</div><div class="page-sub">Track monthly retainers across all schools</div></div>
-    </div>
-    <div class="stats-grid">
-      <div class="stat-card green"><div class="stat-icon">✅</div><div class="stat-value">2</div><div class="stat-label">Paid this month</div></div>
-      <div class="stat-card gold"><div class="stat-icon">💰</div><div class="stat-value">₦360k</div><div class="stat-label">Collected this month</div></div>
-      <div class="stat-card blue"><div class="stat-icon">📅</div><div class="stat-value">₦80k</div><div class="stat-label">Due this month</div></div>
-      <div class="stat-card purple"><div class="stat-icon">📈</div><div class="stat-value">₦510k</div><div class="stat-label">Setup fees collected</div></div>
-    </div>
-    <div class="table-card">
-      <div class="table-header"><div class="table-title">Payment History</div></div>
-      <table>
-        <thead><tr><th>School</th><th>Amount</th><th>Type</th><th>Date</th><th>Status</th><th>Action</th></tr></thead>
-        <tbody>
-          <tr><td><strong>Winrose Group</strong></td><td>₦250,000</td><td>Setup fee</td><td>Apr 28, 2025</td><td><span class="pill pill-green">Paid</span></td><td><button class="action-btn" onclick="showToast('Receipt sent!')">Receipt</button></td></tr>
-          <tr><td><strong>Winrose Group</strong></td><td>₦150,000</td><td>Month 1 retainer</td><td>Apr 28, 2025</td><td><span class="pill pill-green">Paid</span></td><td><button class="action-btn" onclick="showToast('Receipt sent!')">Receipt</button></td></tr>
-          <tr><td><strong>Greenfield Academy</strong></td><td>₦150,000</td><td>Setup fee</td><td>Mar 15, 2025</td><td><span class="pill pill-green">Paid</span></td><td><button class="action-btn" onclick="showToast('Receipt sent!')">Receipt</button></td></tr>
-          <tr><td><strong>Greenfield Academy</strong></td><td>₦80,000</td><td>Month 1 retainer</td><td>Mar 15, 2025</td><td><span class="pill pill-green">Paid</span></td><td><button class="action-btn" onclick="showToast('Receipt sent!')">Receipt</button></td></tr>
-          <tr><td><strong>Greenfield Academy</strong></td><td>₦80,000</td><td>Month 2 retainer</td><td>Apr 15, 2025</td><td><span class="pill pill-green">Paid</span></td><td><button class="action-btn" onclick="showToast('Receipt sent!')">Receipt</button></td></tr>
-          <tr><td><strong>Sunrise International</strong></td><td>₦150,000</td><td>Setup fee</td><td>Feb 1, 2025</td><td><span class="pill pill-green">Paid</span></td><td><button class="action-btn" onclick="showToast('Receipt sent!')">Receipt</button></td></tr>
-          <tr><td><strong>Sunrise International</strong></td><td>₦80,000</td><td>Month 3 retainer</td><td>May 1, 2025</td><td><span class="pill pill-red">Overdue</span></td><td><button class="action-btn" onclick="showToast('Reminder sent to Sunrise! 📨')">Send reminder</button></td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- ── OVERDUE ── -->
-  <div id="section-overdue" class="section">
-    <div class="page-header">
-      <div><div class="page-title">Overdue Payments</div><div class="page-sub">Schools that haven't paid their retainer</div></div>
-    </div>
-    <div class="table-card">
-      <div class="table-header"><div class="table-title">1 overdue school</div></div>
-      <table>
-        <thead><tr><th>School</th><th>Amount due</th><th>Days overdue</th><th>Last contact</th><th>Actions</th></tr></thead>
-        <tbody>
-          <tr>
-            <td><strong>Sunrise International</strong></td>
-            <td style="color:#f87171;font-weight:600;">₦80,000</td>
-            <td><span class="pill pill-red">5 days</span></td>
-            <td>2 days ago</td>
-            <td>
-              <div style="display:flex;gap:6px;">
-                <button class="action-btn" onclick="showToast('WhatsApp reminder sent to Sunrise! 📨')">Send reminder</button>
-                <button class="action-btn danger" onclick="confirmSuspend('Sunrise International')">Suspend access</button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="table-card" style="margin-top:0;">
-      <div class="table-header"><div class="table-title">Auto-suspension Policy</div></div>
-      <div style="padding:20px;font-size:13px;color:var(--text-muted);line-height:2;">
-        <span style="color:var(--gold);">Day 1–3:</span> Automatic WhatsApp reminder sent to school admin<br>
-        <span style="color:var(--gold);">Day 5:</span> Personal WhatsApp from you (Philip) + second reminder<br>
-        <span style="color:var(--danger);">Day 10:</span> Access suspended automatically — school gets warning message<br>
-        <span style="color:var(--danger);">Day 30:</span> School removed from platform<br>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── REVENUE ── -->
+  <!-- REVENUE -->
   <div id="section-revenue" class="section">
-    <div class="page-header">
-      <div><div class="page-title">Revenue</div><div class="page-sub">Your EduPing business performance</div></div>
-    </div>
+    <div class="page-header"><div><div class="page-title">Revenue</div><div class="page-sub">EduPing business performance</div></div></div>
     <div class="stats-grid">
-      <div class="stat-card green"><div class="stat-icon">📈</div><div class="stat-value">₦360k</div><div class="stat-label">MRR (Monthly Recurring)</div><div class="stat-change up">↑ 50% from last month</div></div>
-      <div class="stat-card gold"><div class="stat-icon">💎</div><div class="stat-value">₦4.3M</div><div class="stat-label">ARR (Annual Run Rate)</div><div class="stat-change up">↑ Growing fast</div></div>
-      <div class="stat-card blue"><div class="stat-icon">🏫</div><div class="stat-value">₦510k</div><div class="stat-label">Setup fees collected</div><div class="stat-change up">↑ 3 schools onboarded</div></div>
-      <div class="stat-card purple"><div class="stat-icon">📊</div><div class="stat-value">₦870k</div><div class="stat-label">Total collected to date</div></div>
+      <div class="stat-card green"><div class="stat-icon">📈</div><div class="stat-value" id="rev-mrr">₦0</div><div class="stat-label">Monthly Recurring Revenue</div></div>
+      <div class="stat-card gold"><div class="stat-icon">💎</div><div class="stat-value" id="rev-arr">₦0</div><div class="stat-label">Annual Run Rate</div></div>
+      <div class="stat-card blue"><div class="stat-icon">🏫</div><div class="stat-value" id="rev-schools">0</div><div class="stat-label">Paying schools</div></div>
+      <div class="stat-card purple"><div class="stat-icon">📊</div><div class="stat-value" id="rev-avg">₦0</div><div class="stat-label">Avg revenue per school</div></div>
     </div>
     <div class="table-card">
-      <div class="table-header"><div class="table-title">Monthly Revenue Trend</div></div>
+      <div class="table-header"><div class="table-title">Revenue Projection</div></div>
       <div style="padding:20px;">
-        <div class="revenue-bars" id="rev-chart"></div>
-      </div>
-    </div>
-    <div class="table-card">
-      <div class="table-header"><div class="table-title">Revenue Projection (if you close 10 schools)</div></div>
-      <div style="padding:20px;">
-        <table class="data-table" style="width:100%;border-collapse:collapse;">
-          <thead><tr><th style="text-align:left;padding:8px;font-size:12px;color:var(--text-muted);">Schools</th><th style="text-align:left;padding:8px;font-size:12px;color:var(--text-muted);">Setup fees</th><th style="text-align:left;padding:8px;font-size:12px;color:var(--text-muted);">Monthly retainer</th><th style="text-align:left;padding:8px;font-size:12px;color:var(--text-muted);">Annual revenue</th></tr></thead>
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr><th style="text-align:left;padding:8px;font-size:12px;color:var(--text-muted);">Schools</th><th style="text-align:left;padding:8px;font-size:12px;color:var(--text-muted);">Monthly</th><th style="text-align:left;padding:8px;font-size:12px;color:var(--text-muted);">Annual</th></tr></thead>
           <tbody>
-            <tr><td style="padding:10px 8px;font-size:13px;">3 schools (now)</td><td style="padding:10px 8px;font-size:13px;color:var(--gold);">₦510,000</td><td style="padding:10px 8px;font-size:13px;color:#4ade80;">₦360,000/mo</td><td style="padding:10px 8px;font-size:13px;color:white;font-weight:600;">₦4.83M/yr</td></tr>
-            <tr><td style="padding:10px 8px;font-size:13px;">5 schools</td><td style="padding:10px 8px;font-size:13px;color:var(--gold);">₦900,000</td><td style="padding:10px 8px;font-size:13px;color:#4ade80;">₦600,000/mo</td><td style="padding:10px 8px;font-size:13px;color:white;font-weight:600;">₦8.1M/yr</td></tr>
-            <tr><td style="padding:10px 8px;font-size:13px;">10 schools</td><td style="padding:10px 8px;font-size:13px;color:var(--gold);">₦1,800,000</td><td style="padding:10px 8px;font-size:13px;color:#4ade80;">₦1,200,000/mo</td><td style="padding:10px 8px;font-size:13px;color:white;font-weight:600;">₦16.2M/yr</td></tr>
-            <tr style="background:rgba(26,122,74,0.1);"><td style="padding:10px 8px;font-size:13px;font-weight:600;color:white;">20 schools 🎯</td><td style="padding:10px 8px;font-size:13px;color:var(--gold);font-weight:600;">₦3,600,000</td><td style="padding:10px 8px;font-size:13px;color:#4ade80;font-weight:600;">₦2,400,000/mo</td><td style="padding:10px 8px;font-size:13px;color:#4ade80;font-weight:700;">₦32.4M/yr</td></tr>
+            <tr><td style="padding:10px 8px;font-size:13px;">3 schools</td><td style="padding:10px 8px;color:#4ade80;font-weight:600;">₦360,000</td><td style="padding:10px 8px;color:white;font-weight:600;">₦4.8M</td></tr>
+            <tr><td style="padding:10px 8px;font-size:13px;">5 schools</td><td style="padding:10px 8px;color:#4ade80;font-weight:600;">₦600,000</td><td style="padding:10px 8px;color:white;font-weight:600;">₦8.1M</td></tr>
+            <tr><td style="padding:10px 8px;font-size:13px;">10 schools</td><td style="padding:10px 8px;color:#4ade80;font-weight:600;">₦1,200,000</td><td style="padding:10px 8px;color:white;font-weight:600;">₦16.2M</td></tr>
+            <tr style="background:rgba(26,122,74,.1);"><td style="padding:10px 8px;font-size:13px;font-weight:600;color:white;">20 schools 🎯</td><td style="padding:10px 8px;color:#4ade80;font-weight:700;">₦2,400,000</td><td style="padding:10px 8px;color:#4ade80;font-weight:700;">₦32.4M</td></tr>
           </tbody>
         </table>
       </div>
     </div>
   </div>
 
-  <!-- ── ACTIVITY ── -->
+  <!-- ACTIVITY -->
   <div id="section-activity" class="section">
-    <div class="page-header">
-      <div><div class="page-title">Activity Log</div><div class="page-sub">Everything happening across all schools in real time</div></div>
-    </div>
+    <div class="page-header"><div><div class="page-title">Activity Log</div><div class="page-sub">Platform-wide activity</div></div></div>
     <div class="table-card">
-      <div class="table-header"><div class="table-title">Platform Activity</div><input class="table-search" placeholder="🔍 Filter activity..."></div>
-      <div class="activity-feed">
-        <div class="activity-item"><div class="activity-dot green"></div><div class="activity-text"><span>Winrose</span> — Mrs Adaeze Okonkwo signed in at 7:42am via gate photo</div><div class="activity-time">Today 7:42am</div></div>
-        <div class="activity-item"><div class="activity-dot blue"></div><div class="activity-text"><span>Winrose</span> — 47 parent WhatsApp conversations processed by AI</div><div class="activity-time">Today</div></div>
-        <div class="activity-item"><div class="activity-dot green"></div><div class="activity-text"><span>Greenfield</span> — Attendance uploaded for JSS2A (28 present, 2 absent)</div><div class="activity-time">Today 8:15am</div></div>
-        <div class="activity-item"><div class="activity-dot blue"></div><div class="activity-text"><span>Greenfield</span> — Maths scores uploaded for JSS2A by Mr Emeka Nwosu</div><div class="activity-time">Yesterday</div></div>
-        <div class="activity-item"><div class="activity-dot gold"></div><div class="activity-text"><span>Sunrise</span> — Payment reminder sent automatically (day 5 overdue)</div><div class="activity-time">Today</div></div>
-        <div class="activity-item"><div class="activity-dot green"></div><div class="activity-text"><span>Winrose</span> — Staff of the Week announced: Mrs Funke Adeleke</div><div class="activity-time">Friday</div></div>
-        <div class="activity-item"><div class="activity-dot green"></div><div class="activity-text"><span>Winrose</span> — 289 parents received weekly performance reports</div><div class="activity-time">Friday 4pm</div></div>
-        <div class="activity-item"><div class="activity-dot blue"></div><div class="activity-text"><span>Greenfield</span> — Admission inquiry from Mrs Kemi Lawson processed</div><div class="activity-time">Apr 28</div></div>
-        <div class="activity-item"><div class="activity-dot green"></div><div class="activity-text"><span>Winrose</span> — Successfully onboarded to platform</div><div class="activity-time">Apr 28</div></div>
-        <div class="activity-item"><div class="activity-dot blue"></div><div class="activity-text"><span>Greenfield</span> — 178 parents connected to WhatsApp number</div><div class="activity-time">Mar 20</div></div>
+      <div class="table-header"><div class="table-title">Recent Activity</div></div>
+      <div id="activity-log">
+        <div class="activity-item"><div class="activity-dot green"></div><div class="activity-text">EduPing multi-tenant platform started</div><div class="activity-time">Now</div></div>
+        <div class="activity-item"><div class="activity-dot blue"></div><div class="activity-text">PostgreSQL database connected and migrated</div><div class="activity-time">Now</div></div>
+        <div class="activity-item"><div class="activity-dot gold"></div><div class="activity-text">Cron jobs scheduled — weekly reports every Friday 4pm Nigeria time</div><div class="activity-time">Now</div></div>
+        <div class="activity-item"><div class="activity-dot gold"></div><div class="activity-text">Daily fee reminders scheduled — every day 9am Nigeria time</div><div class="activity-time">Now</div></div>
       </div>
     </div>
   </div>
 
-  <!-- ── SETTINGS ── -->
+  <!-- SETTINGS -->
   <div id="section-settings" class="section">
-    <div class="page-header">
-      <div><div class="page-title">Platform Settings</div><div class="page-sub">Configure EduPing platform defaults</div></div>
-    </div>
+    <div class="page-header"><div><div class="page-title">Settings</div><div class="page-sub">Platform configuration</div></div></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-      <div class="table-card" style="overflow:visible;">
-        <div class="table-header"><div class="table-title">Default Pricing</div></div>
-        <div style="padding:20px;display:flex;flex-direction:column;gap:14px;">
-          <div class="form-group"><label class="form-label">Small plan setup fee</label><input class="form-input" value="₦150,000"></div>
-          <div class="form-group"><label class="form-label">Small plan monthly</label><input class="form-input" value="₦80,000"></div>
-          <div class="form-group"><label class="form-label">Medium plan setup fee</label><input class="form-input" value="₦250,000"></div>
-          <div class="form-group"><label class="form-label">Medium plan monthly</label><input class="form-input" value="₦150,000"></div>
-          <div class="form-group"><label class="form-label">Large plan setup fee</label><input class="form-input" value="₦500,000"></div>
-          <div class="form-group"><label class="form-label">Large plan monthly</label><input class="form-input" value="₦300,000"></div>
-          <button class="btn btn-primary" onclick="showToast('Pricing updated! ✅')">Save pricing</button>
-        </div>
-      </div>
       <div class="table-card" style="overflow:visible;">
         <div class="table-header"><div class="table-title">Super Admin Account</div></div>
         <div style="padding:20px;display:flex;flex-direction:column;gap:14px;">
-          <div class="form-group"><label class="form-label">Your Name</label><input class="form-input" value="Philip Buike"></div>
-          <div class="form-group"><label class="form-label">Your WhatsApp</label><input class="form-input" value="07015255068"></div>
-          <div class="form-group"><label class="form-label">Your Email</label><input class="form-input" value="buikephilip@gmail.com"></div>
-          <div class="form-group"><label class="form-label">Super Admin Password</label><input class="form-input" type="password" value="superadmin"></div>
-          <div class="form-group"><label class="form-label">Suspension Policy (days)</label><input class="form-input" value="10"></div>
-          <button class="btn btn-primary" onclick="showToast('Settings saved! ✅')">Save settings</button>
+          <div class="form-group"><label class="form-label">Name</label><input class="form-input" value="Philip Buike"></div>
+          <div class="form-group"><label class="form-label">WhatsApp</label><input class="form-input" value="07015255068"></div>
+          <div class="form-group"><label class="form-label">Email</label><input class="form-input" value="buikephilip@gmail.com"></div>
+          <button class="btn btn-primary" onclick="showToast('Settings saved ✅')">Save</button>
+        </div>
+      </div>
+      <div class="table-card" style="overflow:visible;">
+        <div class="table-header"><div class="table-title">Default Pricing</div></div>
+        <div style="padding:20px;display:flex;flex-direction:column;gap:14px;">
+          <div class="form-group"><label class="form-label">Starter setup fee</label><input class="form-input" value="150000"></div>
+          <div class="form-group"><label class="form-label">Starter monthly</label><input class="form-input" value="80000"></div>
+          <div class="form-group"><label class="form-label">Medium setup fee</label><input class="form-input" value="250000"></div>
+          <div class="form-group"><label class="form-label">Medium monthly</label><input class="form-input" value="150000"></div>
+          <button class="btn btn-primary" onclick="showToast('Pricing saved ✅')">Save pricing</button>
         </div>
       </div>
     </div>
   </div>
 
-</div><!-- end main-content -->
-</div><!-- end layout -->
-</div><!-- end app -->
+</div>
+</div>
+</div>
 
 <!-- REMOVE MODAL -->
 <div class="modal-overlay" id="remove-modal">
   <div class="modal">
     <div style="font-size:32px;margin-bottom:12px;">⚠️</div>
     <div class="modal-title">Remove School</div>
-    <div class="modal-sub" id="remove-modal-text">Are you sure you want to remove this school? This will immediately cut off their access and delete all data.</div>
+    <div class="modal-sub" id="remove-modal-text">This will permanently delete the school and all its data.</div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="document.getElementById('remove-modal').classList.remove('show')">Cancel</button>
-      <button class="btn btn-danger" onclick="doRemove()">Yes, remove school</button>
-    </div>
-  </div>
-</div>
-
-<!-- SUSPEND MODAL -->
-<div class="modal-overlay" id="suspend-modal">
-  <div class="modal">
-    <div style="font-size:32px;margin-bottom:12px;">🔒</div>
-    <div class="modal-title">Suspend School</div>
-    <div class="modal-sub" id="suspend-modal-text">Suspending this school will block all access until payment is received. The school admin will be notified via WhatsApp.</div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="document.getElementById('suspend-modal').classList.remove('show')">Cancel</button>
-      <button class="btn btn-danger" onclick="doSuspend()">Suspend access</button>
+      <button class="btn btn-danger" onclick="doRemove()">Remove</button>
     </div>
   </div>
 </div>
@@ -731,107 +330,185 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 <div class="toast" id="toast"></div>
 
 <script>
-// ── Login ──────────────────────────────────────────────────
-function superLogin() {
-  const pw = document.getElementById('super-password').value;
-  if (pw === 'superadmin') {
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('app').style.display = 'flex';
-    document.getElementById('app').style.flexDirection = 'column';
-  } else {
-    document.getElementById('login-err').style.display = 'block';
-  }
+let superToken = '';
+let pendingRemoveId = '';
+
+// ── API ───────────────────────────────────────────────────
+async function sapi(url, opts = {}) {
+  opts.headers = { 'Content-Type': 'application/json', 'x-super-admin-password': superToken, ...(opts.headers||{}) };
+  const res = await fetch(url, opts);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// ── Login ─────────────────────────────────────────────────
+async function superLogin() {
+  const pw = document.getElementById('super-pw').value;
+  try {
+    const res = await fetch('/api/super/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:pw}) });
+    const data = await res.json();
+    if (data.ok) {
+      superToken = pw;
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'flex';
+      document.getElementById('app').style.flexDirection = 'column';
+      loadOverview();
+    } else { document.getElementById('login-err').style.display = 'block'; }
+  } catch(e) { document.getElementById('login-err').style.display = 'block'; }
 }
 
 function logout() {
+  superToken = '';
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
-  document.getElementById('super-password').value = '';
+  document.getElementById('super-pw').value = '';
 }
 
 // ── Section switching ──────────────────────────────────────
 function showSection(name, btn) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('section-' + name).classList.add('active');
-  if (btn) {
-    document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
-    btn.classList.add('active');
-  }
+  if (btn) { document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active')); btn.classList.add('active'); }
+  if (name === 'schools') loadSchools();
+  if (name === 'revenue') loadRevenue();
 }
 
-// ── Revenue chart ──────────────────────────────────────────
-const months = [
-  {label:'Jan',val:0},{label:'Feb',val:80},{label:'Mar',val:160},
-  {label:'Apr',val:360},{label:'May',val:440},{label:'Jun',val:520}
-];
-const chart = document.getElementById('rev-chart');
-if (chart) {
-  const max = Math.max(...months.map(m=>m.val)) || 1;
-  months.forEach(m => {
-    chart.innerHTML += `<div class="rev-bar-wrap">
-      <div class="rev-value">${m.val?'₦'+m.val+'k':''}</div>
-      <div class="rev-bar" style="height:90px">
-        <div class="rev-bar-fill" style="height:${(m.val/max)*100}%"></div>
-      </div>
-      <div class="rev-label">${m.label}</div>
-    </div>`;
-  });
+// ── Overview ──────────────────────────────────────────────
+async function loadOverview() {
+  try {
+    const d = await sapi('/api/super/overview');
+    document.getElementById('stat-schools').textContent = d.schools.active;
+    document.getElementById('stat-mrr').textContent = '₦' + Number(d.mrr||0).toLocaleString();
+    document.getElementById('stat-students').textContent = d.students;
+    document.getElementById('stat-convos').textContent = d.conversations;
+    document.getElementById('school-count').textContent = d.schools.total;
+    document.getElementById('overview-sub').textContent = d.schools.total + ' schools · ₦' + Number(d.mrr||0).toLocaleString() + ' MRR';
+    loadSchoolsOverview();
+  } catch(e) { console.log('Overview error:', e); }
 }
 
-// ── Pricing auto-fill ──────────────────────────────────────
-const plans = {
-  small: {setup:'₦150,000', monthly:'₦80,000/month'},
-  medium: {setup:'₦250,000', monthly:'₦150,000/month'},
-  large: {setup:'₦500,000', monthly:'₦300,000/month'},
-  beta: {setup:'₦75,000', monthly:'₦40,000/month'}
-};
-function updatePricing() {
-  const plan = document.getElementById('new-school-plan').value;
-  document.getElementById('new-school-setup').value = plans[plan].setup;
-  document.getElementById('new-school-monthly').value = plans[plan].monthly;
+async function loadSchoolsOverview() {
+  const el = document.getElementById('schools-overview');
+  try {
+    const schools = await sapi('/api/super/schools');
+    if (!schools.length) { el.innerHTML = '<div class="loading">No schools yet. Add your first school.</div>'; return; }
+    el.innerHTML = `<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">School</th><th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">Plan</th><th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">Status</th><th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">MRR</th></tr></thead><tbody>${schools.map(s => `<tr><td style="padding:12px 16px;font-size:13px;border-bottom:1px solid rgba(255,255,255,.04);"><div><strong>${s.name}</strong></div><div class="school-sub">${s.city||''} · ID: ${s.id.slice(0,8)}...</div></td><td style="padding:12px 16px;font-size:12px;border-bottom:1px solid rgba(255,255,255,.04);">${s.plan}</td><td style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.04);"><span class="pill ${s.status==='active'?'pill-green':'pill-red'}"><span class="pill-dot"></span>${s.status}</span></td><td style="padding:12px 16px;font-size:13px;color:#4ade80;font-weight:600;border-bottom:1px solid rgba(255,255,255,.04);">₦${Number(s.monthly_retainer||0).toLocaleString()}</td></tr>`).join('')}</tbody></table>`;
+  } catch(e) { el.innerHTML = '<div class="loading">Error loading schools</div>'; }
 }
 
-// Set today as default billing date
-const billingInput = document.getElementById('new-school-billing');
-if (billingInput) billingInput.value = new Date().toISOString().split('T')[0];
-
-// ── Add school ─────────────────────────────────────────────
-function addSchool() {
-  const name = document.getElementById('new-school-name').value;
-  if (!name) { showToast('Please enter the school name ❌'); return; }
-  const count = document.getElementById('school-count');
-  if (count) count.textContent = parseInt(count.textContent) + 1;
-  showToast(`✅ ${name} added! Opening deployment checklist...`);
-  setTimeout(() => {
-    showSection('pending', null);
-    document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
-    document.querySelectorAll('.sidebar-item')[4].classList.add('active');
-  }, 1500);
-  document.getElementById('new-school-name').value = '';
+// ── Schools full list ─────────────────────────────────────
+async function loadSchools() {
+  const el = document.getElementById('schools-table-wrap');
+  try {
+    const schools = await sapi('/api/super/schools');
+    document.getElementById('schools-count-title').textContent = schools.length + ' school' + (schools.length!==1?'s':'');
+    if (!schools.length) { el.innerHTML = '<div class="loading">No schools yet</div>'; return; }
+    el.innerHTML = `<table style="width:100%;border-collapse:collapse;">
+      <thead><tr>
+        <th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">School</th>
+        <th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">School ID (for admin login)</th>
+        <th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">Plan</th>
+        <th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">Status</th>
+        <th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">MRR</th>
+        <th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">Actions</th>
+      </tr></thead>
+      <tbody>${schools.map(s => `<tr>
+        <td style="padding:12px 16px;font-size:13px;border-bottom:1px solid rgba(255,255,255,.04);"><strong>${s.name}</strong><div class="school-sub">${s.city||''}</div></td>
+        <td style="padding:12px 16px;font-size:11px;border-bottom:1px solid rgba(255,255,255,.04);font-family:monospace;color:var(--text-muted);" onclick="copyId('${s.id}')" style="cursor:pointer;" title="Click to copy">${s.id} 📋</td>
+        <td style="padding:12px 16px;font-size:12px;border-bottom:1px solid rgba(255,255,255,.04);">${s.plan}</td>
+        <td style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.04);"><span class="pill ${s.status==='active'?'pill-green':s.status==='suspended'?'pill-red':'pill-gold'}"><span class="pill-dot"></span>${s.status}</span></td>
+        <td style="padding:12px 16px;font-size:13px;color:#4ade80;font-weight:600;border-bottom:1px solid rgba(255,255,255,.04);">₦${Number(s.monthly_retainer||0).toLocaleString()}/mo</td>
+        <td style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.04);">
+          <div style="display:flex;gap:6px;">
+            <button class="action-btn" onclick="copyId('${s.id}')">Copy ID</button>
+            <button class="action-btn" onclick="suspendSchool('${s.id}','${s.name}','${s.status}')">
+              ${s.status==='active'?'Suspend':'Activate'}
+            </button>
+            <button class="action-btn danger" onclick="confirmRemove('${s.id}','${s.name}')">Remove</button>
+          </div>
+        </td>
+      </tr>`).join('')}</tbody></table>`;
+  } catch(e) { el.innerHTML = '<div class="loading">Error loading schools</div>'; }
 }
 
-// ── Remove/suspend ─────────────────────────────────────────
-let pendingAction = '';
-function confirmRemove(name) {
-  pendingAction = name;
-  document.getElementById('remove-modal-text').textContent = `Are you sure you want to remove "${name}"? This will immediately cut off their access and delete all data. This cannot be undone.`;
+function copyId(id) {
+  navigator.clipboard.writeText(id).then(() => showToast('School ID copied! 📋'));
+}
+
+async function suspendSchool(id, name, currentStatus) {
+  const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
+  try {
+    await sapi('/api/super/schools/' + id, { method:'PATCH', body:JSON.stringify({status:newStatus}) });
+    showToast(newStatus === 'suspended' ? `🔒 ${name} suspended` : `✅ ${name} reactivated`);
+    loadSchools();
+  } catch(e) { showToast('Error updating school ❌'); }
+}
+
+function confirmRemove(id, name) {
+  pendingRemoveId = id;
+  document.getElementById('remove-modal-text').textContent = `Remove "${name}"? This permanently deletes all school data including students, staff, and conversations. This cannot be undone.`;
   document.getElementById('remove-modal').classList.add('show');
 }
-function doRemove() {
+
+async function doRemove() {
   document.getElementById('remove-modal').classList.remove('show');
-  showToast(`🗑️ ${pendingAction} has been removed from the platform`);
-}
-function confirmSuspend(name) {
-  pendingAction = name;
-  document.getElementById('suspend-modal-text').textContent = `Suspending "${name}" will block all access until payment is received. The school admin will receive a WhatsApp notification explaining the suspension.`;
-  document.getElementById('suspend-modal').classList.add('show');
-}
-function doSuspend() {
-  document.getElementById('suspend-modal').classList.remove('show');
-  showToast(`🔒 ${pendingAction} access suspended. Admin notified via WhatsApp.`);
+  try {
+    await sapi('/api/super/schools/' + pendingRemoveId, { method:'DELETE' });
+    showToast('School removed ✅');
+    loadSchools(); loadOverview();
+  } catch(e) { showToast('Error removing school ❌'); }
 }
 
-// ── Toast ──────────────────────────────────────────────────
+// ── Add school ────────────────────────────────────────────
+const pricingMap = { starter:{setup:150000,monthly:80000}, medium:{setup:250000,monthly:150000}, enterprise:{setup:500000,monthly:300000}, beta:{setup:75000,monthly:40000} };
+function updatePricing() {
+  const plan = document.getElementById('ns-plan').value;
+  const p = pricingMap[plan];
+  document.getElementById('ns-setup').value = p.setup;
+  document.getElementById('ns-monthly').value = p.monthly;
+}
+document.getElementById('ns-billing').value = new Date().toISOString().split('T')[0];
+
+async function addSchool() {
+  const name = document.getElementById('ns-name').value;
+  const city = document.getElementById('ns-city').value;
+  const password = document.getElementById('ns-password').value;
+  if (!name || !city || !password) { showToast('Please fill required fields ❌'); return; }
+  try {
+    const school = await sapi('/api/super/schools', { method:'POST', body:JSON.stringify({
+      name, city,
+      landmark_description: document.getElementById('ns-landmark').value,
+      fees: document.getElementById('ns-fees').value,
+      current_term: document.getElementById('ns-term').value,
+      whatsapp_number: document.getElementById('ns-wa').value,
+      twilio_number: document.getElementById('ns-twilio').value,
+      admin_password: password,
+      plan: document.getElementById('ns-plan').value,
+      setup_fee: parseInt(document.getElementById('ns-setup').value) || 0,
+      monthly_retainer: parseInt(document.getElementById('ns-monthly').value) || 0,
+      billing_start: document.getElementById('ns-billing').value
+    })});
+    showToast('✅ ' + name + ' added! Copy their school ID from the schools list.');
+    document.getElementById('ns-name').value = '';
+    document.getElementById('ns-password').value = '';
+    loadOverview();
+    setTimeout(() => showSection('schools', null), 1500);
+  } catch(e) { showToast('Error adding school ❌ ' + e.message); }
+}
+
+// ── Revenue ───────────────────────────────────────────────
+async function loadRevenue() {
+  try {
+    const d = await sapi('/api/super/overview');
+    const mrr = Number(d.mrr || 0);
+    document.getElementById('rev-mrr').textContent = '₦' + mrr.toLocaleString();
+    document.getElementById('rev-arr').textContent = '₦' + (mrr * 12).toLocaleString();
+    document.getElementById('rev-schools').textContent = d.schools.active;
+    document.getElementById('rev-avg').textContent = d.schools.active ? '₦' + Math.round(mrr / d.schools.active).toLocaleString() : '₦0';
+  } catch(e) {}
+}
+
+// ── Toast ─────────────────────────────────────────────────
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');

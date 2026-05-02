@@ -1,513 +1,371 @@
 require('dotenv').config();
 const path = require('path');
-const fs = require('fs/promises');
+const crypto = require('crypto');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const crypto = require('crypto');
+const cron = require('node-cron');
+const { Pool } = require('pg');
 const twilio = require('twilio');
-const OpenAI = require('openai');
 const Anthropic = require('@anthropic-ai/sdk');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DB_PATH = path.join(__dirname, 'data', 'db.json');
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
-app.use(morgan('dev'));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+app.use(morgan('combined'));
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ─── DB helpers ───────────────────────────────────────────
-async function readDb() {
-  const raw = await fs.readFile(DB_PATH, 'utf8');
-  return JSON.parse(raw);
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  max: 12,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000
+});
+
+function hasAi() { return Boolean(process.env.ANTHROPIC_API_KEY); }
+function hasTwilio() { return Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN); }
+function normalisePhone(phone = '') {
+  let raw = String(phone).replace('whatsapp:', '').trim();
+  raw = raw.replace(/[^\d+]/g, '');
+  if (raw.startsWith('0')) raw = '+234' + raw.slice(1);
+  if (raw.startsWith('234')) raw = '+' + raw;
+  return raw;
 }
-async function writeDb(db) {
-  await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2));
+function uuid() { return crypto.randomUUID(); }
+function json(res, data, code = 200) { res.status(code).json(data); }
+function bad(res, message, code = 400) { res.status(code).json({ error: message }); }
+async function q(text, params = []) { return pool.query(text, params); }
+
+async function migrate() {
+  await q('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+  await q(`
+    CREATE TABLE IF NOT EXISTS schools (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name TEXT NOT NULL, city TEXT, landmark_description TEXT,
+      fees TEXT, fee_deadline TEXT, current_term TEXT, whatsapp_number TEXT, twilio_number TEXT UNIQUE,
+      admin_password TEXT NOT NULL, super_admin_token TEXT, plan TEXT DEFAULT 'starter', status TEXT DEFAULT 'active',
+      billing_start DATE, monthly_retainer NUMERIC DEFAULT 0, setup_fee NUMERIC DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS staff (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'teacher', subject TEXT, class TEXT, phone TEXT,
+      performance_score NUMERIC DEFAULT 0, attendance_submissions INT DEFAULT 0, scores_uploaded INT DEFAULT 0,
+      homework_assigned INT DEFAULT 0, absences INT DEFAULT 0, staff_of_week_count INT DEFAULT 0, created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS signin_log (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      staff_id UUID REFERENCES staff(id) ON DELETE SET NULL, date DATE NOT NULL, time TEXT, status TEXT, photo_verified BOOLEAN DEFAULT false
+    );
+    CREATE TABLE IF NOT EXISTS students (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      name TEXT NOT NULL, class_name TEXT, parent_name TEXT, parent_phone TEXT, weekly_performance_score NUMERIC DEFAULT 0,
+      student_of_week_count INT DEFAULT 0, created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS attendance (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      student_id UUID REFERENCES students(id) ON DELETE CASCADE, date DATE NOT NULL, status TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS scores (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      student_id UUID REFERENCES students(id) ON DELETE CASCADE, subject TEXT NOT NULL, score NUMERIC NOT NULL, term TEXT, uploaded_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS fees (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      student_id UUID REFERENCES students(id) ON DELETE CASCADE, term TEXT, amount_due NUMERIC DEFAULT 0, amount_paid NUMERIC DEFAULT 0,
+      status TEXT DEFAULT 'unpaid', due_date DATE
+    );
+    CREATE TABLE IF NOT EXISTS homeworks (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      assigned_by UUID REFERENCES staff(id) ON DELETE SET NULL, class_name TEXT, subject TEXT, description TEXT, due_date DATE, created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS behaviour_notes (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      student_id UUID REFERENCES students(id) ON DELETE CASCADE, note TEXT NOT NULL, reported_by UUID REFERENCES staff(id) ON DELETE SET NULL, created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS sickbay_log (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      student_id UUID REFERENCES students(id) ON DELETE CASCADE, reason TEXT, action_taken TEXT, visited_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS messages (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      from_number TEXT NOT NULL, student_id UUID REFERENCES students(id) ON DELETE SET NULL, channel TEXT DEFAULT 'whatsapp',
+      user_message TEXT, assistant_reply TEXT, created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS admission_inquiries (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      parent_name TEXT, phone TEXT, child_name TEXT, class_applying TEXT, status TEXT DEFAULT 'new', created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS school_events (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      title TEXT NOT NULL, event_date DATE, created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS awards (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      award_type TEXT, winner_id UUID, winner_type TEXT, week_of DATE, announced BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_students_school ON students(school_id);
+    CREATE INDEX IF NOT EXISTS idx_students_phone ON students(parent_phone);
+    CREATE INDEX IF NOT EXISTS idx_staff_school_phone ON staff(school_id, phone);
+    CREATE INDEX IF NOT EXISTS idx_messages_school_from ON messages(school_id, from_number);
+    CREATE INDEX IF NOT EXISTS idx_fees_school_status ON fees(school_id, status);
+  `);
 }
 
-// ─── Auth middleware ───────────────────────────────────────
-function checkAdmin(req, res, next) {
-  const token = req.headers['x-admin-token'] || req.query.token;
-  const password = process.env.ADMIN_PASSWORD || 'admin';
-  if (token !== password) return res.status(401).json({ error: 'Unauthorized' });
+async function seedIfEmpty() {
+  const existing = await q('SELECT id FROM schools LIMIT 1');
+  if (existing.rowCount) return;
+  const school = await q(`INSERT INTO schools
+    (name, city, landmark_description, fees, fee_deadline, current_term, whatsapp_number, twilio_number, admin_password, plan, status, billing_start, monthly_retainer, setup_fee)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,current_date,$12,$13) RETURNING *`,
+    ['Greenfield Academy', 'Abuja', 'Green gate beside the assembly hall', '85000 per term', '15th of each term month', '2nd Term 2024/2025', '+2347015255068', '+14155238886', 'admin123', 'starter', 'active', 50000, 100000]);
+  const schoolId = school.rows[0].id;
+  const students = [
+    ['Emeka Okonkwo','JSS2A','Mrs Adaeze Okonkwo','+2348031111111',82],
+    ['Fatima Hassan','SS1B','Mr Babatunde Hassan','+2348032222222',88],
+    ['Chidi Eze','JSS1C','Dr Ngozi Eze','+2348033333333',91]
+  ];
+  for (const s of students) {
+    const st = await q('INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', [schoolId, ...s]);
+    await q('INSERT INTO fees (school_id,student_id,term,amount_due,amount_paid,status,due_date) VALUES ($1,$2,$3,$4,$5,$6,current_date + interval \'7 days\')', [schoolId, st.rows[0].id, '2nd Term', 85000, s[0].startsWith('Fatima') ? 42500 : 85000, s[0].startsWith('Fatima') ? 'partial' : 'paid']);
+    await q('INSERT INTO scores (school_id,student_id,subject,score,term) VALUES ($1,$2,$3,$4,$5),($1,$2,$6,$7,$5)', [schoolId, st.rows[0].id, 'Mathematics', s[4], '2nd Term', 'English', s[4] + 4]);
+  }
+  await q('INSERT INTO staff (school_id,name,role,subject,class,phone,performance_score) VALUES ($1,$2,$3,$4,$5,$6,$7)', [schoolId,'Mr John Musa','teacher','Mathematics','JSS2A','+2348061111111',86]);
+  await q('INSERT INTO school_events (school_id,title,event_date) VALUES ($1,$2,current_date + interval \'14 days\'),($1,$3,current_date + interval \'21 days\')', [schoolId,'Sports Day','PTA Meeting']);
+}
+
+async function getSchoolByTwilio(to) {
+  const n = normalisePhone(to);
+  const result = await q('SELECT * FROM schools WHERE twilio_number = $1 OR twilio_number = $2 LIMIT 1', [n, `whatsapp:${n}`]);
+  return result.rows[0];
+}
+async function getSchool(id) { const r = await q('SELECT * FROM schools WHERE id=$1', [id]); return r.rows[0]; }
+
+async function callClaude(system, userText, imageBase64) {
+  if (!hasAi()) return demoReply(userText);
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const content = imageBase64 ? [
+    { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 } },
+    { type: 'text', text: userText || 'Analyze this image.' }
+  ] : userText;
+  const response = await client.messages.create({
+    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+    max_tokens: 650,
+    temperature: 0.35,
+    system,
+    messages: [{ role: 'user', content }]
+  });
+  return response.content?.[0]?.text || 'I could not process that yet. Please try again.';
+}
+
+function demoReply(text) {
+  return `Demo mode is active because AI credit is not configured yet. I received: "${String(text || '').slice(0, 100)}". Once ANTHROPIC_API_KEY is added, EduPing will answer with live school data. EduPing 🏫`;
+}
+
+async function buildStudentContext(school, student) {
+  const [attendance, scores, fees, homeworks, events, notes, sickbay] = await Promise.all([
+    q('SELECT date,status FROM attendance WHERE school_id=$1 AND student_id=$2 ORDER BY date DESC LIMIT 10', [school.id, student.id]),
+    q('SELECT subject,score,term FROM scores WHERE school_id=$1 AND student_id=$2 ORDER BY uploaded_at DESC LIMIT 10', [school.id, student.id]),
+    q('SELECT term,amount_due,amount_paid,status,due_date FROM fees WHERE school_id=$1 AND student_id=$2 ORDER BY due_date DESC LIMIT 5', [school.id, student.id]),
+    q('SELECT subject,description,due_date FROM homeworks WHERE school_id=$1 AND class_name=$2 ORDER BY created_at DESC LIMIT 5', [school.id, student.class_name]),
+    q('SELECT title,event_date FROM school_events WHERE school_id=$1 ORDER BY event_date ASC LIMIT 5', [school.id]),
+    q('SELECT note,created_at FROM behaviour_notes WHERE school_id=$1 AND student_id=$2 ORDER BY created_at DESC LIMIT 5', [school.id, student.id]),
+    q('SELECT reason,action_taken,visited_at FROM sickbay_log WHERE school_id=$1 AND student_id=$2 ORDER BY visited_at DESC LIMIT 5', [school.id, student.id])
+  ]);
+  return { school, student, attendance: attendance.rows, scores: scores.rows, fees: fees.rows, homeworks: homeworks.rows, events: events.rows, notes: notes.rows, sickbay: sickbay.rows };
+}
+
+function parentPrompt(ctx, first) {
+  return `You are EduPing, the WhatsApp AI assistant for ${ctx.school.name}, ${ctx.school.city || 'Nigeria'}.
+Use only this tenant's data. Never mention another school. Keep replies warm, Nigerian friendly, short, and practical. Use light emojis.
+End formal responses with "${ctx.school.name} 🏫".
+${first ? 'This is the first message. Start with the privacy disclaimer exactly once, then answer.' : ''}
+
+School data:
+Fees: ${ctx.school.fees || 'Not set'}
+Fee deadline: ${ctx.school.fee_deadline || 'Not set'}
+Current term: ${ctx.school.current_term || 'Not set'}
+Events: ${JSON.stringify(ctx.events)}
+Student: ${JSON.stringify(ctx.student)}
+Attendance: ${JSON.stringify(ctx.attendance)}
+Scores: ${JSON.stringify(ctx.scores)}
+Fees: ${JSON.stringify(ctx.fees)}
+Homeworks: ${JSON.stringify(ctx.homeworks)}
+Behaviour notes: ${JSON.stringify(ctx.notes)}
+Sickbay: ${JSON.stringify(ctx.sickbay)}
+
+First message disclaimer:
+👋 Welcome to ${ctx.school.name}'s AI assistant, EduPing! Before we continue: 📋 Your conversations and child's data are processed by AI to answer your questions. 🔒 Your data is private and never sold. 🤖 For urgent matters contact the school directly. By continuing you agree to this. ${ctx.school.name} 🏫`;
+}
+
+async function twilioSend(to, from, body) {
+  if (!hasTwilio()) return { skipped: true, reason: 'Twilio credentials missing' };
+  const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+  return client.messages.create({ to: `whatsapp:${normalisePhone(to)}`, from: from?.startsWith('whatsapp:') ? from : `whatsapp:${normalisePhone(from || process.env.TWILIO_DEFAULT_FROM)}`, body });
+}
+
+async function handleIncomingWhatsApp(req, res) {
+  const from = normalisePhone(req.body.From);
+  const to = normalisePhone(req.body.To);
+  const body = req.body.Body || '';
+  const mediaUrl = req.body.MediaUrl0;
+  const school = await getSchoolByTwilio(to);
+  if (!school || school.status !== 'active') return res.type('text/xml').send(new twilio.twiml.MessagingResponse().message('School account is not active. Please contact EduPing support.').toString());
+
+  let reply = '';
+  const staff = await q('SELECT * FROM staff WHERE school_id=$1 AND phone=$2 LIMIT 1', [school.id, from]);
+  if (staff.rowCount) reply = await processTeacher(school, staff.rows[0], body, mediaUrl);
+  else {
+    const student = await q('SELECT * FROM students WHERE school_id=$1 AND parent_phone=$2 LIMIT 1', [school.id, from]);
+    if (student.rowCount) {
+      const first = (await q('SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1', [school.id, from])).rowCount === 0;
+      const ctx = await buildStudentContext(school, student.rows[0]);
+      reply = await callClaude(parentPrompt(ctx, first), body || 'Hello', null);
+      await q('INSERT INTO messages (school_id,from_number,student_id,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)', [school.id, from, student.rows[0].id, body, reply]);
+    } else {
+      const first = (await q('SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1', [school.id, from])).rowCount === 0;
+      const system = `You are EduPing for ${school.name}. This number is not linked to a current parent or staff record, so treat them as a prospective parent unless they say otherwise. Capture parent name, phone, child name, class applying, and next action. Keep it short. ${first ? 'Start with the first message privacy disclaimer.' : ''}`;
+      reply = await callClaude(system, body || 'Admission inquiry', null);
+      await q('INSERT INTO admission_inquiries (school_id,phone,status) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [school.id, from, 'new']);
+      await q('INSERT INTO messages (school_id,from_number,user_message,assistant_reply) VALUES ($1,$2,$3,$4)', [school.id, from, body, reply]);
+    }
+  }
+  const twiml = new twilio.twiml.MessagingResponse();
+  twiml.message(reply);
+  return res.type('text/xml').send(twiml.toString());
+}
+
+async function processTeacher(school, staff, body, mediaUrl) {
+  const lower = String(body || '').toLowerCase();
+  const today = new Date().toISOString().slice(0,10);
+  if (lower.includes('sign in') || lower.includes('good morning') || mediaUrl) {
+    await q('INSERT INTO signin_log (school_id,staff_id,date,time,status,photo_verified) VALUES ($1,$2,current_date,to_char(now(),\'HH24:MI\'),$3,$4)', [school.id, staff.id, 'submitted', Boolean(mediaUrl)]);
+    return `✅ ${staff.name}, your sign in has been recorded. ${school.name} 🏫`;
+  }
+  if (lower.includes('homework') || lower.includes('assignment')) {
+    await q('INSERT INTO homeworks (school_id,assigned_by,class_name,subject,description,due_date) VALUES ($1,$2,$3,$4,$5,current_date + interval \'3 days\')', [school.id, staff.id, staff.class, staff.subject, body]);
+    await q('UPDATE staff SET homework_assigned=homework_assigned+1 WHERE id=$1 AND school_id=$2', [staff.id, school.id]);
+    return `✅ Homework saved for ${staff.class || 'your class'}. Parents can now ask EduPing for it. ${school.name} 🏫`;
+  }
+  return await callClaude(`You are EduPing assisting teacher ${staff.name} at ${school.name}. Help with attendance, scores, homework, behaviour notes, and sign in workflows.`, body || 'Hello', null);
+}
+
+function requireSuper(req, res, next) {
+  const token = req.headers['x-super-admin-password'] || req.body.password || req.query.password;
+  if (!process.env.SUPER_ADMIN_PASSWORD || token !== process.env.SUPER_ADMIN_PASSWORD) return bad(res, 'Unauthorized super admin', 401);
+  next();
+}
+async function requireSchool(req, res, next) {
+  const schoolId = req.headers['x-school-id'] || req.query.school_id || req.body.school_id;
+  const password = req.headers['x-admin-password'] || req.body.admin_password || req.query.admin_password;
+  if (!schoolId || !password) return bad(res, 'Missing school_id or admin password', 401);
+  const school = await getSchool(schoolId);
+  if (!school || school.admin_password !== password) return bad(res, 'Unauthorized school admin', 401);
+  req.school = school;
   next();
 }
 
-function getStaffFromPhone(db, phone) {
-  return db.staff.find(s => s.phone === phone || s.phone === `whatsapp:${phone}` || phone.includes(s.phone.replace('whatsapp:', '')));
-}
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/superadmin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'superadmin.html')));
+app.get('/health', async (req, res) => { await q('SELECT 1'); json(res, { ok: true, db: true, ai: hasAi(), twilio: hasTwilio() }); });
+app.post('/webhook/whatsapp', (req, res, next) => handleIncomingWhatsApp(req, res).catch(next));
 
-function getParentFromPhone(db, phone) {
-  return db.students.find(s => s.parentPhone === phone || s.parentPhone === `whatsapp:${phone}` || phone.includes(s.parentPhone.replace('whatsapp:', '')));
-}
+app.post('/api/super/login', (req, res) => json(res, { ok: req.body.password === process.env.SUPER_ADMIN_PASSWORD }));
+app.get('/api/super/overview', requireSuper, async (req, res) => {
+  const [schools, students, messages, mrr] = await Promise.all([
+    q('SELECT COUNT(*)::int total, COUNT(*) FILTER (WHERE status=\'active\')::int active FROM schools'),
+    q('SELECT COUNT(*)::int total FROM students'),
+    q('SELECT COUNT(*)::int total FROM messages'),
+    q('SELECT COALESCE(SUM(monthly_retainer),0)::numeric mrr FROM schools WHERE status=\'active\'')
+  ]);
+  json(res, { schools: schools.rows[0], students: students.rows[0].total, conversations: messages.rows[0].total, mrr: mrr.rows[0].mrr });
+});
+app.get('/api/super/schools', requireSuper, async (req, res) => json(res, (await q('SELECT * FROM schools ORDER BY created_at DESC')).rows));
+app.post('/api/super/schools', requireSuper, async (req, res) => {
+  const b = req.body;
+  const r = await q(`INSERT INTO schools (name,city,landmark_description,fees,fee_deadline,current_term,whatsapp_number,twilio_number,admin_password,plan,status,billing_start,monthly_retainer,setup_fee)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'active',$11,$12,$13) RETURNING *`,
+    [b.name,b.city,b.landmark_description,b.fees,b.fee_deadline,b.current_term,b.whatsapp_number,b.twilio_number,b.admin_password || uuid().slice(0,8),b.plan || 'starter',b.billing_start || new Date(),b.monthly_retainer || 0,b.setup_fee || 0]);
+  json(res, r.rows[0], 201);
+});
+app.patch('/api/super/schools/:id', requireSuper, async (req, res) => {
+  const allowed = ['name','city','status','plan','admin_password','monthly_retainer','setup_fee','twilio_number','whatsapp_number','current_term','fees','fee_deadline'];
+  const keys = Object.keys(req.body).filter(k => allowed.includes(k));
+  if (!keys.length) return bad(res, 'No valid fields');
+  const sets = keys.map((k,i) => `${k}=$${i+1}`).join(',');
+  const r = await q(`UPDATE schools SET ${sets} WHERE id=$${keys.length+1} RETURNING *`, [...keys.map(k => req.body[k]), req.params.id]);
+  json(res, r.rows[0]);
+});
+app.delete('/api/super/schools/:id', requireSuper, async (req, res) => { await q('DELETE FROM schools WHERE id=$1', [req.params.id]); json(res, { ok: true }); });
 
-// ─── AI helpers ────────────────────────────────────────────
-async function callAnthropic(system, messages, imageBase64 = null) {
-  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is missing');
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-  let userContent = messages[messages.length - 1].content;
-  if (imageBase64) {
-    userContent = [
-      { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 } },
-      { type: 'text', text: typeof userContent === 'string' ? userContent : 'Analyze this image.' }
-    ];
-    messages = [...messages.slice(0, -1), { role: 'user', content: userContent }];
-  }
-
-  const response = await client.messages.create({
-    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
-    max_tokens: 800,
-    system,
-    messages
+app.post('/api/admin/login', async (req, res) => {
+  const r = await q('SELECT id,name,city,status FROM schools WHERE id=$1 AND admin_password=$2', [req.body.school_id, req.body.password]);
+  json(res, { ok: r.rowCount === 1, school: r.rows[0] || null });
+});
+app.get('/api/admin/dashboard', requireSchool, async (req, res) => {
+  const sid = req.school.id;
+  const [students, staff, messages, fees, admissions, signin] = await Promise.all([
+    q('SELECT COUNT(*)::int total FROM students WHERE school_id=$1', [sid]), q('SELECT COUNT(*)::int total FROM staff WHERE school_id=$1', [sid]),
+    q('SELECT COUNT(*)::int total FROM messages WHERE school_id=$1', [sid]), q('SELECT COALESCE(SUM(amount_due-amount_paid),0)::numeric outstanding FROM fees WHERE school_id=$1', [sid]),
+    q('SELECT COUNT(*)::int total FROM admission_inquiries WHERE school_id=$1 AND status=$2', [sid,'new']), q('SELECT * FROM signin_log WHERE school_id=$1 AND date=current_date ORDER BY time DESC LIMIT 20', [sid])
+  ]);
+  json(res, { school: req.school, students: students.rows[0].total, staff: staff.rows[0].total, conversations: messages.rows[0].total, outstanding_fees: fees.rows[0].outstanding, new_admissions: admissions.rows[0].total, signin: signin.rows });
+});
+const crud = [
+  ['students','name,class_name,parent_name,parent_phone,weekly_performance_score'], ['staff','name,role,subject,class,phone,performance_score'], ['admission_inquiries','parent_name,phone,child_name,class_applying,status'], ['sickbay_log','student_id,reason,action_taken'], ['school_events','title,event_date']
+];
+for (const [table, fields] of crud) {
+  app.get(`/api/admin/${table}`, requireSchool, async (req, res) => {
+    const orderBy = table === 'sickbay_log' ? 'visited_at' : 'created_at';
+    json(res, (await q(`SELECT * FROM ${table} WHERE school_id=$1 ORDER BY ${orderBy} DESC LIMIT 200`, [req.school.id])).rows);
   });
-  return response.content?.[0]?.text || 'Sorry, I could not process that.';
-}
-
-async function callOpenAI(system, messages) {
-  if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is missing');
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const response = await client.chat.completions.create({
-    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-    messages: [{ role: 'system', content: system }, ...messages],
-    temperature: 0.4,
-    max_tokens: 800
+  app.post(`/api/admin/${table}`, requireSchool, async (req, res) => {
+    const f = fields.split(',').filter(k => req.body[k] !== undefined);
+    const vals = f.map(k => req.body[k]);
+    const sql = `INSERT INTO ${table} (school_id,${f.join(',')}) VALUES ($1,${f.map((_,i)=>'$'+(i+2)).join(',')}) RETURNING *`;
+    json(res, (await q(sql, [req.school.id, ...vals])).rows[0], 201);
   });
-  return response.choices?.[0]?.message?.content || 'Sorry, I could not process that.';
 }
+app.post('/api/admin/broadcast', requireSchool, async (req, res) => {
+  const target = req.body.target || 'all_parents';
+  const message = req.body.message;
+  if (!message) return bad(res, 'Message is required');
+  let rows = [];
+  if (target === 'staff') rows = (await q('SELECT phone FROM staff WHERE school_id=$1 AND phone IS NOT NULL', [req.school.id])).rows;
+  else if (req.body.class_name) rows = (await q('SELECT parent_phone phone FROM students WHERE school_id=$1 AND class_name=$2 AND parent_phone IS NOT NULL', [req.school.id, req.body.class_name])).rows;
+  else rows = (await q('SELECT parent_phone phone FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL', [req.school.id])).rows;
+  const sent = [];
+  for (const r of rows) sent.push(await twilioSend(r.phone, req.school.twilio_number || process.env.TWILIO_DEFAULT_FROM, message));
+  json(res, { queued: rows.length, twilio_enabled: hasTwilio() });
+});
 
-async function callAI(system, messages, imageBase64 = null) {
-  const provider = (process.env.AI_PROVIDER || 'anthropic').toLowerCase();
-  if (provider === 'anthropic' || imageBase64) return callAnthropic(system, messages, imageBase64);
-  return callOpenAI(system, messages);
+async function weeklyReports() {
+  const schools = (await q('SELECT * FROM schools WHERE status=$1', ['active'])).rows;
+  for (const school of schools) {
+    const students = (await q('SELECT * FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL', [school.id])).rows;
+    for (const st of students) await twilioSend(st.parent_phone, school.twilio_number || process.env.TWILIO_DEFAULT_FROM, `Weekly report for ${st.name}: performance score ${st.weekly_performance_score || 0}%. For details, reply with your question. ${school.name} 🏫`);
+  }
 }
-
-// ─── Parent chat ───────────────────────────────────────────
-function buildParentContext(db, student) {
-  return `School: ${db.school.name}, ${db.school.city}
-Current term: ${db.school.currentTerm}
-School fees: ${db.school.fees}
-Fee deadline: ${db.school.feeDeadline}
-Events: ${db.school.events.map(e => `${e.title}: ${e.date}`).join('; ')}
-
-Student: ${student.name} | Class: ${student.className}
-Parent: ${student.parentName}
-Attendance this week: ${student.attendanceThisWeek} | This term: ${student.attendanceTerm}
-Daily: ${Object.entries(student.weeklyAttendance).map(([k,v]) => `${k}: ${v}`).join(', ')}
-Scores: ${Object.entries(student.scores).map(([k,v]) => `${k}: ${v}`).join(', ')}
-Fees: ${student.fees.status}, outstanding: ${student.fees.outstanding}
-Behaviour notes: ${student.behaviourNotes.length ? student.behaviourNotes.join('; ') : 'None'}
-Pending homework: ${student.homeworks.filter(h => !h.submitted).map(h => h.subject + ': ' + h.description + ' due ' + h.dueDate).join('; ') || 'None'}
-Sickbay visits: ${student.sickbayVisits.length ? student.sickbayVisits.map(v => v.date + ': ' + v.reason).join('; ') : 'None'}`;
+async function dailyFeeReminders() {
+  const rows = (await q(`SELECT s.name school_name, s.twilio_number, st.name student_name, st.parent_phone, f.amount_due, f.amount_paid
+    FROM fees f JOIN students st ON st.id=f.student_id JOIN schools s ON s.id=f.school_id
+    WHERE f.status <> 'paid' AND f.due_date <= current_date AND s.status='active'`)).rows;
+  for (const r of rows) await twilioSend(r.parent_phone, r.twilio_number || process.env.TWILIO_DEFAULT_FROM, `Reminder: ${r.student_name} has outstanding fees of ₦${Number(r.amount_due - r.amount_paid).toLocaleString()}. ${r.school_name} 🏫`);
 }
+cron.schedule('0 16 * * 5', weeklyReports, { timezone: 'Africa/Lagos' });
+cron.schedule('0 9 * * *', dailyFeeReminders, { timezone: 'Africa/Lagos' });
+cron.schedule('0 17 * * 5', async () => console.log('Award calculation job placeholder ran'), { timezone: 'Africa/Lagos' });
 
-const PARENT_SYSTEM = (context) => `You are EduPing, a friendly professional WhatsApp AI assistant for a Nigerian school. Use only the data below. Keep replies warm, clear, Nigerian-friendly with light emojis. End formal info with: ${context.split('\n')[0].split(':')[1]?.trim() || 'Greenfield Academy'} 🏫. If you cannot answer from the data, say you will pass it to admin.
+app.use((err, req, res, next) => { console.error(err); res.status(500).json({ error: 'Server error', detail: process.env.NODE_ENV === 'production' ? undefined : err.message }); });
 
-${context}`;
-
-async function askParentAI(userMessage, history, db, student) {
-  const context = buildParentContext(db, student);
-  const system = PARENT_SYSTEM(context);
-  const safeHistory = (Array.isArray(history) ? history : []).filter(m => ['user','assistant'].includes(m.role)).slice(-10);
-  const messages = [...safeHistory, { role: 'user', content: userMessage }];
-  return callAI(system, messages);
-}
-
-// ─── Teacher WhatsApp processing ───────────────────────────
-async function processTeacherMessage(staff, messageText, imageBase64, db) {
-  const lower = messageText.toLowerCase().trim();
-  const now = new Date();
-  const today = now.toISOString().split('T')[0];
-  const timeStr = now.toTimeString().slice(0, 5);
-  const lateThreshold = db.school.lateThreshold || '08:00';
-  const isLate = timeStr > lateThreshold;
-
-  // ── Sign in via photo ──
-  if (imageBase64 && (lower.includes('sign') || lower.includes('morning') || lower.includes('arrived') || lower.includes('here') || !lower || lower.length < 30)) {
-    const landmark = db.school.landmark || 'school gate';
-    const verifyPrompt = `You are verifying a teacher sign-in photo for ${db.school.name}. The school landmark is: ${landmark}. Look at this image and determine if it shows a person at or near a school entrance, gate, or building. Reply with ONLY a JSON object: {"verified": true/false, "reason": "brief reason"}`;
-    let verified = false;
-    let reason = 'Could not verify photo';
-    try {
-      const verifyResult = await callAI(verifyPrompt, [{ role: 'user', content: 'Verify this sign-in photo.' }], imageBase64);
-      const cleaned = verifyResult.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(cleaned);
-      verified = parsed.verified;
-      reason = parsed.reason;
-    } catch(e) {
-      verified = true; // fallback — don't block on parse error
-      reason = 'Photo received';
-    }
-
-    if (verified) {
-      const existingToday = staff.signinLog.find(l => l.date === today);
-      if (!existingToday) {
-        staff.signinLog.push({ date: today, time: timeStr, status: isLate ? 'late' : 'on_time' });
-        await writeDb(db);
-      }
-      if (isLate) {
-        return `⚠️ Good morning ${staff.name.split(' ')[1]}! You've been signed in at ${timeStr}. Please note this is after the ${lateThreshold} deadline. Have a good day! 🏫`;
-      }
-      return `✅ Good morning ${staff.name.split(' ')[1]}! Signed in at ${timeStr}. Have a great day! 🏫`;
-    } else {
-      return `❌ Sign-in photo could not be verified. Please send a clear photo at ${landmark}. Reason: ${reason}`;
-    }
-  }
-
-  // ── Attendance via photo ──
-  if (imageBase64 && (lower.includes('attendance') || lower.includes('register') || lower.includes('present') || lower.includes('absent'))) {
-    const attendancePrompt = `You are reading a teacher's attendance register photo for ${db.school.name}. Extract the student names and their attendance status (Present/Absent). Reply ONLY with JSON: {"class": "detected class or unknown", "records": [{"name": "student name", "status": "Present or Absent"}]}`;
-    try {
-      const result = await callAI(attendancePrompt, [{ role: 'user', content: 'Extract attendance from this register.' }], imageBase64);
-      const cleaned = result.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(cleaned);
-      staff.attendanceSubmissions = (staff.attendanceSubmissions || 0) + 1;
-      await writeDb(db);
-      const presentCount = parsed.records.filter(r => r.status === 'Present').length;
-      const absentCount = parsed.records.filter(r => r.status === 'Absent').length;
-      return `✅ Attendance recorded for ${parsed.class || staff.class}!\n\n📊 ${presentCount} Present | ${absentCount} Absent\n\nRecords updated successfully. Greenfield Academy 🏫`;
-    } catch(e) {
-      return `📋 Attendance photo received! I'll process this manually. Please also send as voice note for faster processing.`;
-    }
-  }
-
-  // ── Scores via photo ──
-  if (imageBase64 && (lower.includes('score') || lower.includes('result') || lower.includes('test') || lower.includes('marks') || lower.includes('script'))) {
-    const scoresPrompt = `You are reading a teacher's marked scripts or score sheet for ${db.school.name}. Extract student names and their scores. Reply ONLY with JSON: {"subject": "subject name or unknown", "records": [{"name": "student name", "score": number}]}`;
-    try {
-      const result = await callAI(scoresPrompt, [{ role: 'user', content: 'Extract scores from this sheet.' }], imageBase64);
-      const cleaned = result.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(cleaned);
-      staff.scoresUploaded = (staff.scoresUploaded || 0) + 1;
-      await writeDb(db);
-      const avg = parsed.records.length ? Math.round(parsed.records.reduce((a, r) => a + r.score, 0) / parsed.records.length) : 0;
-      return `✅ ${parsed.subject || 'Subject'} scores recorded for ${parsed.records.length} students!\n\n📊 Class average: ${avg}%\n\nParents will be notified. Greenfield Academy 🏫`;
-    } catch(e) {
-      return `📝 Score sheet received! Processing your students' results now.`;
-    }
-  }
-
-  // ── Voice/text: assign homework ──
-  if (lower.includes('homework') || lower.includes('assignment')) {
-    const hwPrompt = `Extract homework assignment from this teacher message. Reply ONLY with JSON: {"class": "class name", "subject": "subject", "description": "what to do", "dueDate": "due date or 'next class'"}
-Message: "${messageText}"`;
-    try {
-      const result = await callAI(hwPrompt, [{ role: 'user', content: messageText }]);
-      const cleaned = result.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(cleaned);
-      const hw = { id: crypto.randomUUID(), assignedBy: staff.name, ...parsed, assignedDate: today, submitted: false };
-      db.homeworks.push(hw);
-      staff.homeworkAssigned = (staff.homeworkAssigned || 0) + 1;
-      await writeDb(db);
-      return `✅ Homework assigned!\n\n📚 ${parsed.subject} — ${parsed.description}\n📅 Due: ${parsed.dueDate}\n👥 Class: ${parsed.class}\n\nParents will be notified shortly. Greenfield Academy 🏫`;
-    } catch(e) {
-      return `📚 Homework noted! Make sure to include: subject, class, description and due date for automatic parent notification.`;
-    }
-  }
-
-  // ── Behaviour note ──
-  if (lower.includes('behaviour') || lower.includes('behavior') || lower.includes('disrupt') || lower.includes('note') || lower.includes('report')) {
-    const notePrompt = `Extract a student behaviour note from this teacher message. Reply ONLY with JSON: {"studentName": "name", "note": "behaviour description"}
-Message: "${messageText}"`;
-    try {
-      const result = await callAI(notePrompt, [{ role: 'user', content: messageText }]);
-      const cleaned = result.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(cleaned);
-      const student = db.students.find(s => s.name.toLowerCase().includes(parsed.studentName.toLowerCase().split(' ')[0]));
-      if (student) {
-        student.behaviourNotes.push(`${today}: ${parsed.note}`);
-        await writeDb(db);
-        return `✅ Behaviour note added for ${student.name}.\n\n📝 "${parsed.note}"\n\nAdmin has been notified. Greenfield Academy 🏫`;
-      }
-      return `✅ Behaviour note recorded. Student not found in database — admin will review.`;
-    } catch(e) {
-      return `📝 Note received. Please format as: "Behaviour note for [student name]: [description]"`;
-    }
-  }
-
-  // ── Sickbay (nurse) ──
-  if (staff.role === 'nurse' && (lower.includes('sickbay') || lower.includes('sick') || lower.includes('unwell') || lower.includes('visited'))) {
-    const sickPrompt = `Extract sickbay visit info from this nurse message. Reply ONLY with JSON: {"studentName": "name", "reason": "reason for visit", "action": "what was done"}
-Message: "${messageText}"`;
-    try {
-      const result = await callAI(sickPrompt, [{ role: 'user', content: messageText }]);
-      const cleaned = result.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(cleaned);
-      const student = db.students.find(s => s.name.toLowerCase().includes(parsed.studentName.toLowerCase().split(' ')[0]));
-      if (student) {
-        student.sickbayVisits.push({ date: today, reason: parsed.reason, action: parsed.action });
-        db.sickbayLog.push({ date: today, studentId: student.id, studentName: student.name, reason: parsed.reason, action: parsed.action });
-        await writeDb(db);
-        return `✅ Sickbay visit logged for ${student.name}.\n\n🏥 Reason: ${parsed.reason}\n💊 Action: ${parsed.action}\n\nParent will be notified. Greenfield Academy 🏫`;
-      }
-    } catch(e) {}
-    return `🏥 Sickbay visit noted. Please format as: "Sickbay: [student name] - [reason] - [action taken]"`;
-  }
-
-  // ── Sign out ──
-  if (lower.includes('goodbye') || lower.includes('signing out') || lower.includes('leaving') || lower.includes('good evening')) {
-    const signout = staff.signinLog.find(l => l.date === today);
-    if (signout) signout.signout = timeStr;
-    await writeDb(db);
-    return `👋 Goodbye ${staff.name.split(' ')[1]}! Signed out at ${timeStr}. See you tomorrow! Greenfield Academy 🏫`;
-  }
-
-  // ── General teacher query ──
-  const teacherSystem = `You are EduPing, the school AI assistant for ${db.school.name}. You are speaking with ${staff.name}, a ${staff.role.replace('_', ' ')} who teaches ${staff.subject || 'at the school'}. Help them with school-related queries. Keep replies short and friendly.`;
-  return callAI(teacherSystem, [{ role: 'user', content: messageText }]);
-}
-
-// ─── Weekly awards calculation ─────────────────────────────
-function calculateStaffOfWeek(db) {
-  return db.staff
-    .filter(s => s.role === 'class_teacher' || s.role === 'subject_teacher')
-    .map(s => {
-      const recentSignins = s.signinLog.slice(-5);
-      const punctuality = recentSignins.length ? recentSignins.filter(l => l.status === 'on_time').length / recentSignins.length * 100 : 0;
-      const score = (punctuality * 0.3) + (Math.min(s.attendanceSubmissions, 20) / 20 * 100 * 0.3) + (Math.min(s.scoresUploaded, 15) / 15 * 100 * 0.2) + (Math.min(s.homeworkAssigned, 10) / 10 * 100 * 0.2);
-      return { ...s, calculatedScore: Math.round(score) };
-    })
-    .sort((a, b) => b.calculatedScore - a.calculatedScore)[0];
-}
-
-function calculateStudentOfWeek(db, className) {
-  return db.students
-    .filter(s => s.className === className)
-    .map(s => {
-      const attendance = parseFloat(s.attendanceThisWeek) || 0;
-      const avgScore = Object.values(s.scores).length ? Object.values(s.scores).reduce((a, v) => a + parseFloat(v), 0) / Object.values(s.scores).length : 0;
-      const behaviour = s.behaviourNotes.length === 0 ? 100 : Math.max(0, 100 - s.behaviourNotes.length * 20);
-      const score = (attendance * 0.3) + (avgScore * 0.5) + (behaviour * 0.2);
-      return { ...s, calculatedScore: Math.round(score) };
-    })
-    .sort((a, b) => b.calculatedScore - a.calculatedScore)[0];
-}
-
-// ─── Routes ────────────────────────────────────────────────
-
-app.get('/api/health', (req, res) => res.json({ ok: true, service: 'EduPing', time: new Date().toISOString() }));
-
-app.post('/api/admin/login', (req, res) => {
-  const { password } = req.body;
-  if (password === (process.env.ADMIN_PASSWORD || 'admin')) {
-    res.json({ success: true, token: process.env.ADMIN_PASSWORD || 'admin' });
-  } else {
-    res.status(401).json({ error: 'Wrong password' });
-  }
-});
-
-app.get('/api/dashboard', checkAdmin, async (req, res, next) => {
-  try {
-    const db = await readDb();
-    const outstanding = db.students.filter(s => s.fees.outstanding !== '₦0').length;
-    const todayStr = new Date().toISOString().split('T')[0];
-    const signedInToday = db.staff.filter(s => s.signinLog.some(l => l.date === todayStr)).length;
-    const staffOfWeek = db.staff.find(s => s.id === db.staffOfWeek?.current);
-    const classes = [...new Set(db.students.map(s => s.className))];
-    const studentOfWeek = classes.map(cls => {
-      const sowId = db.studentOfWeek?.[cls]?.current;
-      return { class: cls, student: db.students.find(s => s.id === sowId) };
-    });
-    res.json({
-      school: db.school,
-      stats: {
-        students: db.students.length,
-        staff: db.staff.length,
-        conversations: db.messages.length,
-        feeIssues: outstanding,
-        admissionInquiries: db.admissionInquiries?.length || 0,
-        signedInToday,
-        homeworksThisWeek: db.homeworks?.length || 0
-      },
-      students: db.students,
-      staff: db.staff,
-      staffOfWeek,
-      studentOfWeek,
-      admissionInquiries: db.admissionInquiries || [],
-      sickbayLog: db.sickbayLog || [],
-      recentMessages: db.messages.slice(-20).reverse()
-    });
-  } catch (err) { next(err); }
-});
-
-app.get('/api/staff', checkAdmin, async (req, res, next) => {
-  try {
-    const db = await readDb();
-    res.json(db.staff);
-  } catch(err) { next(err); }
-});
-
-app.post('/api/staff', checkAdmin, async (req, res, next) => {
-  try {
-    const db = await readDb();
-    const newStaff = { id: 'staff-' + Date.now(), performanceScore: 0, signinLog: [], attendanceSubmissions: 0, scoresUploaded: 0, homeworkAssigned: 0, absences: 0, staffOfWeekCount: 0, ...req.body };
-    db.staff.push(newStaff);
-    await writeDb(db);
-    res.json(newStaff);
-  } catch(err) { next(err); }
-});
-
-app.get('/api/awards/calculate', checkAdmin, async (req, res, next) => {
-  try {
-    const db = await readDb();
-    const staffWinner = calculateStaffOfWeek(db);
-    const classes = [...new Set(db.students.map(s => s.className))];
-    const studentWinners = classes.map(cls => ({ class: cls, winner: calculateStudentOfWeek(db, cls) }));
-    res.json({ staffOfWeek: staffWinner, studentOfWeek: studentWinners });
-  } catch(err) { next(err); }
-});
-
-app.post('/api/awards/confirm', checkAdmin, async (req, res, next) => {
-  try {
-    const db = await readDb();
-    const { staffId, studentAwards } = req.body;
-    if (staffId) {
-      db.staffOfWeek.current = staffId;
-      const staff = db.staff.find(s => s.id === staffId);
-      if (staff) staff.staffOfWeekCount = (staff.staffOfWeekCount || 0) + 1;
-    }
-    if (studentAwards) {
-      studentAwards.forEach(({ className, studentId }) => {
-        if (!db.studentOfWeek[className]) db.studentOfWeek[className] = { current: null, history: [] };
-        db.studentOfWeek[className].current = studentId;
-        const student = db.students.find(s => s.id === studentId);
-        if (student) student.studentOfWeekCount = (student.studentOfWeekCount || 0) + 1;
-      });
-    }
-    await writeDb(db);
-    res.json({ success: true });
-  } catch(err) { next(err); }
-});
-
-app.get('/api/students/:id', checkAdmin, async (req, res, next) => {
-  try {
-    const db = await readDb();
-    const student = db.students.find(s => s.id === req.params.id);
-    if (!student) return res.status(404).json({ error: 'Student not found' });
-    res.json(student);
-  } catch(err) { next(err); }
-});
-
-app.post('/api/chat', async (req, res, next) => {
-  try {
-    const { message, history } = req.body;
-    if (!message || typeof message !== 'string') return res.status(400).json({ error: 'message is required' });
-    const db = await readDb();
-    const lower = message.toLowerCase();
-    const student = db.students.find(s => lower.includes(s.name.toLowerCase().split(' ')[0])) || db.students[0];
-    const reply = await askParentAI(message, history || [], db, student);
-    db.messages.push({ id: crypto.randomUUID(), channel: 'web', studentId: student.id, userMessage: message, assistantReply: reply, createdAt: new Date().toISOString() });
-    await writeDb(db);
-    res.json({ reply, student });
-  } catch(err) { next(err); }
-});
-
-app.post('/api/broadcast', checkAdmin, async (req, res, next) => {
-  try {
-    const { message, to } = req.body;
-    if (!message) return res.status(400).json({ error: 'message is required' });
-    const db = await readDb();
-    const recipients = Array.isArray(to) && to.length ? to : db.students.map(s => s.parentPhone);
-    if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
-      return res.json({ queued: true, testMode: true, count: recipients.length, note: 'Simulated — Twilio not configured.' });
-    }
-    const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-    const sent = [];
-    for (const recipient of recipients) {
-      const msg = await client.messages.create({ from: process.env.TWILIO_WHATSAPP_FROM, to: recipient, body: message });
-      sent.push({ to: recipient, sid: msg.sid });
-    }
-    res.json({ queued: true, count: sent.length, sent });
-  } catch(err) { next(err); }
-});
-
-// ─── Super Admin route ─────────────────────────────────────
-app.get('/superadmin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'superadmin.html'));
-});
-
-app.post('/api/superadmin/login', (req, res) => {
-  const { password } = req.body;
-  const superPassword = process.env.SUPER_ADMIN_PASSWORD || 'superadmin';
-  if (password === superPassword) {
-    res.json({ success: true, token: superPassword });
-  } else {
-    res.status(401).json({ error: 'Wrong password' });
-  }
-});
-
-// ─── First-message disclaimer ──────────────────────────────
-function buildDisclaimer(schoolName) {
-  return `👋 Welcome to ${schoolName}'s AI assistant — EduPing!\n\nBefore we continue, please note:\n\n📋 Your conversations and your child's school data (attendance, results, fees) are processed by our AI system to answer your questions.\n\n🔒 Your data is kept private and only used to provide information about your child. It is never sold or shared with third parties.\n\n🤖 This service is powered by AI. For urgent matters please contact the school directly.\n\nBy continuing to chat you agree to this. Type anything to get started! 😊\n\n${schoolName} 🏫`;
-}
-
-function isFirstMessage(db, phone) {
-  return !db.messages.some(m => m.from === phone || m.from === `whatsapp:${phone}`);
-}
-
-// ─── WhatsApp Webhook (Twilio) ─────────────────────────────
-app.post('/webhooks/twilio/whatsapp', async (req, res) => {
-  const twiml = new twilio.twiml.MessagingResponse();
-  try {
-    const incoming = req.body.Body || '';
-    const from = req.body.From || '';
-    const mediaUrl = req.body.MediaUrl0 || null;
-    const db = await readDb();
-
-    let imageBase64 = null;
-    if (mediaUrl && process.env.TWILIO_ACCOUNT_SID) {
-      try {
-        const imgRes = await fetch(mediaUrl, {
-          headers: { 'Authorization': 'Basic ' + Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64') }
-        });
-        const buffer = await imgRes.arrayBuffer();
-        imageBase64 = Buffer.from(buffer).toString('base64');
-      } catch(e) { console.error('Image fetch error:', e.message); }
-    }
-
-    const staff = getStaffFromPhone(db, from);
-    const parentStudent = getParentFromPhone(db, from);
-
-    let reply = '';
-
-    if (staff) {
-      // Staff never get disclaimer — they are internal
-      reply = await processTeacherMessage(staff, incoming, imageBase64, db);
-
-    } else if (parentStudent) {
-      const firstTime = isFirstMessage(db, from);
-      const aiReply = await askParentAI(incoming, [], db, parentStudent);
-      reply = firstTime ? buildDisclaimer(db.school.name) + '\n\n─────────────────\n\n' + aiReply : aiReply;
-      db.messages.push({ channel: 'whatsapp', from, studentId: parentStudent.id, userMessage: incoming, assistantReply: reply, createdAt: new Date().toISOString() });
-      await writeDb(db);
-
-    } else {
-      // Unknown number — prospective parent / admission inquiry
-      const firstTime = isFirstMessage(db, from);
-      const admissionSystem = `You are EduPing, the WhatsApp AI assistant for ${db.school.name} in ${db.school.city}. Someone is contacting us for the first time. Help them with admission inquiries, school information, fees (${db.school.fees}), and current term info. Keep replies warm and professional. End with: ${db.school.name} 🏫`;
-      const aiReply = await callAI(admissionSystem, [{ role: 'user', content: incoming }]);
-      reply = firstTime ? buildDisclaimer(db.school.name) + '\n\n─────────────────\n\n' + aiReply : aiReply;
-      db.messages.push({ channel: 'whatsapp', from, studentId: null, userMessage: incoming, assistantReply: reply, createdAt: new Date().toISOString() });
-      await writeDb(db);
-    }
-
-    twiml.message(reply);
-    res.type('text/xml').send(twiml.toString());
-  } catch(err) {
-    console.error('Webhook error:', err);
-    twiml.message('Sorry, EduPing is having trouble right now. Please try again shortly. 🏫');
-    res.type('text/xml').send(twiml.toString());
-  }
-});
-
-app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(500).json({ error: err.message || 'Server error' });
-});
-
-app.listen(PORT, () => console.log(`EduPing running on http://localhost:${PORT}`));
+(async () => {
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required. Add Railway PostgreSQL and expose DATABASE_URL.');
+  await migrate();
+  await seedIfEmpty();
+  app.listen(PORT, () => console.log(`EduPing multi tenant server running on ${PORT}`));
+})();

@@ -1,119 +1,80 @@
-# EduPing MVP Backend
+# EduPing Multi Tenant
 
-This MVP turns the uploaded EduPing frontend into a basic backend connected product prototype.
+EduPing is a multi tenant WhatsApp AI assistant and school management dashboard for Nigerian schools.
 
-## What is included
+## What changed
 
-1. Node.js and Express backend
-2. Secure AI API calls from the server, not from the browser
-3. Web chat endpoint
-4. Dashboard endpoint
-5. Student data endpoint
-6. Twilio WhatsApp sandbox webhook
-7. Broadcast endpoint for test messages
-8. JSON file database for MVP testing
+This rebuild replaces the old db.json storage with PostgreSQL. One deployment now supports many schools. Every tenant owned record includes `school_id`, and all admin queries filter by `school_id`.
 
-## Setup
+## Stack
 
-```bash
-npm install
-cp .env.example .env
-npm start
-```
+Node.js, Express, PostgreSQL through `pg`, Anthropic Claude, Twilio WhatsApp, node cron, Railway.
 
-Open:
+## Railway setup
 
-```text
-http://localhost:3000
-```
-
-## Environment variables
-
-Edit `.env`.
-
-For OpenAI:
+1. Push this folder to GitHub.
+2. Create a Railway project from the repo.
+3. Add Railway PostgreSQL.
+4. Add these variables:
 
 ```env
-AI_PROVIDER=openai
-OPENAI_API_KEY=your_key_here
-OPENAI_MODEL=gpt-4o-mini
+DATABASE_URL=Railway PostgreSQL connection string
+ANTHROPIC_API_KEY=your Anthropic key
+TWILIO_ACCOUNT_SID=your Twilio SID
+TWILIO_AUTH_TOKEN=your Twilio token
+SUPER_ADMIN_PASSWORD=your strong password
+NODE_ENV=production
 ```
 
-For Anthropic:
+5. Deploy.
 
-```env
-AI_PROVIDER=anthropic
-ANTHROPIC_API_KEY=your_key_here
-ANTHROPIC_MODEL=claude-3-5-sonnet-latest
+The server runs migrations automatically on startup.
+
+## Routes
+
+```txt
+GET /health
+GET /superadmin
+GET /
+POST /webhook/whatsapp
 ```
 
-## API routes
+## Super Admin
 
-```text
-GET  /api/health
-GET  /api/dashboard
-GET  /api/students/:id
-POST /api/chat
-POST /api/broadcast
-POST /webhooks/twilio/whatsapp
+Open `/superadmin`. Use `SUPER_ADMIN_PASSWORD`.
+
+You can add, suspend, activate, and remove schools.
+
+## School Admin
+
+Open `/`. Use the school id and the school admin password.
+
+Seeded test school password is:
+
+```txt
+admin123
 ```
 
-## Twilio WhatsApp sandbox setup
+Get the school id from the Super Admin dashboard.
 
-1. Create a Twilio account
-2. Open Messaging, then WhatsApp Sandbox
-3. Join the sandbox from your phone using the code Twilio gives you
-4. Use ngrok while testing locally:
+## Twilio webhook
 
-```bash
-ngrok http 3000
+In Twilio WhatsApp Sandbox or WhatsApp sender settings, set incoming message webhook to:
+
+```txt
+https://your-railway-domain.up.railway.app/webhook/whatsapp
 ```
 
-5. Copy the HTTPS ngrok URL into Twilio sandbox webhook:
+The system identifies the school by `req.body.To`, matching the school's `twilio_number`.
 
-```text
-https://your-ngrok-url.ngrok-free.app/webhooks/twilio/whatsapp
-```
+## Data isolation
 
-6. Set the webhook method to POST
+All tenant tables include `school_id`. Every school admin endpoint uses the authenticated `school_id`. Super Admin is the only role that can see all schools.
 
-## Testing the web chat
+## Demo mode
 
-Run the app, open the browser, then ask:
+If `ANTHROPIC_API_KEY` is missing, EduPing returns demo replies instead of crashing. This lets you show the interface before funding AI credits.
 
-```text
-What is Emeka's attendance this week?
-```
+## Production notes
 
-The frontend now calls:
-
-```text
-POST /api/chat
-```
-
-instead of calling the AI provider directly from the browser.
-
-## Testing broadcast
-
-The dashboard broadcast button calls:
-
-```text
-POST /api/broadcast
-```
-
-If Twilio credentials are missing, it simulates the broadcast and returns test mode. If Twilio credentials are present, it sends to the parent WhatsApp numbers in `data/db.json`.
-
-## Important MVP limitations
-
-This is not production ready yet.
-
-Before using with a real school, add:
-
-1. Admin login
-2. Parent login or verified WhatsApp identity
-3. Real database, preferably Supabase or Firebase
-4. Proper consent for parent messaging
-5. WhatsApp approved templates for outbound production messages
-6. Audit logs
-7. Data privacy controls
-
+This is a stronger MVP, not a finished enterprise SIS. Before large scale usage, add password hashing, audit trails, file storage for media, paid billing webhooks, and proper role based user accounts.

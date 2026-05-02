@@ -3,36 +3,50 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>EduPing — School AI Assistant</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Playfair+Display:wght@600&display=swap" rel="stylesheet">
+<title>EduPing — School Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
   --green:#1a7a4a; --green-light:#25a865; --green-pale:#e8f5ee; --green-bubble:#dcf8c6;
   --gray-bg:#f0f2f5; --text:#111b21; --text-muted:#667781;
-  --gold:#c9a84c; --info:#3b82f6; --danger:#e53935; --warning:#f59e0b; --purple:#7c3aed;
+  --gold:#c9a84c; --info:#3b82f6; --danger:#e53935; --purple:#7c3aed;
   --radius:10px; --shadow:0 1px 3px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.06);
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;}
-/* NAV */
 .topnav{background:var(--green);color:white;display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,.2);z-index:100;}
 .topnav-brand{display:flex;align-items:center;gap:10px;}
 .topnav-logo{width:32px;height:32px;background:white;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;}
 .topnav-name{font-family:'Playfair Display',serif;font-size:18px;}
-.topnav-school{font-size:12px;opacity:.8;}
+.topnav-school{font-size:12px;opacity:.8;margin-top:-1px;}
 .topnav-tabs{display:flex;gap:4px;}
 .tab-btn{background:rgba(255,255,255,.15);border:none;color:white;padding:7px 16px;border-radius:20px;font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .2s;font-weight:500;}
 .tab-btn.active{background:white;color:var(--green);}
 .tab-btn:hover:not(.active){background:rgba(255,255,255,.25);}
 .ai-status{font-size:13px;opacity:.8;display:flex;align-items:center;gap:6px;}
-.ai-dot{width:8px;height:8px;background:#4ade80;border-radius:50%;display:inline-block;}
-/* LAYOUT */
+.ai-dot{width:8px;height:8px;background:#4ade80;border-radius:50%;}
 .main{flex:1;display:flex;overflow:hidden;}
 .view{display:none;width:100%;}
 .view.active{display:flex;}
+
+/* LOGIN */
+.login-wrap{width:100%;display:flex;align-items:center;justify-content:center;background:var(--gray-bg);}
+.login-box{background:white;border-radius:16px;padding:36px;width:360px;box-shadow:var(--shadow);text-align:center;}
+.login-icon{font-size:36px;margin-bottom:12px;}
+.login-title{font-family:'Playfair Display',serif;font-size:20px;margin-bottom:4px;}
+.login-sub{font-size:13px;color:var(--text-muted);margin-bottom:24px;}
+.form-group{display:flex;flex-direction:column;gap:5px;text-align:left;margin-bottom:12px;}
+.form-label{font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;}
+.form-input,.form-select,.form-textarea{width:100%;background:var(--gray-bg);border:1px solid #e9edef;border-radius:8px;padding:10px 14px;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text);outline:none;}
+.form-input:focus,.form-select:focus{border-color:var(--green);}
+.form-textarea{height:80px;resize:none;}
+.login-btn{width:100%;background:var(--green);color:white;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;margin-top:4px;}
+.login-btn:hover{background:var(--green-light);}
+.login-err{color:var(--danger);font-size:12px;margin-bottom:8px;display:none;}
+
 /* CHAT */
 .chat-view{display:flex;width:100%;}
-.contacts-panel{width:320px;flex-shrink:0;background:white;border-right:1px solid #e9edef;display:flex;flex-direction:column;}
+.contacts-panel{width:300px;flex-shrink:0;background:white;border-right:1px solid #e9edef;display:flex;flex-direction:column;}
 .contacts-header{padding:16px;border-bottom:1px solid #e9edef;}
 .contacts-title{font-size:18px;font-weight:600;margin-bottom:10px;}
 .search-box{background:var(--gray-bg);border:none;border-radius:8px;padding:8px 14px;width:100%;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text);outline:none;}
@@ -43,18 +57,15 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
 .contact-info{flex:1;min-width:0;}
 .contact-name{font-weight:500;font-size:14px;}
 .contact-preview{font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
-.contact-meta{display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
 .contact-time{font-size:11px;color:var(--text-muted);}
-.unread-badge{background:var(--green-light);color:white;border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;font-weight:600;}
-.chat-area{flex:1;display:flex;flex-direction:column;background:#efeae2;background-image:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none'%3E%3Cg fill='%23d9d3c9' fill-opacity='0.3'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");}
+.chat-area{flex:1;display:flex;flex-direction:column;background:#efeae2;}
 .chat-header{background:var(--green);color:white;padding:10px 20px;display:flex;align-items:center;gap:12px;flex-shrink:0;}
 .chat-header-avatar{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:20px;}
 .chat-header-name{font-weight:600;font-size:15px;}
 .chat-header-status{font-size:12px;opacity:.8;}
-.chat-header-right{margin-left:auto;}
-.chat-messages{flex:1;overflow-y:auto;padding:16px 60px;display:flex;flex-direction:column;gap:4px;}
+.chat-messages{flex:1;overflow-y:auto;padding:16px 40px;display:flex;flex-direction:column;gap:4px;}
 .date-divider{text-align:center;margin:12px 0;}
-.date-divider span{background:rgba(255,255,255,.85);padding:4px 14px;border-radius:8px;font-size:12px;color:var(--text-muted);box-shadow:0 1px 2px rgba(0,0,0,.1);}
+.date-divider span{background:rgba(255,255,255,.85);padding:4px 14px;border-radius:8px;font-size:12px;color:var(--text-muted);}
 .msg{max-width:65%;display:flex;flex-direction:column;gap:2px;}
 .msg.sent{align-self:flex-end;}
 .msg.received{align-self:flex-start;}
@@ -66,46 +77,42 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
 .msg-tick{color:#53bdeb;}
 .typing-indicator{display:none;align-self:flex-start;}
 .typing-indicator.show{display:flex;}
-.typing-bubble{background:white;border-radius:18px;padding:10px 14px;display:flex;gap:4px;align-items:center;box-shadow:0 1px 2px rgba(0,0,0,.1);}
+.typing-bubble{background:white;border-radius:18px;padding:10px 14px;display:flex;gap:4px;align-items:center;}
 .typing-dot{width:7px;height:7px;background:#90a0aa;border-radius:50%;animation:typingBounce 1.2s infinite;}
 .typing-dot:nth-child(2){animation-delay:.2s;}
 .typing-dot:nth-child(3){animation-delay:.4s;}
 @keyframes typingBounce{0%,60%,100%{transform:translateY(0);}30%{transform:translateY(-6px);}}
-.quick-replies{padding:8px 16px 0;display:flex;gap:8px;flex-wrap:wrap;}
+.quick-replies{padding:8px 16px 0;display:flex;gap:8px;flex-wrap:wrap;background:var(--gray-bg);}
 .qr-btn{background:white;border:1.5px solid var(--green);color:var(--green);border-radius:20px;padding:5px 14px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .2s;font-weight:500;}
 .qr-btn:hover{background:var(--green);color:white;}
 .chat-input-bar{background:var(--gray-bg);padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;}
 .chat-input{flex:1;background:white;border:none;border-radius:24px;padding:10px 18px;font-family:'DM Sans',sans-serif;font-size:14px;outline:none;color:var(--text);resize:none;max-height:100px;line-height:1.5;}
-.send-btn{width:46px;height:46px;background:var(--green);border:none;border-radius:50%;color:white;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s;flex-shrink:0;}
+.send-btn{width:46px;height:46px;background:var(--green);border:none;border-radius:50%;color:white;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .send-btn:hover{background:var(--green-light);}
+
 /* DASHBOARD */
 .dashboard-view{width:100%;overflow-y:auto;padding:24px 28px;display:flex;flex-direction:column;gap:20px;}
 .dash-welcome{display:flex;align-items:center;justify-content:space-between;}
 .dash-welcome h1{font-family:'Playfair Display',serif;font-size:22px;}
 .dash-welcome p{color:var(--text-muted);font-size:13px;margin-top:3px;}
 .dash-date{background:white;padding:8px 16px;border-radius:var(--radius);font-size:13px;color:var(--text-muted);box-shadow:var(--shadow);}
-/* Sub-nav */
 .dash-subnav{display:flex;gap:8px;flex-wrap:wrap;}
 .subnav-btn{background:white;border:1.5px solid #e9edef;color:var(--text-muted);padding:7px 16px;border-radius:20px;font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .2s;font-weight:500;}
 .subnav-btn.active{background:var(--green);color:white;border-color:var(--green);}
 .dash-section{display:none;}
 .dash-section.active{display:contents;}
-/* Stats */
 .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
-.stat-card{background:white;border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);border-left:4px solid transparent;transition:transform .2s;cursor:default;}
+.stat-card{background:white;border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);border-left:4px solid transparent;transition:transform .2s;}
 .stat-card:hover{transform:translateY(-2px);}
 .stat-card.green{border-color:var(--green);}
 .stat-card.gold{border-color:var(--gold);}
 .stat-card.blue{border-color:var(--info);}
 .stat-card.red{border-color:var(--danger);}
-.stat-card.purple{border-color:var(--purple);}
 .stat-icon{font-size:22px;margin-bottom:8px;}
 .stat-value{font-size:26px;font-weight:600;}
 .stat-label{font-size:12px;color:var(--text-muted);margin-top:3px;}
 .stat-change{font-size:11px;margin-top:5px;}
 .stat-change.up{color:var(--green);}
-.stat-change.down{color:var(--danger);}
-/* Cards */
 .dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
 .dash-card{background:white;border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;}
 .dash-card.full{grid-column:span 2;}
@@ -113,32 +120,25 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
 .dash-card-title{font-weight:600;font-size:14px;}
 .dash-card-action{font-size:12px;color:var(--green);cursor:pointer;font-weight:500;}
 .dash-card-body{padding:14px 18px;}
-/* Table */
 .data-table{width:100%;border-collapse:collapse;}
 .data-table th{text-align:left;font-size:11px;color:var(--text-muted);font-weight:500;padding:6px 8px;border-bottom:1px solid #f0f2f5;text-transform:uppercase;}
 .data-table td{padding:10px 8px;font-size:13px;border-bottom:1px solid #f9fafb;}
 .data-table tr:last-child td{border-bottom:none;}
 .data-table tr:hover td{background:#fafafa;}
-/* Pills */
 .pill{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:500;}
 .pill-green{background:#d1fae5;color:#065f46;}
-.pill-blue{background:#dbeafe;color:#1e3a8a;}
 .pill-gold{background:#fef3c7;color:#92400e;}
 .pill-red{background:#fee2e2;color:#991b1b;}
+.pill-blue{background:#dbeafe;color:#1e3a8a;}
 .pill-gray{background:#f3f4f6;color:#374151;}
-.pill-purple{background:#ede9fe;color:#4c1d95;}
-/* Score */
 .score-pill{display:inline-block;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:500;}
 .score-a{background:#d1fae5;color:#065f46;}
 .score-b{background:#dbeafe;color:#1e3a8a;}
 .score-c{background:#fef3c7;color:#92400e;}
 .score-d{background:#fee2e2;color:#991b1b;}
-/* Staff card */
 .staff-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
 .staff-card{background:white;border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);border-top:3px solid var(--green);}
-.staff-card.late-today{border-top-color:var(--danger);}
-.staff-card.on-time{border-top-color:var(--green);}
-.staff-avatar{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;color:white;font-size:16px;margin-bottom:10px;}
+.staff-avatar{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;color:white;font-size:14px;margin-bottom:10px;}
 .staff-name{font-weight:600;font-size:14px;}
 .staff-role{font-size:12px;color:var(--text-muted);margin-top:2px;}
 .staff-metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;}
@@ -147,75 +147,46 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
 .staff-metric-label{font-size:10px;color:var(--text-muted);}
 .signin-dots{display:flex;gap:4px;margin-top:10px;}
 .signin-dot{width:10px;height:10px;border-radius:50%;}
-.signin-dot.on_time{background:var(--green);}
-.signin-dot.late{background:var(--warning);}
-.signin-dot.absent{background:var(--danger);}
+.signin-dot.submitted{background:var(--green);}
 .signin-dot.none{background:#e9edef;}
-/* Award card */
-.award-card{background:linear-gradient(135deg,#1a7a4a,#25a865);color:white;border-radius:var(--radius);padding:20px;display:flex;align-items:center;gap:16px;}
-.award-trophy{font-size:40px;}
-.award-label{font-size:12px;opacity:.8;text-transform:uppercase;letter-spacing:1px;}
-.award-name{font-size:20px;font-weight:600;margin-top:4px;}
-.award-sub{font-size:13px;opacity:.8;margin-top:2px;}
-/* Alerts */
+.award-card{background:linear-gradient(135deg,#1a7a4a,#25a865);color:white;border-radius:var(--radius);padding:20px;display:flex;align-items:center;gap:16px;margin-bottom:10px;}
+.award-trophy{font-size:36px;}
+.award-label{font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:1px;}
+.award-name{font-size:18px;font-weight:600;margin-top:4px;}
+.award-sub{font-size:12px;opacity:.8;margin-top:2px;}
 .alert-item{display:flex;align-items:flex-start;gap:12px;padding:12px;border-radius:8px;margin-bottom:8px;}
 .alert-item:last-child{margin-bottom:0;}
 .alert-item.fee{background:#fef3c7;}
 .alert-item.admit{background:#ede9fe;}
 .alert-item.report{background:#d1fae5;}
-.alert-item.danger{background:#fee2e2;}
 .alert-icon{font-size:20px;flex-shrink:0;}
 .alert-text{font-size:13px;flex:1;}
 .alert-title{font-weight:600;margin-bottom:2px;}
 .alert-sub{color:var(--text-muted);font-size:12px;}
 .alert-action{background:var(--green);color:white;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;font-weight:500;white-space:nowrap;flex-shrink:0;}
-/* Form */
-.form-select,.form-textarea,.form-input{width:100%;background:var(--gray-bg);border:1px solid #e9edef;border-radius:8px;padding:10px 14px;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text);outline:none;}
-.form-textarea{height:80px;resize:none;}
-.form-label{font-size:12px;font-weight:500;color:var(--text-muted);margin-bottom:4px;display:block;}
-.form-group{display:flex;flex-direction:column;gap:4px;}
-.broadcast-btn{background:var(--green);color:white;border:none;border-radius:8px;padding:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:background .2s;width:100%;}
-.broadcast-btn:hover{background:var(--green-light);}
-/* Attendance chart */
 .attend-bars{display:flex;align-items:flex-end;gap:10px;height:100px;padding-top:10px;}
 .attend-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end;}
 .attend-bar{width:100%;background:var(--green-pale);border-radius:4px 4px 0 0;position:relative;}
-.attend-bar-fill{position:absolute;bottom:0;left:0;right:0;background:var(--green);border-radius:4px 4px 0 0;transition:height .5s ease;}
+.attend-bar-fill{position:absolute;bottom:0;left:0;right:0;background:var(--green);border-radius:4px 4px 0 0;}
 .attend-label{font-size:11px;color:var(--text-muted);}
 .attend-pct{font-size:11px;font-weight:600;color:var(--green);}
-/* Sickbay */
-.sickbay-item{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid #f5f5f5;}
-.sickbay-item:last-child{border:none;}
-/* Modal */
+.broadcast-btn{background:var(--green);color:white;border:none;border-radius:8px;padding:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;width:100%;}
+.broadcast-btn:hover{background:var(--green-light);}
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;}
 .modal-overlay.show{display:flex;}
-.modal-box{background:white;border-radius:16px;padding:32px;width:360px;box-shadow:0 8px 32px rgba(0,0,0,.2);}
+.modal-box{background:white;border-radius:16px;padding:32px;width:380px;box-shadow:0 8px 32px rgba(0,0,0,.2);}
 .modal-icon{text-align:center;font-size:36px;margin-bottom:8px;}
 .modal-title{text-align:center;font-size:18px;font-weight:600;margin-bottom:4px;}
 .modal-sub{text-align:center;font-size:13px;color:var(--text-muted);margin-bottom:20px;}
-.modal-error{color:var(--danger);font-size:12px;margin-bottom:8px;display:none;}
+.modal-err{color:var(--danger);font-size:12px;margin-bottom:8px;display:none;}
 .modal-btn{width:100%;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;margin-bottom:8px;}
 .modal-btn.primary{background:var(--green);color:white;}
 .modal-btn.secondary{background:none;color:var(--text-muted);border:1px solid #e9edef;}
-/* Toast */
 .toast{position:fixed;bottom:24px;right:24px;background:var(--text);color:white;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:500;box-shadow:0 4px 16px rgba(0,0,0,.3);transform:translateY(80px);opacity:0;transition:all .3s;z-index:999;}
 .toast.show{transform:translateY(0);opacity:1;}
-/* Scrollbar */
+.loading{color:var(--text-muted);font-size:13px;padding:20px;text-align:center;}
 ::-webkit-scrollbar{width:4px;}
-::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:#ccc;border-radius:4px;}
-/* Convo items */
-.convo-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f5f5f5;}
-.convo-item:last-child{border:none;}
-.convo-avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;color:white;flex-shrink:0;}
-.convo-name{font-weight:500;font-size:13px;}
-.convo-msg{font-size:12px;color:var(--text-muted);}
-.convo-time{font-size:11px;color:var(--text-muted);margin-left:auto;white-space:nowrap;}
-.convo-tag{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:500;margin-left:6px;}
-.tag-fee{background:#fef3c7;color:#92400e;}
-.tag-result{background:#d1fae5;color:#065f46;}
-.tag-attend{background:#dbeafe;color:#1e3a8a;}
-.tag-admit{background:#ede9fe;color:#4c1d95;}
 </style>
 </head>
 <body>
@@ -225,425 +196,314 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
     <div class="topnav-logo">🏫</div>
     <div>
       <div class="topnav-name">EduPing</div>
-      <div class="topnav-school">Greenfield Academy, Abuja</div>
+      <div class="topnav-school" id="school-name-nav">School Admin</div>
     </div>
   </div>
-  <div class="topnav-tabs">
+  <div class="topnav-tabs" id="main-tabs" style="display:none;">
     <button class="tab-btn active" onclick="switchView('chat',this)">💬 Parent Chat</button>
     <button class="tab-btn" onclick="switchView('dashboard',this)">📊 Admin Dashboard</button>
   </div>
-  <div class="ai-status"><span class="ai-dot"></span> AI Online</div>
+  <div class="ai-status"><span class="ai-dot"></span> EduPing</div>
 </div>
 
 <div class="main">
 
-<!-- ═══════════════ CHAT VIEW ═══════════════ -->
-<div id="chat-view" class="view active">
-  <div class="chat-view" style="width:100%">
-    <div class="contacts-panel">
-      <div class="contacts-header">
-        <div class="contacts-title">Chats</div>
-        <input class="search-box" placeholder="🔍  Search conversations...">
-      </div>
-      <div class="contacts-list">
-        <div class="contact-item active" onclick="selectContact(this,'Mrs Adaeze Okonkwo','👩🏾','#1a7a4a','Emeka — JSS2A')">
-          <div class="contact-avatar" style="background:#1a7a4a">AO</div>
-          <div class="contact-info">
-            <div class="contact-name">Mrs Adaeze Okonkwo</div>
-            <div class="contact-preview">What is Emeka's attendance?</div>
-          </div>
-          <div class="contact-meta"><div class="contact-time">10:42 AM</div><div class="unread-badge">2</div></div>
+  <!-- LOGIN VIEW -->
+  <div id="login-view" class="view active">
+    <div class="login-wrap">
+      <div class="login-box">
+        <div class="login-icon">🏫</div>
+        <div class="login-title">School Admin Login</div>
+        <div class="login-sub">Enter your school ID and password</div>
+        <div class="form-group">
+          <label class="form-label">School ID</label>
+          <input class="form-input" id="login-school-id" placeholder="Paste your school UUID here">
         </div>
-        <div class="contact-item" onclick="selectContact(this,'Mr Babatunde Hassan','👨🏿','#c9a84c','Fatima — SS1B')">
-          <div class="contact-avatar" style="background:#c9a84c">BH</div>
-          <div class="contact-info">
-            <div class="contact-name">Mr Babatunde Hassan</div>
-            <div class="contact-preview">When is the next fee deadline?</div>
-          </div>
-          <div class="contact-meta"><div class="contact-time">9:15 AM</div></div>
+        <div class="form-group">
+          <label class="form-label">Admin Password</label>
+          <input class="form-input" type="password" id="login-password" placeholder="Enter password" onkeydown="if(event.key==='Enter')doLogin()">
         </div>
-        <div class="contact-item" onclick="selectContact(this,'Dr Ngozi Eze','👩🏾','#3b82f6','Chidi — JSS1C')">
-          <div class="contact-avatar" style="background:#3b82f6">NE</div>
-          <div class="contact-info">
-            <div class="contact-name">Dr Ngozi Eze</div>
-            <div class="contact-preview">How did Chidi do in Mathematics?</div>
-          </div>
-          <div class="contact-meta"><div class="contact-time">Yesterday</div></div>
+        <div class="modal-err" id="login-err" style="display:none;">Wrong school ID or password. Try again.</div>
+        <button class="login-btn" onclick="doLogin()">Login to Dashboard</button>
+        <div style="margin-top:16px;font-size:12px;color:var(--text-muted);">
+          Don't know your school ID? Contact <a href="/superadmin" style="color:var(--green);">EduPing Super Admin</a>
         </div>
-        <div class="contact-item" onclick="selectContact(this,'Mrs Funke Adeleke','👩🏽','#7c3aed','Tolu — JSS3A')">
-          <div class="contact-avatar" style="background:#7c3aed">FA</div>
-          <div class="contact-info">
-            <div class="contact-name">Mrs Funke Adeleke</div>
-            <div class="contact-preview">I'd like to enroll my daughter</div>
-          </div>
-          <div class="contact-meta"><div class="contact-time">Yesterday</div></div>
-        </div>
-      </div>
-    </div>
-    <div style="flex:1;display:flex;flex-direction:column;">
-      <div class="chat-header">
-        <div class="chat-header-avatar" id="chat-emoji">👩🏾</div>
-        <div>
-          <div class="chat-header-name" id="chat-name">Mrs Adaeze Okonkwo</div>
-          <div class="chat-header-status" id="chat-sub">Parent of Emeka — JSS2A</div>
-        </div>
-      </div>
-      <div class="chat-messages" id="chat-messages">
-        <div class="date-divider"><span>Today</span></div>
-        <div class="msg received">
-          <div class="msg-bubble">Hello, I'd like to know Emeka's attendance this week please</div>
-          <div class="msg-time">10:40 AM</div>
-        </div>
-        <div class="msg sent">
-          <div class="msg-bubble">Hello Mrs Okonkwo! 👋
-
-Here's Emeka's attendance for this week:
-
-📅 Monday — ✅ Present
-📅 Tuesday — ✅ Present
-📅 Wednesday — ❌ Absent
-📅 Thursday — ✅ Present
-📅 Friday — ✅ Present
-
-Overall this week: 4/5 days (80%)
-This term so far: 92% attendance ⭐
-
-Would you like to know more about his academic performance?</div>
-          <div class="msg-time">10:41 AM <span class="msg-tick">✓✓</span></div>
-        </div>
-        <div class="msg received">
-          <div class="msg-bubble">Yes please, how did he do in his subjects?</div>
-          <div class="msg-time">10:42 AM</div>
-        </div>
-      <div class="typing-indicator" id="typing">
-        <div class="typing-bubble">
-          <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
-        </div>
-      </div>
-      </div>
-      <div class="quick-replies">
-        <button class="qr-btn" onclick="sendQuick('Check fee balance')">💰 Fee balance</button>
-        <button class="qr-btn" onclick="sendQuick('Show attendance this week')">📅 Attendance</button>
-        <button class="qr-btn" onclick="sendQuick('Send weekly performance report for Emeka')">📊 Weekly report</button>
-        <button class="qr-btn" onclick="sendQuick('What are upcoming school events?')">📢 Events</button>
-        <button class="qr-btn" onclick="sendQuick('Any homework due?')">📚 Homework</button>
-      </div>
-      <div class="chat-input-bar">
-        <textarea class="chat-input" id="chat-input" placeholder="Type a message..." rows="1"
-          onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
-        <button class="send-btn" onclick="sendMessage()">➤</button>
       </div>
     </div>
   </div>
-</div>
 
-<!-- ═══════════════ DASHBOARD VIEW ═══════════════ -->
-<div id="dashboard-view" class="view">
-  <div class="dashboard-view" id="dash-content">
-    <div class="dash-welcome">
-      <div>
-        <h1>Good morning, Admin 👋</h1>
-        <p>Here's what's happening at Greenfield Academy today</p>
+  <!-- CHAT VIEW -->
+  <div id="chat-view" class="view">
+    <div class="chat-view" style="width:100%">
+      <div class="contacts-panel">
+        <div class="contacts-header">
+          <div class="contacts-title">Parent Chats</div>
+          <input class="search-box" placeholder="🔍 Search...">
+        </div>
+        <div class="contacts-list" id="contacts-list">
+          <div class="loading">Loading conversations...</div>
+        </div>
       </div>
-      <div class="dash-date" id="dash-date"></div>
-    </div>
-
-    <!-- Sub navigation -->
-    <div class="dash-subnav">
-      <button class="subnav-btn active" onclick="switchSection('overview',this)">📊 Overview</button>
-      <button class="subnav-btn" onclick="switchSection('staff',this)">👩‍🏫 Staff Audit</button>
-      <button class="subnav-btn" onclick="switchSection('students',this)">🎓 Students</button>
-      <button class="subnav-btn" onclick="switchSection('awards',this)">🏆 Awards</button>
-      <button class="subnav-btn" onclick="switchSection('admissions',this)">📋 Admissions</button>
-      <button class="subnav-btn" onclick="switchSection('sickbay',this)">🏥 Sick Bay</button>
-      <button class="subnav-btn" onclick="switchSection('broadcast',this)">📢 Broadcast</button>
-    </div>
-
-    <!-- ── OVERVIEW ── -->
-    <div id="section-overview" class="dash-section active">
-      <div class="stats-grid">
-        <div class="stat-card green"><div class="stat-icon">💬</div><div class="stat-value">47</div><div class="stat-label">Conversations today</div><div class="stat-change up">↑ 12% from yesterday</div></div>
-        <div class="stat-card blue"><div class="stat-icon">👩‍🏫</div><div class="stat-value" id="stat-signedin">4/5</div><div class="stat-label">Staff signed in today</div><div class="stat-change up">↑ On track</div></div>
-        <div class="stat-card gold"><div class="stat-icon">💰</div><div class="stat-value">₦2.4M</div><div class="stat-label">Fees outstanding</div><div class="stat-change down">↓ 8% this week</div></div>
-        <div class="stat-card red"><div class="stat-icon">📋</div><div class="stat-value">3</div><div class="stat-label">Admission inquiries</div><div class="stat-change up">↑ 3 new today</div></div>
-      </div>
-      <div class="dash-grid">
-        <div class="dash-card">
-          <div class="dash-card-header"><div class="dash-card-title">Recent Parent Conversations</div></div>
-          <div class="dash-card-body">
-            <div class="convo-item"><div class="convo-avatar" style="background:#1a7a4a">AO</div><div><div class="convo-name">Mrs Adaeze Okonkwo <span class="convo-tag tag-attend">Attendance</span></div><div class="convo-msg">Emeka's attendance this week?</div></div><div class="convo-time">10:42 AM</div></div>
-            <div class="convo-item"><div class="convo-avatar" style="background:#c9a84c">BH</div><div><div class="convo-name">Mr Babatunde Hassan <span class="convo-tag tag-fee">Fee</span></div><div class="convo-msg">Next fee payment deadline?</div></div><div class="convo-time">9:15 AM</div></div>
-            <div class="convo-item"><div class="convo-avatar" style="background:#3b82f6">NE</div><div><div class="convo-name">Dr Ngozi Eze <span class="convo-tag tag-result">Results</span></div><div class="convo-msg">Chidi's Maths score this term</div></div><div class="convo-time">Yesterday</div></div>
+      <div style="flex:1;display:flex;flex-direction:column;">
+        <div class="chat-header">
+          <div class="chat-header-avatar" id="chat-emoji">👩🏾</div>
+          <div>
+            <div class="chat-header-name" id="chat-name">Select a conversation</div>
+            <div class="chat-header-status" id="chat-sub">EduPing AI Assistant</div>
           </div>
         </div>
-        <div class="dash-card">
-          <div class="dash-card-header"><div class="dash-card-title">Action Required</div></div>
-          <div class="dash-card-body">
-            <div class="alert-item fee"><div class="alert-icon">💰</div><div class="alert-text"><div class="alert-title">Fee deadline in 3 days</div><div class="alert-sub">34 parents haven't paid 2nd term fees</div></div><button class="alert-action" onclick="showToast('Broadcast sent to 34 parents! 📨')">Send reminder</button></div>
-            <div class="alert-item admit"><div class="alert-icon">📋</div><div class="alert-text"><div class="alert-title">3 new admission inquiries</div><div class="alert-sub">AI has collected details, needs review</div></div><button class="alert-action" onclick="switchSection('admissions',null)">Review</button></div>
-            <div class="alert-item report"><div class="alert-icon">📊</div><div class="alert-text"><div class="alert-title">Weekly reports ready</div><div class="alert-sub">312 reports queued for Friday delivery</div></div><button class="alert-action" onclick="showToast('Reports scheduled! ✅')">Schedule send</button></div>
+        <div class="chat-messages" id="chat-messages">
+          <div class="date-divider"><span>Today</span></div>
+          <div style="text-align:center;color:var(--text-muted);font-size:13px;margin-top:40px;">Select a parent conversation on the left<br>or type a message below to test the AI</div>
+        </div>
+        <div class="typing-indicator" id="typing">
+          <div class="typing-bubble">
+            <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
           </div>
         </div>
-        <div class="dash-card">
-          <div class="dash-card-header"><div class="dash-card-title">Weekly Attendance</div></div>
-          <div class="dash-card-body"><div class="attend-bars" id="attend-chart"></div></div>
+        <div class="quick-replies">
+          <button class="qr-btn" onclick="sendQuick('Check fee balance')">💰 Fee balance</button>
+          <button class="qr-btn" onclick="sendQuick('Show attendance this week')">📅 Attendance</button>
+          <button class="qr-btn" onclick="sendQuick('Send weekly performance report')">📊 Weekly report</button>
+          <button class="qr-btn" onclick="sendQuick('What are upcoming school events?')">📢 Events</button>
+          <button class="qr-btn" onclick="sendQuick('Any homework due?')">📚 Homework</button>
         </div>
-        <div class="dash-card">
-          <div class="dash-card-header"><div class="dash-card-title">Today's Staff Sign-ins</div></div>
-          <div class="dash-card-body">
-            <table class="data-table">
-              <thead><tr><th>Name</th><th>Role</th><th>Time</th><th>Status</th></tr></thead>
-              <tbody>
-                <tr><td>Mrs Adaeze Okonkwo</td><td>Class Teacher</td><td>08:15</td><td><span class="pill pill-gold">Late</span></td></tr>
-                <tr><td>Mr Emeka Nwosu</td><td>Subject Teacher</td><td>07:48</td><td><span class="pill pill-green">On Time</span></td></tr>
-                <tr><td>Mrs Funke Adeleke</td><td>Subject Teacher</td><td>07:40</td><td><span class="pill pill-green">On Time</span></td></tr>
-                <tr><td>Nurse Blessing Eze</td><td>Nurse</td><td>08:05</td><td><span class="pill pill-gold">Late</span></td></tr>
-                <tr><td>Mr Tunde Security</td><td>Security</td><td>07:02</td><td><span class="pill pill-green">On Time</span></td></tr>
-              </tbody>
-            </table>
-          </div>
+        <div class="chat-input-bar">
+          <textarea class="chat-input" id="chat-input" placeholder="Type a message as a parent..." rows="1"
+            onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          <button class="send-btn" onclick="sendMessage()">➤</button>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- ── STAFF AUDIT ── -->
-    <div id="section-staff" class="dash-section">
-      <div class="dash-card full" style="grid-column:span 2">
-        <div class="dash-card-header">
-          <div class="dash-card-title">Staff Performance Audit</div>
-          <div class="dash-card-action" onclick="showToast('Exporting report... 📄')">Export report</div>
+  <!-- DASHBOARD VIEW -->
+  <div id="dashboard-view" class="view">
+    <div class="dashboard-view">
+      <div class="dash-welcome">
+        <div>
+          <h1 id="dash-greeting">Good morning, Admin 👋</h1>
+          <p id="dash-school-sub">Loading your school data...</p>
         </div>
-        <div class="dash-card-body">
-          <div class="staff-grid" id="staff-grid">
-            <!-- Populated by JS -->
+        <div class="dash-date" id="dash-date"></div>
+      </div>
+
+      <div class="dash-subnav">
+        <button class="subnav-btn active" onclick="switchSection('overview',this)">📊 Overview</button>
+        <button class="subnav-btn" onclick="switchSection('staff',this)">👩‍🏫 Staff Audit</button>
+        <button class="subnav-btn" onclick="switchSection('students',this)">🎓 Students</button>
+        <button class="subnav-btn" onclick="switchSection('awards',this)">🏆 Awards</button>
+        <button class="subnav-btn" onclick="switchSection('admissions',this)">📋 Admissions</button>
+        <button class="subnav-btn" onclick="switchSection('sickbay',this)">🏥 Sick Bay</button>
+        <button class="subnav-btn" onclick="switchSection('broadcast',this)">📢 Broadcast</button>
+      </div>
+
+      <!-- OVERVIEW -->
+      <div id="section-overview" class="dash-section active">
+        <div class="stats-grid">
+          <div class="stat-card green"><div class="stat-icon">💬</div><div class="stat-value" id="stat-conversations">—</div><div class="stat-label">Total conversations</div></div>
+          <div class="stat-card blue"><div class="stat-icon">👩‍🏫</div><div class="stat-value" id="stat-staff">—</div><div class="stat-label">Staff members</div></div>
+          <div class="stat-card gold"><div class="stat-icon">💰</div><div class="stat-value" id="stat-fees">—</div><div class="stat-label">Fees outstanding</div></div>
+          <div class="stat-card red"><div class="stat-icon">📋</div><div class="stat-value" id="stat-admissions">—</div><div class="stat-label">New admissions</div></div>
+        </div>
+        <div class="dash-grid">
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">Recent Conversations</div></div>
+            <div class="dash-card-body" id="recent-convos"><div class="loading">Loading...</div></div>
           </div>
-        </div>
-      </div>
-      <div class="dash-card full">
-        <div class="dash-card-header"><div class="dash-card-title">Sign-in Log (Last 7 days)</div></div>
-        <div class="dash-card-body">
-          <table class="data-table" id="signin-table">
-            <thead><tr><th>Staff</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>On Time</th><th>Late</th><th>Absent</th></tr></thead>
-            <tbody id="signin-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="dash-card full">
-        <div class="dash-card-header"><div class="dash-card-title">Add New Staff Member</div></div>
-        <div class="dash-card-body">
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:end;">
-            <div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="new-staff-name" placeholder="Mrs Amaka Johnson"></div>
-            <div class="form-group"><label class="form-label">Role</label><select class="form-select" id="new-staff-role"><option value="class_teacher">Class Teacher</option><option value="subject_teacher">Subject Teacher</option><option value="nurse">Nurse</option><option value="security">Security</option><option value="admin">Admin</option></select></div>
-            <div class="form-group"><label class="form-label">Subject / Class</label><input class="form-input" id="new-staff-subject" placeholder="Mathematics / JSS2A"></div>
-            <div class="form-group"><label class="form-label">WhatsApp Number</label><input class="form-input" id="new-staff-phone" placeholder="+2348011112233"></div>
-          </div>
-          <button class="broadcast-btn" style="margin-top:14px;max-width:200px" onclick="addStaff()">➕ Add Staff Member</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── STUDENTS ── -->
-    <div id="section-students" class="dash-section">
-      <div class="dash-card full">
-        <div class="dash-card-header"><div class="dash-card-title">JSS2A — Weekly Performance</div></div>
-        <div class="dash-card-body">
-          <table class="data-table">
-            <thead><tr><th>Student</th><th>Maths</th><th>English</th><th>Science</th><th>Social Studies</th><th>Attendance</th><th>Fees</th><th>Report</th></tr></thead>
-            <tbody>
-              <tr><td><strong>Emeka Okonkwo</strong></td><td><span class="score-pill score-b">78%</span></td><td><span class="score-pill score-a">85%</span></td><td><span class="score-pill score-b">72%</span></td><td><span class="score-pill score-a">88%</span></td><td>80%</td><td><span class="pill pill-green">Paid</span></td><td>✅</td></tr>
-              <tr><td><strong>Blessing Adeyemi</strong></td><td><span class="score-pill score-a">92%</span></td><td><span class="score-pill score-a">90%</span></td><td><span class="score-pill score-a">95%</span></td><td><span class="score-pill score-a">88%</span></td><td>100%</td><td><span class="pill pill-green">Paid</span></td><td>✅</td></tr>
-              <tr><td><strong>Taiwo Balogun</strong></td><td><span class="score-pill score-c">58%</span></td><td><span class="score-pill score-c">67%</span></td><td><span class="score-pill score-d">55%</span></td><td><span class="score-pill score-b">70%</span></td><td>75%</td><td><span class="pill pill-red">Unpaid</span></td><td>✅</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div class="dash-card full">
-        <div class="dash-card-header"><div class="dash-card-title">Behaviour Notes This Week</div></div>
-        <div class="dash-card-body">
-          <table class="data-table">
-            <thead><tr><th>Student</th><th>Class</th><th>Note</th><th>Reported By</th><th>Date</th></tr></thead>
-            <tbody>
-              <tr><td><strong>Taiwo Balogun</strong></td><td>JSS2A</td><td>Disruptive in class on Monday</td><td>Mrs Adaeze Okonkwo</td><td>Apr 28</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── AWARDS ── -->
-    <div id="section-awards" class="dash-section">
-      <div class="dash-grid">
-        <div class="dash-card">
-          <div class="dash-card-header"><div class="dash-card-title">🏆 Staff of the Week</div><div class="dash-card-action" onclick="calculateAwards()">Recalculate</div></div>
-          <div class="dash-card-body">
-            <div class="award-card" id="staff-award-card">
-              <div class="award-trophy">🏆</div>
-              <div>
-                <div class="award-label">Staff of the Week</div>
-                <div class="award-name">Mrs Funke Adeleke</div>
-                <div class="award-sub">Biology Teacher — Score: 94/100</div>
-              </div>
-            </div>
-            <div style="margin-top:14px;display:flex;gap:8px;">
-              <button class="broadcast-btn" onclick="showToast('🏆 Staff of the Week announced to all staff via WhatsApp!')">📤 Announce via WhatsApp</button>
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">Action Required</div></div>
+            <div class="dash-card-body">
+              <div class="alert-item fee"><div class="alert-icon">💰</div><div class="alert-text"><div class="alert-title">Fee reminders active</div><div class="alert-sub">Daily automated reminders running</div></div><button class="alert-action" onclick="showToast('Reminders running automatically ✅')">Active</button></div>
+              <div class="alert-item admit"><div class="alert-icon">📋</div><div class="alert-text"><div class="alert-title">New admission inquiries</div><div class="alert-sub" id="admit-alert-sub">Check admissions tab</div></div><button class="alert-action" onclick="switchSection('admissions',null)">Review</button></div>
+              <div class="alert-item report"><div class="alert-icon">📊</div><div class="alert-text"><div class="alert-title">Weekly reports</div><div class="alert-sub">Auto-sent every Friday 4pm</div></div><button class="alert-action" onclick="showToast('Reports scheduled ✅')">Scheduled</button></div>
             </div>
           </div>
-        </div>
-        <div class="dash-card">
-          <div class="dash-card-header"><div class="dash-card-title">⭐ Student of the Week (by class)</div><div class="dash-card-action" onclick="calculateAwards()">Recalculate</div></div>
-          <div class="dash-card-body" id="student-awards-body">
-            <div class="award-card" style="margin-bottom:10px">
-              <div class="award-trophy">⭐</div>
-              <div>
-                <div class="award-label">JSS2A — Student of the Week</div>
-                <div class="award-name">Blessing Adeyemi</div>
-                <div class="award-sub">Score: 91% avg • 100% attendance</div>
-              </div>
-            </div>
-            <div class="award-card" style="margin-bottom:10px">
-              <div class="award-trophy">⭐</div>
-              <div>
-                <div class="award-label">JSS1C — Student of the Week</div>
-                <div class="award-name">Chidi Eze</div>
-                <div class="award-sub">Score: 91% avg • 100% attendance</div>
-              </div>
-            </div>
-            <div class="award-card">
-              <div class="award-trophy">⭐</div>
-              <div>
-                <div class="award-label">SS1B — Student of the Week</div>
-                <div class="award-name">Fatima Hassan</div>
-                <div class="award-sub">Score: 82% avg • 95% attendance</div>
-              </div>
-            </div>
-            <div style="margin-top:14px;">
-              <button class="broadcast-btn" onclick="showToast('⭐ Student of the Week announced to all parents via WhatsApp!')">📤 Announce to all parents</button>
-            </div>
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">Weekly Attendance</div></div>
+            <div class="dash-card-body"><div class="attend-bars" id="attend-chart"></div></div>
           </div>
-        </div>
-        <div class="dash-card full">
-          <div class="dash-card-header"><div class="dash-card-title">Award History</div></div>
-          <div class="dash-card-body">
-            <table class="data-table">
-              <thead><tr><th>Week</th><th>Award</th><th>Winner</th><th>Score</th></tr></thead>
-              <tbody>
-                <tr><td>Apr 21-25</td><td>Staff of the Week</td><td>Mrs Adaeze Okonkwo</td><td>92/100</td></tr>
-                <tr><td>Apr 21-25</td><td>JSS2A Student of Week</td><td>Blessing Adeyemi</td><td>91%</td></tr>
-                <tr><td>Apr 14-18</td><td>Staff of the Week</td><td>Mrs Funke Adeleke</td><td>88/100</td></tr>
-                <tr><td>Apr 14-18</td><td>JSS1C Student of Week</td><td>Chidi Eze</td><td>91%</td></tr>
-              </tbody>
-            </table>
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">Today's Sign-ins</div></div>
+            <div class="dash-card-body" id="signin-today"><div class="loading">Loading...</div></div>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- ── ADMISSIONS ── -->
-    <div id="section-admissions" class="dash-section">
-      <div class="dash-card full">
-        <div class="dash-card-header"><div class="dash-card-title">Admission Inquiries</div><div class="dash-card-action">Export list</div></div>
-        <div class="dash-card-body">
-          <table class="data-table">
-            <thead><tr><th>Parent</th><th>Phone</th><th>Child</th><th>Class</th><th>Date</th><th>Status</th><th>Action</th></tr></thead>
-            <tbody>
-              <tr><td>Mrs Kemi Lawson</td><td>+2348099001122</td><td>David Lawson</td><td>JSS1</td><td>Apr 28</td><td><span class="pill pill-gold">Pending</span></td><td><button class="alert-action" onclick="showToast('Visit scheduled for Mrs Lawson 📅')">Schedule visit</button></td></tr>
-              <tr><td>Mr Chucks Obi</td><td>+2348099003344</td><td>Grace Obi</td><td>SS1</td><td>Apr 29</td><td><span class="pill pill-blue">Visit Scheduled</span></td><td><button class="alert-action" onclick="showToast('Acceptance sent to Mr Obi ✅')">Send acceptance</button></td></tr>
-              <tr><td>Mrs Hauwa Musa</td><td>+2348099005566</td><td>Ahmad Musa</td><td>JSS2</td><td>Apr 30</td><td><span class="pill pill-gold">Pending</span></td><td><button class="alert-action" onclick="showToast('Visit scheduled for Mrs Musa 📅')">Schedule visit</button></td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── SICK BAY ── -->
-    <div id="section-sickbay" class="dash-section">
-      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
-        <div class="stat-card blue"><div class="stat-icon">🏥</div><div class="stat-value">3</div><div class="stat-label">Visits this week</div></div>
-        <div class="stat-card green"><div class="stat-icon">💊</div><div class="stat-value">2</div><div class="stat-label">Treated & returned</div></div>
-        <div class="stat-card gold"><div class="stat-icon">🚗</div><div class="stat-value">1</div><div class="stat-label">Sent home</div></div>
-      </div>
-      <div class="dash-card full">
-        <div class="dash-card-header"><div class="dash-card-title">Sick Bay Log</div></div>
-        <div class="dash-card-body">
-          <table class="data-table">
-            <thead><tr><th>Student</th><th>Class</th><th>Date</th><th>Reason</th><th>Action Taken</th><th>Parent Notified</th></tr></thead>
-            <tbody>
-              <tr><td><strong>Taiwo Balogun</strong></td><td>JSS2A</td><td>Apr 29</td><td>Headache</td><td>Paracetamol given, rested 30 mins</td><td>✅ Yes</td></tr>
-              <tr><td><strong>Emeka Okonkwo</strong></td><td>JSS2A</td><td>Apr 28</td><td>Stomach pain</td><td>Sent home early</td><td>✅ Yes</td></tr>
-              <tr><td><strong>Chidi Eze</strong></td><td>JSS1C</td><td>Apr 27</td><td>Dizziness</td><td>Water, rest — returned to class</td><td>✅ Yes</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── BROADCAST ── -->
-    <div id="section-broadcast" class="dash-section">
-      <div class="dash-grid">
-        <div class="dash-card">
-          <div class="dash-card-header"><div class="dash-card-title">Send Broadcast Message</div></div>
+      <!-- STAFF AUDIT -->
+      <div id="section-staff" class="dash-section">
+        <div class="staff-grid" id="staff-grid"><div class="loading">Loading staff...</div></div>
+        <div class="dash-card full" style="margin-top:18px;">
+          <div class="dash-card-header"><div class="dash-card-title">Add New Staff Member</div></div>
           <div class="dash-card-body">
-            <div style="display:flex;flex-direction:column;gap:12px;">
-              <div class="form-group"><label class="form-label">Send to</label>
-                <select class="form-select" id="broadcast-target">
-                  <option>All parents</option><option>JSS parents only</option><option>SS parents only</option>
-                  <option>Debtors only</option><option>All staff</option><option>Specific class</option>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:end;">
+              <div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="sf-name" placeholder="Mrs Amaka Johnson"></div>
+              <div class="form-group"><label class="form-label">Role</label>
+                <select class="form-select" id="sf-role">
+                  <option value="teacher">Class Teacher</option>
+                  <option value="subject_teacher">Subject Teacher</option>
+                  <option value="nurse">Nurse</option>
+                  <option value="security">Security</option>
                 </select>
               </div>
-              <div class="form-group"><label class="form-label">Message</label>
-                <textarea class="form-textarea" id="broadcast-msg" placeholder="Type your WhatsApp message here..."></textarea>
-              </div>
-              <button class="broadcast-btn" onclick="sendBroadcast()">📤 Send via WhatsApp AI</button>
+              <div class="form-group"><label class="form-label">Subject</label><input class="form-input" id="sf-subject" placeholder="Mathematics"></div>
+              <div class="form-group"><label class="form-label">Class</label><input class="form-input" id="sf-class" placeholder="JSS2A"></div>
+              <div class="form-group"><label class="form-label">WhatsApp Number</label><input class="form-input" id="sf-phone" placeholder="+2348011112233"></div>
             </div>
+            <button class="broadcast-btn" style="margin-top:14px;max-width:200px" onclick="addStaff()">➕ Add Staff Member</button>
           </div>
         </div>
-        <div class="dash-card">
-          <div class="dash-card-header"><div class="dash-card-title">Quick Templates</div></div>
+      </div>
+
+      <!-- STUDENTS -->
+      <div id="section-students" class="dash-section">
+        <div class="dash-card full">
+          <div class="dash-card-header"><div class="dash-card-title">All Students</div><div class="dash-card-action" onclick="showAddStudent()">+ Add student</div></div>
           <div class="dash-card-body">
-            <div style="display:flex;flex-direction:column;gap:8px;">
-              <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('fee')">💰 Fee payment reminder</button>
-              <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('event')">📅 Upcoming event reminder</button>
-              <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('exam')">📝 Exam timetable</button>
-              <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('closure')">🚪 Early school closure</button>
-              <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('award')">🏆 Student of the week</button>
-              <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('pta')">👨‍👩‍👧 PTA meeting reminder</button>
+            <table class="data-table" id="students-table">
+              <thead><tr><th>Student</th><th>Class</th><th>Parent</th><th>Parent Phone</th><th>Perf. Score</th></tr></thead>
+              <tbody id="students-tbody"><tr><td colspan="5" class="loading">Loading...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- AWARDS -->
+      <div id="section-awards" class="dash-section">
+        <div class="dash-grid">
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">🏆 Staff of the Week</div></div>
+            <div class="dash-card-body">
+              <div class="award-card"><div class="award-trophy">🏆</div><div><div class="award-label">Staff of the Week</div><div class="award-name" id="sotw-name">Calculating...</div><div class="award-sub" id="sotw-sub">Based on performance data</div></div></div>
+              <button class="broadcast-btn" style="margin-top:14px;" onclick="announceAward('staff')">📤 Announce to all staff</button>
+            </div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">⭐ Student of the Week</div></div>
+            <div class="dash-card-body" id="student-awards"><div class="loading">Loading...</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ADMISSIONS -->
+      <div id="section-admissions" class="dash-section">
+        <div class="dash-card full">
+          <div class="dash-card-header"><div class="dash-card-title">Admission Inquiries</div></div>
+          <div class="dash-card-body">
+            <table class="data-table">
+              <thead><tr><th>Parent</th><th>Phone</th><th>Child</th><th>Class</th><th>Date</th><th>Status</th><th>Action</th></tr></thead>
+              <tbody id="admissions-tbody"><tr><td colspan="7" class="loading">Loading...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- SICK BAY -->
+      <div id="section-sickbay" class="dash-section">
+        <div class="dash-card full">
+          <div class="dash-card-header"><div class="dash-card-title">Sick Bay Log</div></div>
+          <div class="dash-card-body">
+            <table class="data-table">
+              <thead><tr><th>Student</th><th>Reason</th><th>Action Taken</th><th>Date</th></tr></thead>
+              <tbody id="sickbay-tbody"><tr><td colspan="4" class="loading">Loading...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- BROADCAST -->
+      <div id="section-broadcast" class="dash-section">
+        <div class="dash-grid">
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">Send Broadcast</div></div>
+            <div class="dash-card-body">
+              <div style="display:flex;flex-direction:column;gap:12px;">
+                <div class="form-group"><label class="form-label">Send to</label>
+                  <select class="form-select" id="broadcast-target">
+                    <option value="all_parents">All parents</option>
+                    <option value="staff">All staff</option>
+                  </select>
+                </div>
+                <div class="form-group"><label class="form-label">Message</label>
+                  <textarea class="form-textarea" id="broadcast-msg" placeholder="Type your WhatsApp message..."></textarea>
+                </div>
+                <button class="broadcast-btn" onclick="sendBroadcast()">📤 Send via WhatsApp</button>
+              </div>
+            </div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">Quick Templates</div></div>
+            <div class="dash-card-body">
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('fee')">💰 Fee payment reminder</button>
+                <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('event')">📅 Upcoming event reminder</button>
+                <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('exam')">📝 Exam timetable notice</button>
+                <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('award')">🏆 Student of the week</button>
+                <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('pta')">👨‍👩‍👧 PTA meeting reminder</button>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
     </div>
-
   </div>
-</div>
 
-</div><!-- end main -->
-
-<!-- Admin Login Modal -->
-<div class="modal-overlay" id="admin-modal">
-  <div class="modal-box">
-    <div class="modal-icon">🔒</div>
-    <div class="modal-title">Admin Access</div>
-    <div class="modal-sub">Enter your password to access the dashboard</div>
-    <input id="admin-password-input" type="password" class="form-input" placeholder="Enter admin password" style="margin-bottom:8px;" onkeydown="if(event.key==='Enter')submitAdminLogin()">
-    <div class="modal-error" id="admin-login-error">Wrong password. Try again.</div>
-    <button class="modal-btn primary" onclick="submitAdminLogin()">Login</button>
-    <button class="modal-btn secondary" onclick="hideAdminLogin()">Cancel</button>
-  </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
-// ── View & section switching ──────────────────────────────
-let adminToken = null;
+// ── State ─────────────────────────────────────────────────
+let schoolId = '', adminPassword = '', schoolData = null, chatHistory = [];
+const colors = ['#1a7a4a','#c9a84c','#3b82f6','#7c3aed','#e53935','#0891b2'];
 
+// ── API helper ────────────────────────────────────────────
+async function api(url, opts = {}) {
+  opts.headers = { 'Content-Type': 'application/json', 'x-school-id': schoolId, 'x-admin-password': adminPassword, ...(opts.headers || {}) };
+  const res = await fetch(url, opts);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// ── Login ─────────────────────────────────────────────────
+async function doLogin() {
+  schoolId = document.getElementById('login-school-id').value.trim();
+  adminPassword = document.getElementById('login-password').value.trim();
+  if (!schoolId || !adminPassword) { showLoginErr('Please fill in both fields'); return; }
+  try {
+    const res = await fetch('/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ school_id: schoolId, password: adminPassword }) });
+    const data = await res.json();
+    if (!data.ok) { showLoginErr('Wrong school ID or password'); return; }
+    schoolData = data.school;
+    onLoggedIn();
+  } catch(e) { showLoginErr('Could not connect. Try again.'); }
+}
+
+function showLoginErr(msg) {
+  const el = document.getElementById('login-err');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+function onLoggedIn() {
+  document.getElementById('login-view').classList.remove('active');
+  document.getElementById('main-tabs').style.display = 'flex';
+  document.getElementById('school-name-nav').textContent = schoolData.name + ', ' + (schoolData.city || '');
+  document.getElementById('dash-greeting').textContent = 'Good morning, Admin 👋';
+  document.getElementById('dash-school-sub').textContent = schoolData.name;
+  document.getElementById('dash-date').textContent = new Date().toLocaleDateString('en-NG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  switchView('dashboard', document.querySelectorAll('.tab-btn')[1]);
+  loadDashboard();
+}
+
+// ── View switching ────────────────────────────────────────
 function switchView(view, btn) {
-  if (view === 'dashboard' && !adminToken) { showAdminLogin(); return; }
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(view + '-view').classList.add('active');
   if (btn) btn.classList.add('active');
   if (view === 'dashboard') loadDashboard();
+  if (view === 'chat') loadConversations();
 }
 
 function switchSection(name, btn) {
@@ -651,154 +511,229 @@ function switchSection(name, btn) {
   document.querySelectorAll('.subnav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('section-' + name).classList.add('active');
   if (btn) btn.classList.add('active');
-  else document.querySelectorAll('.subnav-btn')[4].classList.add('active');
-}
-
-// ── Admin auth ────────────────────────────────────────────
-function showAdminLogin() { document.getElementById('admin-modal').classList.add('show'); setTimeout(()=>document.getElementById('admin-password-input').focus(),100); }
-function hideAdminLogin() { document.getElementById('admin-modal').classList.remove('show'); document.getElementById('admin-password-input').value=''; document.getElementById('admin-login-error').style.display='none'; }
-
-async function submitAdminLogin() {
-  const password = document.getElementById('admin-password-input').value;
-  if (!password) return;
-  try {
-    const res = await fetch('/api/admin/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password}) });
-    const data = await res.json();
-    if (data.success) {
-      adminToken = data.token;
-      hideAdminLogin();
-      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById('dashboard-view').classList.add('active');
-      document.querySelectorAll('.tab-btn')[1].classList.add('active');
-      loadDashboard();
-    } else { document.getElementById('admin-login-error').style.display='block'; }
-  } catch(e) { document.getElementById('admin-login-error').style.display='block'; }
+  if (name === 'students') loadStudents();
+  if (name === 'staff') loadStaff();
+  if (name === 'admissions') loadAdmissions();
+  if (name === 'sickbay') loadSickbay();
+  if (name === 'awards') loadAwards();
 }
 
 // ── Dashboard data ────────────────────────────────────────
 async function loadDashboard() {
   try {
-    const res = await fetch('/api/dashboard', { headers:{'x-admin-token': adminToken} });
-    if (!res.ok) return;
-    const data = await res.json();
-    if (data.stats) {
-      document.getElementById('stat-signedin').textContent = data.stats.signedInToday + '/' + data.stats.staff;
-    }
-    if (data.staff) renderStaffGrid(data.staff);
-  } catch(e) { console.log('Dashboard load error:', e); }
+    const d = await api('/api/admin/dashboard');
+    document.getElementById('stat-conversations').textContent = d.conversations;
+    document.getElementById('stat-staff').textContent = d.staff;
+    document.getElementById('stat-fees').textContent = '₦' + Number(d.outstanding_fees || 0).toLocaleString();
+    document.getElementById('stat-admissions').textContent = d.new_admissions;
+    document.getElementById('admit-alert-sub').textContent = d.new_admissions + ' new inquiries pending';
+    renderSignins(d.signin);
+    loadRecentConvos();
+  } catch(e) { console.log('Dashboard error:', e); }
+
+  // Attendance chart
+  const chart = document.getElementById('attend-chart');
+  const days = [{l:'Mon',p:94},{l:'Tue',p:88},{l:'Wed',p:91},{l:'Thu',p:96},{l:'Fri',p:91}];
+  chart.innerHTML = days.map(d => `<div class="attend-bar-wrap"><div class="attend-pct">${d.p}%</div><div class="attend-bar" style="height:90px"><div class="attend-bar-fill" style="height:${d.p}%"></div></div><div class="attend-label">${d.l}</div></div>`).join('');
 }
 
-// ── Staff grid ────────────────────────────────────────────
-const roleColors = { class_teacher:'#1a7a4a', subject_teacher:'#3b82f6', nurse:'#e53935', security:'#c9a84c', admin:'#7c3aed' };
-const roleLabels = { class_teacher:'Class Teacher', subject_teacher:'Subject Teacher', nurse:'Nurse', security:'Security', admin:'Admin' };
+function renderSignins(signins) {
+  const el = document.getElementById('signin-today');
+  if (!signins || !signins.length) { el.innerHTML = '<div class="loading">No sign-ins recorded today yet</div>'; return; }
+  el.innerHTML = `<table class="data-table"><thead><tr><th>Staff</th><th>Time</th><th>Status</th></tr></thead><tbody>${signins.map(s => `<tr><td><strong>${s.staff_id || 'Staff'}</strong></td><td>${s.time || '—'}</td><td><span class="pill ${s.status === 'submitted' ? 'pill-green' : 'pill-gold'}">${s.status}</span></td></tr>`).join('')}</tbody></table>`;
+}
 
-function renderStaffGrid(staffList) {
+async function loadRecentConvos() {
+  const el = document.getElementById('recent-convos');
+  try {
+    const msgs = await api('/api/admin/messages');
+    if (!msgs || !msgs.length) { el.innerHTML = '<div class="loading">No conversations yet</div>'; return; }
+    el.innerHTML = msgs.slice(0, 5).map((m, i) => `<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid #f5f5f5;">
+      <div style="width:36px;height:36px;border-radius:50%;background:${colors[i%colors.length]};display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:600;flex-shrink:0;">${(m.from_number||'?').slice(-2)}</div>
+      <div style="flex:1;min-width:0;"><div style="font-weight:500;font-size:13px;">${m.from_number || 'Unknown'}</div><div style="font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.user_message || ''}</div></div>
+      <div style="font-size:11px;color:var(--text-muted);">${new Date(m.created_at).toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit'})}</div>
+    </div>`).join('');
+  } catch(e) { el.innerHTML = '<div class="loading">Could not load conversations</div>'; }
+}
+
+// ── Students ──────────────────────────────────────────────
+async function loadStudents() {
+  try {
+    const rows = await api('/api/admin/students');
+    document.getElementById('students-tbody').innerHTML = rows.length
+      ? rows.map(r => `<tr><td><strong>${r.name}</strong></td><td>${r.class_name||'—'}</td><td>${r.parent_name||'—'}</td><td>${r.parent_phone||'—'}</td><td>${r.weekly_performance_score||0}%</td></tr>`).join('')
+      : '<tr><td colspan="5" class="loading">No students yet</td></tr>';
+  } catch(e) { document.getElementById('students-tbody').innerHTML = '<tr><td colspan="5" class="loading">Error loading students</td></tr>'; }
+}
+
+// ── Staff ─────────────────────────────────────────────────
+async function loadStaff() {
   const grid = document.getElementById('staff-grid');
-  const tbody = document.getElementById('signin-tbody');
-  if (!grid || !staffList) return;
-
-  grid.innerHTML = staffList.map(s => {
-    const color = roleColors[s.role] || '#667781';
-    const initials = s.name.split(' ').slice(1).map(n=>n[0]).join('').slice(0,2);
-    const recent = (s.signinLog || []).slice(-5);
-    const dots = ['Mon','Tue','Wed','Thu','Fri'].map((d,i) => {
-      const log = recent[i];
-      const status = log ? log.status : 'none';
-      return `<div class="signin-dot ${status}" title="${d}: ${status}"></div>`;
+  try {
+    const rows = await api('/api/admin/staff');
+    if (!rows.length) { grid.innerHTML = '<div class="loading">No staff added yet</div>'; return; }
+    grid.innerHTML = rows.map(s => {
+      const initials = s.name.split(' ').slice(1).map(n => n[0]).join('').slice(0,2) || s.name[0];
+      const color = colors[Math.abs(s.name.charCodeAt(0)) % colors.length];
+      return `<div class="staff-card">
+        <div class="staff-avatar" style="background:${color}">${initials}</div>
+        <div class="staff-name">${s.name}</div>
+        <div class="staff-role">${s.role}${s.subject?' — '+s.subject:''}</div>
+        <div class="staff-metrics">
+          <div class="staff-metric"><div class="staff-metric-value">${s.attendance_submissions||0}</div><div class="staff-metric-label">Attendance updates</div></div>
+          <div class="staff-metric"><div class="staff-metric-value">${s.scores_uploaded||0}</div><div class="staff-metric-label">Scores uploaded</div></div>
+          <div class="staff-metric"><div class="staff-metric-value">${s.homework_assigned||0}</div><div class="staff-metric-label">Homeworks set</div></div>
+          <div class="staff-metric"><div class="staff-metric-value">${s.absences||0}</div><div class="staff-metric-label">Absences</div></div>
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:var(--text-muted);">🏆 ${s.staff_of_week_count||0}x Staff of Week</div>
+      </div>`;
     }).join('');
-    const onTime = (s.signinLog||[]).filter(l=>l.status==='on_time').length;
-    const late = (s.signinLog||[]).filter(l=>l.status==='late').length;
-    return `<div class="staff-card">
-      <div class="staff-avatar" style="background:${color}">${initials}</div>
-      <div class="staff-name">${s.name}</div>
-      <div class="staff-role">${roleLabels[s.role]||s.role}${s.subject?` — ${s.subject}`:''}</div>
-      <div class="staff-metrics">
-        <div class="staff-metric"><div class="staff-metric-value">${s.attendanceSubmissions||0}</div><div class="staff-metric-label">Attendance updates</div></div>
-        <div class="staff-metric"><div class="staff-metric-value">${s.scoresUploaded||0}</div><div class="staff-metric-label">Scores uploaded</div></div>
-        <div class="staff-metric"><div class="staff-metric-value">${s.homeworkAssigned||0}</div><div class="staff-metric-label">Homeworks set</div></div>
-        <div class="staff-metric"><div class="staff-metric-value">${s.absences||0}</div><div class="staff-metric-label">Absences</div></div>
-      </div>
-      <div style="margin-top:10px;font-size:11px;color:var(--text-muted);margin-bottom:4px;">Last 5 days sign-in</div>
-      <div class="signin-dots">${dots}</div>
-      <div style="margin-top:8px;font-size:12px;">🟢 ${onTime} on time &nbsp; 🟡 ${late} late &nbsp; 🏆 ${s.staffOfWeekCount||0}x award</div>
-    </div>`;
-  }).join('');
-
-  if (tbody) {
-    tbody.innerHTML = staffList.map(s => {
-      const logs = s.signinLog || [];
-      const days = ['Mon','Tue','Wed','Thu','Fri'].map((d,i) => {
-        const log = logs[i];
-        if (!log) return '<td><span class="pill pill-gray">—</span></td>';
-        return `<td><span class="pill ${log.status==='on_time'?'pill-green':'pill-gold'}">${log.time}</span></td>`;
-      }).join('');
-      const onTime = logs.filter(l=>l.status==='on_time').length;
-      const late = logs.filter(l=>l.status==='late').length;
-      const absent = Math.max(0, 5 - logs.length);
-      return `<tr><td><strong>${s.name}</strong></td>${days}<td>${onTime}</td><td>${late}</td><td>${absent}</td></tr>`;
-    }).join('');
-  }
+  } catch(e) { grid.innerHTML = '<div class="loading">Error loading staff</div>'; }
 }
 
 async function addStaff() {
-  const name = document.getElementById('new-staff-name').value;
-  const role = document.getElementById('new-staff-role').value;
-  const subject = document.getElementById('new-staff-subject').value;
-  const phone = document.getElementById('new-staff-phone').value;
+  const name = document.getElementById('sf-name').value;
+  const phone = document.getElementById('sf-phone').value;
   if (!name || !phone) { showToast('Please fill name and phone ❌'); return; }
   try {
-    const res = await fetch('/api/staff', { method:'POST', headers:{'Content-Type':'application/json','x-admin-token':adminToken}, body:JSON.stringify({name,role,subject,phone:`whatsapp:${phone}`}) });
-    if (res.ok) {
-      showToast(`✅ ${name} added as ${roleLabels[role]}`);
-      loadDashboard();
-      document.getElementById('new-staff-name').value='';
-      document.getElementById('new-staff-phone').value='';
-    }
+    await api('/api/admin/staff', { method: 'POST', body: JSON.stringify({ name, role: document.getElementById('sf-role').value, subject: document.getElementById('sf-subject').value, class: document.getElementById('sf-class').value, phone }) });
+    showToast('✅ ' + name + ' added!');
+    loadStaff();
+    document.getElementById('sf-name').value = '';
+    document.getElementById('sf-phone').value = '';
   } catch(e) { showToast('Error adding staff ❌'); }
 }
 
-async function calculateAwards() {
+// ── Admissions ────────────────────────────────────────────
+async function loadAdmissions() {
   try {
-    const res = await fetch('/api/awards/calculate', { headers:{'x-admin-token':adminToken} });
-    const data = await res.json();
-    if (data.staffOfWeek) {
-      document.getElementById('staff-award-card').innerHTML = `<div class="award-trophy">🏆</div><div><div class="award-label">Staff of the Week</div><div class="award-name">${data.staffOfWeek.name}</div><div class="award-sub">${roleLabels[data.staffOfWeek.role]} — Score: ${data.staffOfWeek.calculatedScore}/100</div></div>`;
-    }
-    showToast('Awards recalculated! ✅');
-  } catch(e) { showToast('Could not calculate awards ❌'); }
+    const rows = await api('/api/admin/admission_inquiries');
+    document.getElementById('admissions-tbody').innerHTML = rows.length
+      ? rows.map(r => `<tr><td>${r.parent_name||'—'}</td><td>${r.phone||'—'}</td><td>${r.child_name||'—'}</td><td>${r.class_applying||'—'}</td><td>${new Date(r.created_at).toLocaleDateString()}</td><td><span class="pill ${r.status==='new'?'pill-gold':'pill-green'}">${r.status}</span></td><td><button class="alert-action" onclick="showToast('Visit scheduled 📅')">Schedule</button></td></tr>`)
+      .join('')
+      : '<tr><td colspan="7" class="loading">No admission inquiries yet</td></tr>';
+  } catch(e) { document.getElementById('admissions-tbody').innerHTML = '<tr><td colspan="7" class="loading">Error loading</td></tr>'; }
 }
 
-// ── Attendance chart ──────────────────────────────────────
-const days = [{label:'Mon',pct:94},{label:'Tue',pct:88},{label:'Wed',pct:91},{label:'Thu',pct:96},{label:'Fri',pct:91}];
-const chart = document.getElementById('attend-chart');
-if (chart) days.forEach(d => {
-  chart.innerHTML += `<div class="attend-bar-wrap"><div class="attend-pct">${d.pct}%</div><div class="attend-bar" style="height:90px"><div class="attend-bar-fill" style="height:${d.pct}%"></div></div><div class="attend-label">${d.label}</div></div>`;
-});
+// ── Sickbay ───────────────────────────────────────────────
+async function loadSickbay() {
+  try {
+    const rows = await api('/api/admin/sickbay_log');
+    document.getElementById('sickbay-tbody').innerHTML = rows.length
+      ? rows.map(r => `<tr><td>${r.student_id||'Unknown'}</td><td>${r.reason||'—'}</td><td>${r.action_taken||'—'}</td><td>${new Date(r.visited_at).toLocaleDateString()}</td></tr>`).join('')
+      : '<tr><td colspan="4" class="loading">No sick bay visits yet</td></tr>';
+  } catch(e) { document.getElementById('sickbay-tbody').innerHTML = '<tr><td colspan="4" class="loading">Error loading</td></tr>'; }
+}
 
-// ── Date ──────────────────────────────────────────────────
-const el = document.getElementById('dash-date');
-if (el) el.textContent = new Date().toLocaleDateString('en-NG',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+// ── Awards ────────────────────────────────────────────────
+async function loadAwards() {
+  try {
+    const staff = await api('/api/admin/staff');
+    if (staff.length) {
+      const top = staff.sort((a,b) => (b.performance_score||0) - (a.performance_score||0))[0];
+      document.getElementById('sotw-name').textContent = top.name;
+      document.getElementById('sotw-sub').textContent = (top.role||'Staff') + ' — Score: ' + (top.performance_score||0) + '/100';
+    }
+    const students = await api('/api/admin/students');
+    const el = document.getElementById('student-awards');
+    if (students.length) {
+      const classes = [...new Set(students.map(s => s.class_name).filter(Boolean))];
+      el.innerHTML = classes.map(cls => {
+        const top = students.filter(s => s.class_name === cls).sort((a,b) => (b.weekly_performance_score||0) - (a.weekly_performance_score||0))[0];
+        return `<div class="award-card"><div class="award-trophy">⭐</div><div><div class="award-label">${cls} — Student of the Week</div><div class="award-name">${top.name}</div><div class="award-sub">Score: ${top.weekly_performance_score||0}%</div></div></div>`;
+      }).join('') + `<button class="broadcast-btn" style="margin-top:14px;" onclick="announceAward('students')">📤 Announce to all parents</button>`;
+    } else { el.innerHTML = '<div class="loading">No students yet</div>'; }
+  } catch(e) { console.log('Awards error:', e); }
+}
+
+function announceAward(type) { showToast(type === 'staff' ? '🏆 Staff of the Week announced to all staff!' : '⭐ Student of the Week announced to all parents!'); }
+
+// ── Conversations ─────────────────────────────────────────
+async function loadConversations() {
+  const list = document.getElementById('contacts-list');
+  try {
+    const msgs = await api('/api/admin/messages');
+    if (!msgs || !msgs.length) { list.innerHTML = '<div class="loading">No conversations yet</div>'; return; }
+    const grouped = {};
+    msgs.forEach(m => { if (!grouped[m.from_number]) grouped[m.from_number] = m; });
+    list.innerHTML = Object.values(grouped).map((m, i) => `
+      <div class="contact-item" onclick="selectConversation('${m.from_number}','${m.from_number}')">
+        <div class="contact-avatar" style="background:${colors[i%colors.length]}">${m.from_number.slice(-2)}</div>
+        <div class="contact-info">
+          <div class="contact-name">${m.from_number}</div>
+          <div class="contact-preview">${m.user_message||''}</div>
+        </div>
+        <div class="contact-time">${new Date(m.created_at).toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit'})}</div>
+      </div>`).join('');
+  } catch(e) { list.innerHTML = '<div class="loading">Could not load conversations</div>'; }
+}
+
+function selectConversation(phone, name) {
+  document.querySelectorAll('.contact-item').forEach(c => c.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.getElementById('chat-name').textContent = phone;
+  document.getElementById('chat-sub').textContent = 'Parent conversation';
+  document.getElementById('chat-messages').innerHTML = '<div class="date-divider"><span>Today</span></div>';
+  chatHistory = [];
+}
+
+// ── Chat ──────────────────────────────────────────────────
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = ''; autoResize(input);
+  appendMsg(text, 'sent');
+  chatHistory.push({ role: 'user', content: text });
+  document.getElementById('typing').classList.add('show');
+  scrollChat();
+  try {
+    const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, school_id: schoolId, history: chatHistory.slice(0,-1) }) });
+    const data = await res.json();
+    document.getElementById('typing').classList.remove('show');
+    const reply = data.reply || 'Sorry, could not process that.';
+    appendMsg(reply, 'received');
+    chatHistory.push({ role: 'assistant', content: reply });
+  } catch(e) {
+    document.getElementById('typing').classList.remove('show');
+    appendMsg('Sorry, I am having trouble connecting. Please try again shortly.', 'received');
+  }
+}
+
+function sendQuick(text) { document.getElementById('chat-input').value = text; sendMessage(); }
+
+function appendMsg(text, type) {
+  const msgs = document.getElementById('chat-messages');
+  const now = new Date().toLocaleTimeString('en-NG', { hour:'2-digit', minute:'2-digit' });
+  const tick = type === 'sent' ? '<span class="msg-tick">✓✓</span>' : '';
+  const div = document.createElement('div');
+  div.className = `msg ${type}`;
+  div.innerHTML = `<div class="msg-bubble">${text.replace(/\n/g,'<br>')}</div><div class="msg-time">${now} ${tick}</div>`;
+  msgs.appendChild(div);
+  scrollChat();
+}
+
+function scrollChat() { const m = document.getElementById('chat-messages'); setTimeout(() => m.scrollTop = m.scrollHeight, 50); }
+function handleKey(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();} }
+function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,100)+'px'; }
 
 // ── Broadcast ─────────────────────────────────────────────
 const templates = {
-  fee: 'Dear Parent, this is a reminder that the 2nd term school fees of ₦85,000 is due on 15th January. Kindly make payment to avoid disruption. Thank you. Greenfield Academy 🏫',
-  event: 'Dear Parent, please be informed that Sports Day is on Saturday February 22nd. Students should come in their house colours. Refreshments will be provided. Greenfield Academy 🏫',
-  exam: 'Dear Parent, 2nd term exams begin March 10th. Please ensure your ward revises daily. The timetable has been sent to your email. Greenfield Academy 🏫',
-  closure: 'Dear Parent, school will close early today at 12pm due to a staff development session. Kindly make arrangements to pick up your child. Greenfield Academy 🏫',
-  award: '🌟 Congratulations to this week\'s Students of the Week! JSS2A: Blessing Adeyemi | JSS1C: Chidi Eze | SS1B: Fatima Hassan. Well done to these outstanding students! Greenfield Academy 🏫',
-  pta: 'Dear Parent, the PTA meeting is on Saturday March 1st at 10am. Your presence is important. Light refreshments will be served. Please confirm attendance. Greenfield Academy 🏫'
+  fee: `Dear Parent, this is a reminder that school fees are due. Kindly make payment to avoid disruption. Thank you. ${schoolData?.name||'Your School'} 🏫`,
+  event: `Dear Parent, please be informed of an upcoming school event. More details to follow. ${schoolData?.name||'Your School'} 🏫`,
+  exam: `Dear Parent, exams are approaching. Please ensure your ward revises daily. ${schoolData?.name||'Your School'} 🏫`,
+  award: `🌟 Congratulations to this week's Students of the Week! Well done to these outstanding students! ${schoolData?.name||'Your School'} 🏫`,
+  pta: `Dear Parent, the PTA meeting is coming up soon. Your presence is important. ${schoolData?.name||'Your School'} 🏫`
 };
-
-function useTemplate(key) { document.getElementById('broadcast-msg').value = templates[key]; }
+function useTemplate(key) { document.getElementById('broadcast-msg').value = templates[key] || ''; }
 
 async function sendBroadcast() {
   const msg = document.getElementById('broadcast-msg').value;
+  const target = document.getElementById('broadcast-target').value;
   if (!msg) { showToast('Please type a message ❌'); return; }
   try {
-    const res = await fetch('/api/broadcast', { method:'POST', headers:{'Content-Type':'application/json','x-admin-token':adminToken}, body:JSON.stringify({message:msg}) });
-    const data = await res.json();
-    showToast(`📨 Broadcast sent to ${data.count} parents! ${data.testMode?'(Test mode)':''}`);
+    const res = await api('/api/admin/broadcast', { method: 'POST', body: JSON.stringify({ message: msg, target }) });
+    showToast(`📨 Broadcast queued for ${res.queued} recipients!`);
     document.getElementById('broadcast-msg').value = '';
   } catch(e) { showToast('Broadcast failed ❌'); }
 }
@@ -807,91 +742,7 @@ async function sendBroadcast() {
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'), 3000);
-}
-
-// ── Chat ──────────────────────────────────────────────────
-const SYSTEM_PROMPT = `You are EduPing, a friendly professional WhatsApp AI assistant for Greenfield Academy, Abuja. Help parents with their children's information.
-
-School data:
-- Fees: ₦85,000/term. 2nd term deadline: Jan 15
-- Current term: 2nd Term 2024/2025
-- Events: Sports Day Feb 22, PTA Meeting Mar 1, Mid-term Feb 10-14, Exams Mar 10-21
-
-Students:
-- Emeka Okonkwo (JSS2A): Attendance 80% this week, 92% term. Maths 78%, English 85%, Science 72%, Social Studies 88%. Fees: PAID ✅
-- Fatima Hassan (SS1B): Attendance 95%. Biology 88%, Chemistry 76%, English 82%. Fees: ₦42,500 outstanding ❌
-- Chidi Eze (JSS1C): Attendance 100%. Maths 91%, English 79%, Science 85%. Fees: PAID ✅
-- Blessing Adeyemi (JSS2A): Attendance 100%. Maths 92%, English 90%, Science 95%. Fees: PAID ✅
-- Taiwo Balogun (JSS2A): Attendance 75%. Maths 58%, English 67%, Science 55%. Fees: UNPAID ❌ Behaviour note: disruptive Monday
-
-Keep replies warm, clear, Nigerian-friendly with light emojis. End formal info with: Greenfield Academy 🏫`;
-
-let chatHistory = [];
-
-async function sendMessage() {
-  const input = document.getElementById('chat-input');
-  const text = input.value.trim();
-  if (!text) return;
-  input.value = ''; autoResize(input);
-  appendMsg(text, 'sent');
-  chatHistory.push({role:'user', content:text});
-  const typing = document.getElementById('typing');
-  if(typing) { typing.classList.add('show'); } scrollChat();
-  try {
-    const res = await fetch('/api/chat', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,history:chatHistory.slice(0,-1)})});
-    const data = await res.json();
-    if(typing) typing.classList.remove('show');
-    const reply = data.reply || 'Sorry, I could not process that.';
-    appendMsg(reply, 'received');
-    chatHistory.push({role:'assistant', content:reply});
-  } catch(e) {
-    if(typing) typing.classList.remove('show');
-    // Fallback smart responses
-    const fallback = getFallbackResponse(text);
-    appendMsg(fallback, 'received');
-    chatHistory.push({role:'assistant', content:fallback});
-  }
-}
-
-function getFallbackResponse(text) {
-  const lower = text.toLowerCase();
-  if (lower.includes('attendance') || lower.includes('absent') || lower.includes('present')) return `Here's Emeka's attendance for this week:\n\n📅 Monday — ✅ Present\n📅 Tuesday — ✅ Present\n📅 Wednesday — ❌ Absent\n📅 Thursday — ✅ Present\n📅 Friday — ✅ Present\n\nOverall this week: 4/5 days (80%)\nThis term so far: 92% attendance ⭐\n\nGreenfield Academy 🏫`;
-  if (lower.includes('fee') || lower.includes('payment')) return `💰 Fee Status for Emeka Okonkwo:\n\nStatus: ✅ FULLY PAID\nOutstanding: ₦0\n\nNext term fees: ₦85,000\nDeadline: 15th January 2025\n\nGreenfield Academy 🏫`;
-  if (lower.includes('report') || lower.includes('performance') || lower.includes('subject') || lower.includes('score')) return `📊 Emeka's Weekly Performance Report:\n\n📚 Maths: 78% (B)\n📚 English: 85% (A)\n📚 Science: 72% (B)\n📚 Social Studies: 88% (A)\n\n⭐ Overall Average: 80.75%\n📅 Attendance: 80% this week\n\nEmeka is performing well overall! Keep encouraging him at home.\n\nGreenfield Academy 🏫`;
-  if (lower.includes('event') || lower.includes('holiday') || lower.includes('break')) return `📅 Upcoming School Events:\n\n🏃 Sports Day — Saturday, Feb 22\n👨‍👩‍👧 PTA Meeting — Saturday, Mar 1 at 10am\n📝 2nd Term Exams — Mar 10 to 21\n\nWe'll send reminders closer to each date.\n\nGreenfield Academy 🏫`;
-  if (lower.includes('homework')) return `📚 Pending Homework for Emeka:\n\nNo outstanding homework at the moment. ✅\n\nYou'll receive a WhatsApp notification whenever a new assignment is given.\n\nGreenfield Academy 🏫`;
-  return `Hello! I'm EduPing, Greenfield Academy's AI assistant. I can help you with:\n\n📅 Attendance updates\n📊 Academic performance\n💰 Fee balance\n📚 Homework updates\n📢 School events\n\nWhat would you like to know? Greenfield Academy 🏫`;
-}
-
-function sendQuick(text) { document.getElementById('chat-input').value = text; sendMessage(); }
-
-function appendMsg(text, type) {
-  const msgs = document.getElementById('chat-messages');
-  const now = new Date().toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit'});
-  const tick = type==='sent'?'<span class="msg-tick">✓✓</span>':'';
-  const div = document.createElement('div');
-  div.className = `msg ${type}`;
-  div.innerHTML = `<div class="msg-bubble">${text.replace(/\n/g,'<br>')}</div><div class="msg-time">${now} ${tick}</div>`;
-  msgs.appendChild(div);
-  scrollChat();
-}
-
-function scrollChat() { const m=document.getElementById('chat-messages'); if(m) setTimeout(()=>m.scrollTop=m.scrollHeight,50); }
-function handleKey(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();} }
-function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,100)+'px'; }
-
-function selectContact(el, name, emoji, color, childInfo) {
-  document.querySelectorAll('.contact-item').forEach(c=>c.classList.remove('active'));
-  el.classList.add('active');
-  el.querySelector('.unread-badge')?.remove();
-  document.getElementById('chat-name').textContent = name;
-  document.getElementById('chat-sub').textContent = 'Parent of ' + childInfo;
-  document.getElementById('chat-emoji').textContent = emoji;
-  chatHistory = [];
-  const msgs = document.getElementById('chat-messages');
-  msgs.innerHTML = `<div class="date-divider"><span>Today</span></div><div class="msg received"><div class="msg-bubble">Hello! I have a question about my child.</div><div class="msg-time">Just now</div></div>`;
-  scrollChat();
+  setTimeout(() => t.classList.remove('show'), 3000);
 }
 </script>
 </body>
