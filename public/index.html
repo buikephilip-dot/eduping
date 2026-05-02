@@ -357,15 +357,81 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
 
       <!-- STUDENTS -->
       <div id="section-students" class="dash-section">
+
+        <!-- Import methods -->
+        <div class="dash-grid" style="margin-bottom:18px;">
+
+          <!-- Photo import -->
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">📸 Import from Photo</div></div>
+            <div class="dash-card-body">
+              <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.6;">Snap a photo of your student register book or printed list. EduPing reads every name, class, and parent detail automatically.</div>
+              <div id="photo-drop-zone" style="border:2px dashed #e9edef;border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:all .2s;" ondragover="event.preventDefault();this.style.borderColor='var(--green)'" ondragleave="this.style.borderColor='#e9edef'" ondrop="handlePhotoDrop(event)" onclick="document.getElementById('register-photo-input').click()">
+                <div style="font-size:36px;margin-bottom:8px;">📷</div>
+                <div style="font-weight:600;font-size:14px;margin-bottom:4px;">Click to upload or drag photo here</div>
+                <div style="font-size:12px;color:var(--text-muted);">JPG, PNG supported · Student register, class list, any printed list</div>
+                <input type="file" id="register-photo-input" accept="image/*" style="display:none" onchange="handlePhotoSelect(event)">
+              </div>
+              <div id="photo-preview" style="display:none;margin-top:12px;">
+                <img id="photo-preview-img" style="width:100%;border-radius:8px;max-height:200px;object-fit:cover;">
+                <button class="broadcast-btn" style="margin-top:10px;" onclick="importFromPhoto()">🔍 Read & Import Students</button>
+              </div>
+              <div id="photo-import-result" style="display:none;margin-top:12px;background:var(--green-pale);border-radius:8px;padding:12px;font-size:13px;color:var(--green);"></div>
+            </div>
+          </div>
+
+          <!-- Excel import -->
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">📊 Import from Excel / CSV</div></div>
+            <div class="dash-card-body">
+              <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.6;">Upload your existing Excel or CSV student list. Required columns: <strong>Name, Class, Parent Name, Parent Phone.</strong> Extra columns are ignored.</div>
+              <div id="excel-drop-zone" style="border:2px dashed #e9edef;border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:all .2s;" ondragover="event.preventDefault();this.style.borderColor='var(--green)'" ondragleave="this.style.borderColor='#e9edef'" ondrop="handleExcelDrop(event)" onclick="document.getElementById('excel-input').click()">
+                <div style="font-size:36px;margin-bottom:8px;">📋</div>
+                <div style="font-weight:600;font-size:14px;margin-bottom:4px;">Click to upload or drag file here</div>
+                <div style="font-size:12px;color:var(--text-muted);">.xlsx, .xls, .csv supported</div>
+                <input type="file" id="excel-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelSelect(event)">
+              </div>
+              <div id="excel-preview" style="display:none;margin-top:12px;">
+                <div id="excel-preview-table" style="overflow-x:auto;max-height:200px;overflow-y:auto;"></div>
+                <button class="broadcast-btn" style="margin-top:10px;" onclick="importFromExcel()">⬆️ Import All Students</button>
+              </div>
+              <div id="excel-import-result" style="display:none;margin-top:12px;background:var(--green-pale);border-radius:8px;padding:12px;font-size:13px;color:var(--green);"></div>
+              <div style="margin-top:12px;">
+                <button class="qr-btn" onclick="downloadTemplate()">⬇️ Download Excel template</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Manual add -->
+        <div class="dash-card full" style="margin-bottom:18px;">
+          <div class="dash-card-header"><div class="dash-card-title">✏️ Add Student Manually</div><div class="dash-card-action" onclick="toggleManualForm()">Toggle form</div></div>
+          <div class="dash-card-body" id="manual-form" style="display:none;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:end;">
+              <div class="form-group"><label class="form-label">Student Name *</label><input class="form-input" id="st-name" placeholder="Emeka Okonkwo"></div>
+              <div class="form-group"><label class="form-label">Class *</label><input class="form-input" id="st-class" placeholder="JSS2A"></div>
+              <div class="form-group"><label class="form-label">Parent Name</label><input class="form-input" id="st-parent" placeholder="Mrs Adaeze Okonkwo"></div>
+              <div class="form-group"><label class="form-label">Parent WhatsApp *</label><input class="form-input" id="st-phone" placeholder="+2348010000001"></div>
+            </div>
+            <button class="broadcast-btn" style="margin-top:14px;max-width:200px;" onclick="addStudentManual()">➕ Add Student</button>
+          </div>
+        </div>
+
+        <!-- Students table -->
         <div class="dash-card full">
-          <div class="dash-card-header"><div class="dash-card-title">All Students</div><div class="dash-card-action" onclick="showAddStudent()">+ Add student</div></div>
-          <div class="dash-card-body">
+          <div class="dash-card-header">
+            <div class="dash-card-title">All Students <span id="student-count" style="color:var(--text-muted);font-weight:400;font-size:13px;"></span></div>
+            <input class="search-box" placeholder="🔍 Search students..." oninput="filterStudents(this.value)" style="width:220px;font-size:13px;">
+          </div>
+          <div class="dash-card-body" style="padding:0;">
             <table class="data-table" id="students-table">
-              <thead><tr><th>Student</th><th>Class</th><th>Parent</th><th>Parent Phone</th><th>Perf. Score</th></tr></thead>
-              <tbody id="students-tbody"><tr><td colspan="5" class="loading">Loading...</td></tr></tbody>
+              <thead><tr><th>Student</th><th>Class</th><th>Parent</th><th>Parent Phone</th><th>Perf. Score</th><th>Action</th></tr></thead>
+              <tbody id="students-tbody"><tr><td colspan="6" class="loading">Loading...</td></tr></tbody>
             </table>
           </div>
         </div>
+
       </div>
 
       <!-- AWARDS -->
@@ -557,13 +623,228 @@ async function loadRecentConvos() {
 }
 
 // ── Students ──────────────────────────────────────────────
+let allStudents = [];
+
 async function loadStudents() {
   try {
-    const rows = await api('/api/admin/students');
-    document.getElementById('students-tbody').innerHTML = rows.length
-      ? rows.map(r => `<tr><td><strong>${r.name}</strong></td><td>${r.class_name||'—'}</td><td>${r.parent_name||'—'}</td><td>${r.parent_phone||'—'}</td><td>${r.weekly_performance_score||0}%</td></tr>`).join('')
-      : '<tr><td colspan="5" class="loading">No students yet</td></tr>';
-  } catch(e) { document.getElementById('students-tbody').innerHTML = '<tr><td colspan="5" class="loading">Error loading students</td></tr>'; }
+    allStudents = await api('/api/admin/students');
+    renderStudentsTable(allStudents);
+  } catch(e) {
+    document.getElementById('students-tbody').innerHTML = '<tr><td colspan="6" class="loading">Error loading students</td></tr>';
+  }
+}
+
+function renderStudentsTable(rows) {
+  const count = document.getElementById('student-count');
+  if (count) count.textContent = '(' + rows.length + ' students)';
+  document.getElementById('students-tbody').innerHTML = rows.length
+    ? rows.map(r => `<tr>
+        <td><strong>${r.name}</strong></td>
+        <td>${r.class_name||'—'}</td>
+        <td>${r.parent_name||'—'}</td>
+        <td>${r.parent_phone||'—'}</td>
+        <td>${r.weekly_performance_score||0}%</td>
+        <td><button class="action-btn" onclick="removeStudent('${r.id}','${r.name}')">Remove</button></td>
+      </tr>`).join('')
+    : '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">No students yet — import from photo, Excel, or add manually above</td></tr>';
+}
+
+function filterStudents(query) {
+  const filtered = allStudents.filter(s =>
+    s.name.toLowerCase().includes(query.toLowerCase()) ||
+    (s.class_name||'').toLowerCase().includes(query.toLowerCase()) ||
+    (s.parent_name||'').toLowerCase().includes(query.toLowerCase())
+  );
+  renderStudentsTable(filtered);
+}
+
+function toggleManualForm() {
+  const el = document.getElementById('manual-form');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function addStudentManual() {
+  const name = document.getElementById('st-name').value.trim();
+  const cls = document.getElementById('st-class').value.trim();
+  const phone = document.getElementById('st-phone').value.trim();
+  if (!name || !cls || !phone) { showToast('Name, class and parent phone required ❌'); return; }
+  try {
+    await api('/api/admin/students', { method:'POST', body:JSON.stringify({
+      name, class_name: cls,
+      parent_name: document.getElementById('st-parent').value.trim(),
+      parent_phone: phone.startsWith('+') ? phone : '+234' + phone.replace(/^0/, '')
+    })});
+    showToast('✅ ' + name + ' added!');
+    document.getElementById('st-name').value = '';
+    document.getElementById('st-class').value = '';
+    document.getElementById('st-parent').value = '';
+    document.getElementById('st-phone').value = '';
+    loadStudents();
+  } catch(e) { showToast('Error adding student ❌'); }
+}
+
+async function removeStudent(id, name) {
+  if (!confirm('Remove ' + name + '?')) return;
+  try {
+    await api('/api/admin/students/' + id, { method:'DELETE' });
+    showToast(name + ' removed');
+    loadStudents();
+  } catch(e) { showToast('Error removing student ❌'); }
+}
+
+// ── Photo import ──────────────────────────────────────────
+let photoFile = null;
+
+function handlePhotoDrop(e) {
+  e.preventDefault();
+  document.getElementById('photo-drop-zone').style.borderColor = '#e9edef';
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) showPhotoPreview(file);
+}
+
+function handlePhotoSelect(e) {
+  const file = e.target.files[0];
+  if (file) showPhotoPreview(file);
+}
+
+function showPhotoPreview(file) {
+  photoFile = file;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('photo-preview-img').src = e.target.result;
+    document.getElementById('photo-preview').style.display = 'block';
+    document.getElementById('photo-import-result').style.display = 'none';
+    document.getElementById('photo-drop-zone').style.borderColor = 'var(--green)';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function importFromPhoto() {
+  if (!photoFile) return;
+  const btn = event.target;
+  btn.textContent = '🔍 Reading register...';
+  btn.disabled = true;
+  try {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const base64 = e.target.result.split(',')[1];
+      try {
+        const result = await api('/api/admin/students/import-photo', {
+          method: 'POST',
+          body: JSON.stringify({ image: base64, mimeType: photoFile.type })
+        });
+        const el = document.getElementById('photo-import-result');
+        el.style.display = 'block';
+        el.innerHTML = '✅ <strong>' + result.imported + ' students imported</strong> from register photo!<br>' +
+          (result.classes ? Object.entries(result.classes).map(([k,v]) => k + ': ' + v + ' students').join(' · ') : '') +
+          (result.skipped ? '<br>⚠️ ' + result.skipped + ' rows skipped (unclear handwriting)' : '');
+        loadStudents();
+      } catch(e) {
+        document.getElementById('photo-import-result').style.display = 'block';
+        document.getElementById('photo-import-result').style.background = '#fee2e2';
+        document.getElementById('photo-import-result').style.color = 'var(--danger)';
+        document.getElementById('photo-import-result').textContent = '❌ Could not read the register. Please ensure the photo is clear and well-lit.';
+      }
+      btn.textContent = '🔍 Read & Import Students';
+      btn.disabled = false;
+    };
+    reader.readAsDataURL(photoFile);
+  } catch(e) {
+    btn.textContent = '🔍 Read & Import Students';
+    btn.disabled = false;
+  }
+}
+
+// ── Excel / CSV import ────────────────────────────────────
+let excelData = [];
+
+function handleExcelDrop(e) {
+  e.preventDefault();
+  document.getElementById('excel-drop-zone').style.borderColor = '#e9edef';
+  const file = e.dataTransfer.files[0];
+  if (file) handleExcelFile(file);
+}
+
+function handleExcelSelect(e) {
+  const file = e.target.files[0];
+  if (file) handleExcelFile(file);
+}
+
+function handleExcelFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      let rows = [];
+      if (file.name.endsWith('.csv')) {
+        // Parse CSV
+        const text = e.target.result;
+        const lines = text.split('\n').filter(l => l.trim());
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/[^a-z]/g,''));
+        rows = lines.slice(1).map(line => {
+          const cols = line.split(',');
+          const obj = {};
+          headers.forEach((h, i) => obj[h] = (cols[i]||'').trim().replace(/^"|"$/g,''));
+          return obj;
+        }).filter(r => r.name || r.studentname || r.fullname);
+      } else {
+        // For xlsx we ask user to save as CSV first
+        showToast('Please save your Excel file as CSV first (.csv) then re-upload ');
+        return;
+      }
+
+      excelData = rows.map(r => ({
+        name: r.name || r.studentname || r.fullname || '',
+        class_name: r.class || r.classname || r.form || r.grade || '',
+        parent_name: r.parentname || r.parent || r.guardian || r.guardianname || '',
+        parent_phone: r.parentphone || r.phone || r.parentcontact || r.contact || r.mobile || ''
+      })).filter(r => r.name);
+
+      // Show preview
+      const preview = document.getElementById('excel-preview-table');
+      preview.innerHTML = '<table class="data-table"><thead><tr><th>Name</th><th>Class</th><th>Parent</th><th>Phone</th></tr></thead><tbody>' +
+        excelData.slice(0,5).map(r => '<tr><td>' + r.name + '</td><td>' + (r.class_name||'—') + '</td><td>' + (r.parent_name||'—') + '</td><td>' + (r.parent_phone||'—') + '</td></tr>').join('') +
+        (excelData.length > 5 ? '<tr><td colspan="4" style="color:var(--text-muted);font-size:12px;">...and ' + (excelData.length-5) + ' more students</td></tr>' : '') +
+        '</tbody></table>';
+      document.getElementById('excel-preview').style.display = 'block';
+      document.getElementById('excel-drop-zone').style.borderColor = 'var(--green)';
+      document.getElementById('excel-import-result').style.display = 'none';
+      showToast('📊 ' + excelData.length + ' students found in file');
+    } catch(err) {
+      showToast('Could not read file. Try saving as CSV ❌');
+    }
+  };
+  if (file.name.endsWith('.csv')) reader.readAsText(file);
+  else reader.readAsArrayBuffer(file);
+}
+
+async function importFromExcel() {
+  if (!excelData.length) return;
+  const btn = event.target;
+  btn.textContent = '⬆️ Importing...';
+  btn.disabled = true;
+  try {
+    const result = await api('/api/admin/students/import-bulk', {
+      method: 'POST',
+      body: JSON.stringify({ students: excelData })
+    });
+    const el = document.getElementById('excel-import-result');
+    el.style.display = 'block';
+    el.innerHTML = '✅ <strong>' + result.imported + ' students imported</strong> successfully!' +
+      (result.skipped ? ' ' + result.skipped + ' skipped (duplicates).' : '');
+    loadStudents();
+  } catch(e) { showToast('Import failed ❌'); }
+  btn.textContent = '⬆️ Import All Students';
+  btn.disabled = false;
+}
+
+function downloadTemplate() {
+  const csv = 'Name,Class,Parent Name,Parent Phone\nEmeka Okonkwo,JSS2A,Mrs Adaeze Okonkwo,+2348010000001\nBlessing Adeyemi,JSS2A,Mrs Tope Adeyemi,+2348010000002';
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'edupingai_student_template.csv';
+  a.click(); URL.revokeObjectURL(url);
+  showToast('📥 Template downloaded!');
 }
 
 // ── Staff ─────────────────────────────────────────────────

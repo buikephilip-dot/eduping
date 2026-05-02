@@ -30,24 +30,10 @@ NODE_ENV=production
 
 The server runs migrations automatically on startup.
 
-## Public status page
-
-Open `/status` to view the public status page. It checks:
-
-```txt
-EduPing AI
-WhatsApp
-Database
-```
-
-The page calls `/api/status` and refreshes every 60 seconds. For a custom status domain, point `status.edupingai.com` to this Railway service and use `/status` as the public page path, or configure your reverse proxy to route the subdomain directly to `/status`.
-
 ## Routes
 
 ```txt
 GET /health
-GET /api/status
-GET /status
 GET /superadmin
 GET /
 POST /webhook/whatsapp

@@ -272,48 +272,7 @@ async function requireSchool(req, res, next) {
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/superadmin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'superadmin.html')));
-app.get('/status', (req, res) => res.sendFile(path.join(__dirname, 'public', 'status.html')));
-
-async function getSystemStatus() {
-  const checkedAt = new Date().toISOString();
-  const services = {
-    ai: { label: 'EduPing AI', status: 'online', detail: 'Claude API key configured' },
-    whatsapp: { label: 'WhatsApp', status: 'connected', detail: 'Twilio credentials configured' },
-    database: { label: 'Database', status: 'healthy', detail: 'PostgreSQL responding' }
-  };
-
-  if (!hasAi()) {
-    services.ai.status = 'demo';
-    services.ai.detail = 'AI key not configured. Demo fallback is active.';
-  }
-
-  if (!hasTwilio()) {
-    services.whatsapp.status = 'not_configured';
-    services.whatsapp.detail = 'Twilio credentials are missing.';
-  }
-
-  try {
-    await q('SELECT 1');
-  } catch (err) {
-    services.database.status = 'offline';
-    services.database.detail = 'PostgreSQL health check failed.';
-  }
-
-  const ok = services.database.status === 'healthy' && ['online', 'demo'].includes(services.ai.status) && ['connected', 'not_configured'].includes(services.whatsapp.status);
-  return { ok, checked_at: checkedAt, services };
-}
-
-app.get('/health', async (req, res) => {
-  const status = await getSystemStatus();
-  json(res, {
-    ok: status.ok,
-    db: status.services.database.status === 'healthy',
-    ai: hasAi(),
-    twilio: hasTwilio(),
-    checked_at: status.checked_at
-  });
-});
-app.get('/api/status', async (req, res) => json(res, await getSystemStatus()));
+app.get('/health', async (req, res) => { await q('SELECT 1'); json(res, { ok: true, db: true, ai: hasAi(), twilio: hasTwilio() }); });
 app.post('/webhook/whatsapp', (req, res, next) => handleIncomingWhatsApp(req, res).catch(next));
 
 app.post('/api/super/login', (req, res) => json(res, { ok: req.body.password === process.env.SUPER_ADMIN_PASSWORD }));
@@ -372,6 +331,74 @@ for (const [table, fields] of crud) {
     json(res, (await q(sql, [req.school.id, ...vals])).rows[0], 201);
   });
 }
+// ── Student bulk import (Excel/CSV) ──────────────────────
+app.post('/api/admin/students/import-bulk', requireSchool, async (req, res) => {
+  try {
+    const { students } = req.body;
+    if (!students || !students.length) return res.status(400).json({ error: 'No students provided' });
+    const sid = req.school.id;
+    let imported = 0, skipped = 0;
+    for (const s of students) {
+      if (!s.name || !s.parent_phone) { skipped++; continue; }
+      const phone = s.parent_phone.startsWith('+') ? s.parent_phone : '+234' + s.parent_phone.replace(/^0/, '');
+      const existing = await q('SELECT id FROM students WHERE school_id=$1 AND parent_phone=$2 AND name=$3 LIMIT 1', [sid, phone, s.name]);
+      if (existing.rows.length) { skipped++; continue; }
+      await q('INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6)', [sid, s.name, s.class_name||'', s.parent_name||'', phone, 0]);
+      imported++;
+    }
+    res.json({ imported, skipped });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Student photo import (Claude vision) ─────────────────
+app.post('/api/admin/students/import-photo', requireSchool, async (req, res) => {
+  try {
+    const { image, mimeType } = req.body;
+    if (!image) return res.status(400).json({ error: 'No image provided' });
+    if (!hasAi()) return res.status(400).json({ error: 'AI not configured' });
+
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mimeType || 'image/jpeg', data: image } },
+          { type: 'text', text: 'This is a school student register. Extract ALL student records you can see. Return ONLY a JSON array with no explanation: [{"name":"Full Name","class_name":"Class e.g. JSS2A","parent_name":"Parent name if visible","parent_phone":"Phone if visible"}]. If handwriting is unclear for a field use empty string. Do not include markdown or code blocks.' }
+        ]
+      }]
+    });
+
+    let students = [];
+    try {
+      const text = response.content[0].text.replace(/```json|```/g, '').trim();
+      students = JSON.parse(text);
+    } catch(e) { return res.status(400).json({ error: 'Could not parse register. Please ensure photo is clear.' }); }
+
+    const sid = req.school.id;
+    let imported = 0, skipped = 0;
+    const classes = {};
+    for (const s of students) {
+      if (!s.name || s.name.length < 2) { skipped++; continue; }
+      try {
+        await q('INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING', [sid, s.name, s.class_name||'', s.parent_name||'', s.parent_phone||'', 0]);
+        imported++;
+        if (s.class_name) classes[s.class_name] = (classes[s.class_name]||0) + 1;
+      } catch(e) { skipped++; }
+    }
+    res.json({ imported, skipped, classes });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Delete student ────────────────────────────────────────
+app.delete('/api/admin/students/:id', requireSchool, async (req, res) => {
+  try {
+    await q('DELETE FROM students WHERE id=$1 AND school_id=$2', [req.params.id, req.school.id]);
+    res.json({ ok: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/admin/broadcast', requireSchool, async (req, res) => {
   const target = req.body.target || 'all_parents';
   const message = req.body.message;
