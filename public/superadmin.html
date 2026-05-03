@@ -215,12 +215,11 @@ tr:hover td{background:rgba(255,255,255,.02);}
             <div class="form-group"><label class="form-label">City *</label><input class="form-input" id="ns-city" placeholder="Abuja"></div>
             <div class="form-group"><label class="form-label">Plan</label><select class="form-select" id="ns-plan" onchange="updatePricing()"><option value="starter">Starter — Small</option><option value="medium">Medium</option><option value="enterprise">Enterprise — Large</option><option value="beta">Beta Partner</option></select></div>
           </div>
-          <div class="form-group"><label class="form-label">School WhatsApp Number</label><input class="form-input" id="ns-wa" placeholder="+2348012345678"></div>
-          <div class="form-group"><label class="form-label">Twilio Number (for routing)</label><input class="form-input" id="ns-twilio" placeholder="+14155238886"></div>
-          <div class="form-group"><label class="form-label">Admin Password *</label><input class="form-input" id="ns-password" placeholder="Set a strong password"></div>
-          <div class="form-group"><label class="form-label">Landmark (for teacher sign-in)</label><input class="form-input" id="ns-landmark" placeholder="Green gate with school signboard"></div>
-          <div class="form-group"><label class="form-label">School Fees</label><input class="form-input" id="ns-fees" placeholder="85000 per term"></div>
-          <div class="form-group"><label class="form-label">Current Term</label><input class="form-input" id="ns-term" placeholder="2nd Term 2024/2025"></div>
+          <div class="form-group"><label class="form-label">Twilio Number (for WhatsApp routing)</label><input class="form-input" id="ns-twilio" placeholder="+14155238886"><div style="font-size:11px;color:var(--text-muted);margin-top:4px;">The Twilio number assigned to this school. Parents WhatsApp this number.</div></div>
+          <div class="form-group"><label class="form-label">Admin Password *</label><input class="form-input" id="ns-password" placeholder="Set a strong password"><div style="font-size:11px;color:var(--text-muted);margin-top:4px;">School admin uses this + their school ID to log in to the dashboard.</div></div>
+          <div style="background:rgba(26,122,74,.1);border:1px solid rgba(26,122,74,.3);border-radius:8px;padding:12px;font-size:12px;color:#4ade80;line-height:1.8;">
+            ℹ️ <strong>Everything else</strong> (fees, term, grading, events, staff rules, AI tone) is filled by the school through their onboarding link. Just add the school here, then send them the link.
+          </div>
         </div>
       </div>
       <div class="table-card" style="overflow:visible;">
@@ -421,6 +420,7 @@ async function loadSchools() {
         <td style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.04);">
           <div style="display:flex;gap:6px;">
             <button class="action-btn" onclick="copyId('${s.id}')">Copy ID</button>
+            <button class="action-btn" onclick="generateLink('${s.id}','${s.name}')">🔗 Onboarding link</button>
             <button class="action-btn" onclick="suspendSchool('${s.id}','${s.name}','${s.status}')">
               ${s.status==='active'?'Suspend':'Activate'}
             </button>
@@ -477,10 +477,6 @@ async function addSchool() {
   try {
     const school = await sapi('/api/super/schools', { method:'POST', body:JSON.stringify({
       name, city,
-      landmark_description: document.getElementById('ns-landmark').value,
-      fees: document.getElementById('ns-fees').value,
-      current_term: document.getElementById('ns-term').value,
-      whatsapp_number: document.getElementById('ns-wa').value,
       twilio_number: document.getElementById('ns-twilio').value,
       admin_password: password,
       plan: document.getElementById('ns-plan').value,
