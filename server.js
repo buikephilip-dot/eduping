@@ -272,6 +272,60 @@ async function requireSchool(req, res, next) {
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/superadmin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'superadmin.html')));
+app.get('/onboarding', (req, res) => res.sendFile(path.join(__dirname, 'public', 'onboarding.html')));
+
+// ── Generate onboarding link ────────────────────────────────
+app.post('/api/super/schools/:id/onboarding-link', requireSuper, async (req, res) => {
+  try {
+    const school = await q('SELECT id, name, whatsapp_number FROM schools WHERE id=$1', [req.params.id]);
+    if (!school.rows.length) return json(res, { error: 'School not found' }, 404);
+    const baseUrl = process.env.BASE_URL || `https://${req.headers.host}`;
+    const link = `${baseUrl}/onboarding?school_id=${req.params.id}`;
+    json(res, { ok: true, link, school: school.rows[0].name });
+  } catch(err) { json(res, { error: err.message }, 500); }
+});
+
+// ── Save onboarding data ────────────────────────────────────
+app.post('/api/onboarding', async (req, res) => {
+  try {
+    const d = req.body;
+    if (!d.school_id) return json(res, { error: 'school_id required' }, 400);
+    const school = await q('SELECT id, whatsapp_number FROM schools WHERE id=$1', [d.school_id]);
+    if (!school.rows.length) return json(res, { error: 'School not found' }, 404);
+
+    const config = JSON.stringify({
+      grading: d.grading, subjects: d.subjects,
+      working_hours: d.working_hours,
+      homework_frequency: d.homework_frequency,
+      score_upload_deadline_hours: d.score_upload_deadline_hours,
+      attendance_deadline: d.attendance_deadline,
+      max_absences_per_term: d.max_absences_per_term,
+      appraisal_weights: d.appraisal_weights,
+      tone: d.tone, greeting: d.greeting, languages: d.languages,
+      fee_instructions: d.fee_instructions,
+      school_phone: d.school_phone, school_email: d.school_email,
+      principal: d.principal, term_start: d.term_start,
+      term_end: d.term_end, midterm_break: d.midterm_break
+    });
+
+    await q(`UPDATE schools SET name=$1, city=$2, current_term=$3, fees=$4,
+      fee_deadline=$5, landmark_description=$6, config=$7, status='active'
+      WHERE id=$8`,
+      [d.name, d.city, d.current_term, String(d.fees), d.fee_deadline,
+       d.landmark_description, config, d.school_id]);
+
+    if (d.events && d.events.length) {
+      await q('DELETE FROM school_events WHERE school_id=$1', [d.school_id]);
+      for (const ev of d.events) {
+        if (ev.title && ev.date) {
+          await q('INSERT INTO school_events (school_id, title, event_date) VALUES ($1,$2,$3)',
+            [d.school_id, ev.title, ev.date]);
+        }
+      }
+    }
+    json(res, { ok: true, whatsapp_number: school.rows[0].whatsapp_number });
+  } catch(err) { json(res, { error: err.message }, 500); }
+});
 app.get('/health', async (req, res) => { await q('SELECT 1'); json(res, { ok: true, db: true, ai: hasAi(), twilio: hasTwilio() }); });
 app.post('/webhook/whatsapp', (req, res, next) => handleIncomingWhatsApp(req, res).catch(next));
 

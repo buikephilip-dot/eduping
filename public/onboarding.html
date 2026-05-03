@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EduPing — School Setup</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --green:#1a7a4a; --green-light:#25a865; --green-pale:#e8f5ee;
+  --gray-bg:#f5f7fa; --text:#1a1a2e; --text-muted:#6b7280;
+  --border:#e5e7eb; --radius:12px;
+  --shadow:0 4px 24px rgba(0,0,0,0.08);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text);min-height:100vh;}
+
+/* HEADER */
+.header{background:var(--green);padding:20px 32px;display:flex;align-items:center;gap:12px;}
+.header-logo{width:40px;height:40px;background:white;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;}
+.header-name{font-family:'Playfair Display',serif;font-size:20px;color:white;}
+.header-sub{font-size:12px;color:rgba(255,255,255,.7);margin-top:1px;}
+
+/* PROGRESS */
+.progress-wrap{background:white;border-bottom:1px solid var(--border);padding:20px 32px;}
+.progress-steps{display:flex;align-items:center;gap:0;max-width:800px;margin:0 auto;}
+.step{display:flex;align-items:center;gap:8px;flex:1;}
+.step-circle{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;border:2px solid var(--border);color:var(--text-muted);background:white;transition:all .3s;}
+.step-circle.active{background:var(--green);color:white;border-color:var(--green);}
+.step-circle.done{background:var(--green);color:white;border-color:var(--green);}
+.step-label{font-size:12px;color:var(--text-muted);font-weight:500;}
+.step-label.active{color:var(--green);font-weight:600;}
+.step-line{flex:1;height:2px;background:var(--border);margin:0 8px;transition:background .3s;}
+.step-line.done{background:var(--green);}
+
+/* MAIN */
+.main{max-width:800px;margin:32px auto;padding:0 20px 80px;}
+
+/* STEP CARDS */
+.step-panel{display:none;}
+.step-panel.active{display:block;}
+.step-header{margin-bottom:28px;}
+.step-num{font-size:12px;color:var(--green);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
+.step-title{font-family:'Playfair Display',serif;font-size:26px;color:var(--text);margin-bottom:8px;}
+.step-sub{font-size:14px;color:var(--text-muted);line-height:1.6;}
+
+.card{background:white;border-radius:var(--radius);box-shadow:var(--shadow);padding:28px;margin-bottom:20px;}
+.card-title{font-weight:600;font-size:15px;margin-bottom:18px;color:var(--text);display:flex;align-items:center;gap:8px;}
+
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.form-grid.three{grid-template-columns:1fr 1fr 1fr;}
+.form-grid.single{grid-template-columns:1fr;}
+.form-group{display:flex;flex-direction:column;gap:6px;}
+.form-label{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;}
+.form-label .req{color:#ef4444;}
+.form-input,.form-select,.form-textarea{background:var(--gray-bg);border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text);outline:none;transition:border .2s;}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--green);background:white;}
+.form-input::placeholder,.form-textarea::placeholder{color:#9ca3af;}
+.form-textarea{height:80px;resize:none;}
+.form-hint{font-size:11px;color:var(--text-muted);margin-top:2px;}
+
+/* Grading table */
+.grade-table{width:100%;border-collapse:collapse;}
+.grade-table th{text-align:left;font-size:11px;color:var(--text-muted);font-weight:600;padding:8px 12px;border-bottom:1px solid var(--border);text-transform:uppercase;}
+.grade-table td{padding:8px 6px;border-bottom:1px solid #f9fafb;}
+.grade-table td input{background:var(--gray-bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-family:'DM Sans',sans-serif;font-size:13px;width:100%;outline:none;}
+.grade-table td input:focus{border-color:var(--green);}
+.grade-letter{font-weight:700;font-size:16px;width:40px;text-align:center;}
+.grade-letter.a{color:#065f46;}
+.grade-letter.b{color:#1e3a8a;}
+.grade-letter.c{color:#92400e;}
+.grade-letter.d{color:#7c2d12;}
+.grade-letter.f{color:#991b1b;}
+
+/* Appraisal weights */
+.weight-item{display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid #f5f5f5;}
+.weight-item:last-child{border-bottom:none;}
+.weight-icon{font-size:20px;width:32px;text-align:center;}
+.weight-label{flex:1;}
+.weight-title{font-weight:600;font-size:13px;}
+.weight-desc{font-size:11px;color:var(--text-muted);margin-top:2px;}
+.weight-input{width:70px;background:var(--gray-bg);border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;text-align:center;outline:none;}
+.weight-input:focus{border-color:var(--green);}
+.weight-pct{font-size:13px;color:var(--text-muted);}
+.weight-total{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);}
+.weight-total-label{font-size:13px;font-weight:600;}
+.weight-total-value{font-size:18px;font-weight:700;color:var(--green);}
+.weight-total-value.error{color:#ef4444;}
+
+/* Tone selector */
+.tone-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+.tone-card{border:2px solid var(--border);border-radius:10px;padding:16px;cursor:pointer;transition:all .2s;text-align:center;}
+.tone-card:hover{border-color:var(--green-light);}
+.tone-card.selected{border-color:var(--green);background:var(--green-pale);}
+.tone-emoji{font-size:28px;margin-bottom:8px;}
+.tone-title{font-weight:600;font-size:13px;margin-bottom:4px;}
+.tone-desc{font-size:11px;color:var(--text-muted);line-height:1.4;}
+
+/* Upload zone */
+.upload-zone{border:2px dashed var(--border);border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:all .2s;}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--green);background:var(--green-pale);}
+.upload-icon{font-size:36px;margin-bottom:10px;}
+.upload-title{font-weight:600;font-size:14px;margin-bottom:4px;}
+.upload-sub{font-size:12px;color:var(--text-muted);}
+.upload-preview{margin-top:14px;display:none;}
+.upload-preview img{width:100%;max-height:180px;object-fit:cover;border-radius:8px;}
+
+/* Events */
+.event-list{display:flex;flex-direction:column;gap:10px;}
+.event-item{display:grid;grid-template-columns:1fr 160px 40px;gap:10px;align-items:center;}
+.remove-btn{width:36px;height:36px;background:#fee2e2;border:none;border-radius:8px;color:#ef4444;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.add-event-btn{background:none;border:1.5px dashed var(--green);color:var(--green);border-radius:8px;padding:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;width:100%;margin-top:8px;transition:all .2s;}
+.add-event-btn:hover{background:var(--green-pale);}
+
+/* Navigation */
+.nav-bar{position:fixed;bottom:0;left:0;right:0;background:white;border-top:1px solid var(--border);padding:16px 32px;display:flex;justify-content:space-between;align-items:center;z-index:100;}
+.nav-back{background:none;border:1.5px solid var(--border);color:var(--text-muted);padding:10px 24px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;}
+.nav-next{background:var(--green);color:white;border:none;padding:10px 32px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:background .2s;}
+.nav-next:hover{background:var(--green-light);}
+.nav-next:disabled{background:#9ca3af;cursor:not-allowed;}
+.nav-step{font-size:13px;color:var(--text-muted);}
+
+/* Success */
+.success-screen{text-align:center;padding:60px 20px;}
+.success-icon{font-size:72px;margin-bottom:20px;}
+.success-title{font-family:'Playfair Display',serif;font-size:32px;margin-bottom:12px;}
+.success-sub{font-size:16px;color:var(--text-muted);line-height:1.6;max-width:480px;margin:0 auto 32px;}
+.success-card{background:white;border-radius:var(--radius);box-shadow:var(--shadow);padding:28px;max-width:480px;margin:0 auto 24px;text-align:left;}
+.success-detail{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f5f5f5;font-size:14px;}
+.success-detail:last-child{border-bottom:none;}
+.success-detail-label{color:var(--text-muted);}
+.success-detail-value{font-weight:600;}
+.success-btn{background:var(--green);color:white;border:none;padding:14px 32px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;}
+
+/* Error */
+.err-msg{color:#ef4444;font-size:12px;margin-top:4px;display:none;}
+.form-input.error,.form-select.error{border-color:#ef4444;}
+
+/* Loading */
+.loading-overlay{display:none;position:fixed;inset:0;background:rgba(255,255,255,.9);z-index:999;align-items:center;justify-content:center;flex-direction:column;gap:16px;}
+.loading-overlay.show{display:flex;}
+.loading-spinner{width:48px;height:48px;border:4px solid var(--green-pale);border-top-color:var(--green);border-radius:50%;animation:spin 1s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-text{font-size:14px;color:var(--text-muted);}
+
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:4px;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">🏫</div>
+  <div>
+    <div class="header-name">EduPing School Setup</div>
+    <div class="header-sub">Complete your school configuration</div>
+  </div>
+</div>
+
+<!-- PROGRESS BAR -->
+<div class="progress-wrap">
+  <div class="progress-steps">
+    <div class="step">
+      <div class="step-circle active" id="sc1">1</div>
+      <div class="step-label active" id="sl1">School Info</div>
+    </div>
+    <div class="step-line" id="line1"></div>
+    <div class="step">
+      <div class="step-circle" id="sc2">2</div>
+      <div class="step-label" id="sl2">Grading</div>
+    </div>
+    <div class="step-line" id="line2"></div>
+    <div class="step">
+      <div class="step-circle" id="sc3">3</div>
+      <div class="step-label" id="sl3">Staff Rules</div>
+    </div>
+    <div class="step-line" id="line3"></div>
+    <div class="step">
+      <div class="step-circle" id="sc4">4</div>
+      <div class="step-label" id="sl4">Events</div>
+    </div>
+    <div class="step-line" id="line4"></div>
+    <div class="step">
+      <div class="step-circle" id="sc5">5</div>
+      <div class="step-label" id="sl5">AI Personality</div>
+    </div>
+    <div class="step-line" id="line5"></div>
+    <div class="step">
+      <div class="step-circle" id="sc6">6</div>
+      <div class="step-label" id="sl6">Done</div>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- ── STEP 1: SCHOOL INFO ── -->
+  <div id="panel-1" class="step-panel active">
+    <div class="step-header">
+      <div class="step-num">Step 1 of 5</div>
+      <div class="step-title">Tell us about your school</div>
+      <div class="step-sub">This information helps EduPing answer parent questions accurately. Fields marked <span style="color:#ef4444">*</span> are required.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🏫 Basic Information</div>
+      <div class="form-grid" style="margin-bottom:16px;">
+        <div class="form-group">
+          <label class="form-label">School Name <span class="req">*</span></label>
+          <input class="form-input" id="s-name" placeholder="Winrose Group of Schools">
+          <div class="err-msg" id="err-name">School name is required</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">City <span class="req">*</span></label>
+          <input class="form-input" id="s-city" placeholder="Abuja">
+        </div>
+      </div>
+      <div class="form-grid" style="margin-bottom:16px;">
+        <div class="form-group">
+          <label class="form-label">State</label>
+          <input class="form-input" id="s-state" placeholder="FCT">
+        </div>
+        <div class="form-group">
+          <label class="form-label">School Address</label>
+          <input class="form-input" id="s-address" placeholder="12 School Road, Gwarinpa">
+        </div>
+      </div>
+      <div class="form-grid single">
+        <div class="form-group">
+          <label class="form-label">Principal / Proprietor Name</label>
+          <input class="form-input" id="s-principal" placeholder="Dr Amaka Williams">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📅 Current Term</div>
+      <div class="form-grid" style="margin-bottom:16px;">
+        <div class="form-group">
+          <label class="form-label">Current Term Name <span class="req">*</span></label>
+          <input class="form-input" id="s-term" placeholder="2nd Term 2024/2025">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Term Start Date</label>
+          <input class="form-input" type="date" id="s-term-start">
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Term End Date</label>
+          <input class="form-input" type="date" id="s-term-end">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mid-term Break</label>
+          <input class="form-input" id="s-midterm" placeholder="Feb 10 to Feb 14">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">💰 School Fees</div>
+      <div class="form-grid" style="margin-bottom:16px;">
+        <div class="form-group">
+          <label class="form-label">Fee Amount Per Term <span class="req">*</span></label>
+          <input class="form-input" id="s-fees" placeholder="85000">
+          <div class="form-hint">In Naira, numbers only e.g. 85000</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fee Deadline <span class="req">*</span></label>
+          <input class="form-input" id="s-fee-deadline" placeholder="15th January 2025">
+        </div>
+      </div>
+      <div class="form-grid single">
+        <div class="form-group">
+          <label class="form-label">Fee Payment Instructions</label>
+          <input class="form-input" id="s-fee-instructions" placeholder="Pay to GTBank Account: 0123456789, Winrose Schools Ltd">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📸 School Gate / Landmark</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.6;">
+        Teachers will take a photo at this location every morning to sign in. Describe what the landmark looks like so EduPing can verify it.
+      </div>
+      <div class="form-grid single" style="margin-bottom:14px;">
+        <div class="form-group">
+          <label class="form-label">Landmark Description <span class="req">*</span></label>
+          <input class="form-input" id="s-landmark" placeholder="Green metal gate with white Winrose Academy signboard at the entrance">
+        </div>
+      </div>
+      <div class="upload-zone" id="landmark-zone" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleLandmarkDrop(event)" onclick="document.getElementById('landmark-file').click()">
+        <div class="upload-icon">🚪</div>
+        <div class="upload-title">Upload a photo of your school gate (optional)</div>
+        <div class="upload-sub">Helps EduPing verify teacher sign-ins more accurately</div>
+        <input type="file" id="landmark-file" accept="image/*" style="display:none" onchange="handleLandmarkFile(event)">
+      </div>
+      <div class="upload-preview" id="landmark-preview">
+        <img id="landmark-img" src="">
+        <div style="font-size:12px;color:var(--green);margin-top:8px;">✅ Gate photo uploaded</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STEP 2: GRADING ── -->
+  <div id="panel-2" class="step-panel">
+    <div class="step-header">
+      <div class="step-num">Step 2 of 5</div>
+      <div class="step-title">Your grading system</div>
+      <div class="step-sub">Set your school's grading scale so EduPing gives parents the right grade and remark alongside every score.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📊 Grade Scale</div>
+      <table class="grade-table">
+        <thead><tr><th>Grade</th><th>Minimum Score (%)</th><th>Maximum Score (%)</th><th>Remark</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="grade-letter a">A</td>
+            <td><input type="number" id="g-a-min" value="70" min="0" max="100"></td>
+            <td><input type="number" id="g-a-max" value="100" min="0" max="100" readonly style="opacity:.6"></td>
+            <td><input type="text" id="g-a-remark" value="Excellent"></td>
+          </tr>
+          <tr>
+            <td class="grade-letter b">B</td>
+            <td><input type="number" id="g-b-min" value="60" min="0" max="100"></td>
+            <td><input type="number" id="g-b-max" value="69" min="0" max="100" readonly style="opacity:.6"></td>
+            <td><input type="text" id="g-b-remark" value="Very Good"></td>
+          </tr>
+          <tr>
+            <td class="grade-letter c">C</td>
+            <td><input type="number" id="g-c-min" value="50" min="0" max="100"></td>
+            <td><input type="number" id="g-c-max" value="59" min="0" max="100" readonly style="opacity:.6"></td>
+            <td><input type="text" id="g-c-remark" value="Good"></td>
+          </tr>
+          <tr>
+            <td class="grade-letter d">D</td>
+            <td><input type="number" id="g-d-min" value="40" min="0" max="100"></td>
+            <td><input type="number" id="g-d-max" value="49" min="0" max="100" readonly style="opacity:.6"></td>
+            <td><input type="text" id="g-d-remark" value="Pass"></td>
+          </tr>
+          <tr>
+            <td class="grade-letter f">F</td>
+            <td><input type="number" id="g-f-min" value="0" min="0" max="100" readonly style="opacity:.6"></td>
+            <td><input type="number" id="g-f-max" value="39" min="0" max="100" readonly style="opacity:.6"></td>
+            <td><input type="text" id="g-f-remark" value="Fail"></td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="margin-top:14px;font-size:12px;color:var(--text-muted);">💡 The maximum score for each grade is set automatically based on the next grade's minimum.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📚 Subjects</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">List the subjects taught at your school. EduPing will use these when parents ask about their child's performance.</div>
+      <div class="form-group">
+        <label class="form-label">Subjects (comma separated)</label>
+        <textarea class="form-textarea" id="s-subjects" placeholder="Mathematics, English Language, Basic Science, Social Studies, Civic Education, Agricultural Science, Computer Studies, French, Physical Education, Creative Arts">Mathematics, English Language, Basic Science, Social Studies, Civic Education, Computer Studies, French, Physical Education, Creative Arts</textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STEP 3: STAFF RULES ── -->
+  <div id="panel-3" class="step-panel">
+    <div class="step-header">
+      <div class="step-num">Step 3 of 5</div>
+      <div class="step-title">Staff rules & appraisal</div>
+      <div class="step-sub">Set your school's expectations for teachers. EduPing uses these to calculate performance scores and flag issues automatically.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">⏰ Working Hours</div>
+      <div class="form-grid three">
+        <div class="form-group">
+          <label class="form-label">School Opens <span class="req">*</span></label>
+          <input class="form-input" type="time" id="s-opens" value="07:30">
+          <div class="form-hint">Earliest expected sign-in</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Late After <span class="req">*</span></label>
+          <input class="form-input" type="time" id="s-late" value="08:00">
+          <div class="form-hint">Sign-ins after this are marked late</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">School Closes</label>
+          <input class="form-input" type="time" id="s-closes" value="15:00">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📋 Teaching Expectations</div>
+      <div class="form-grid" style="margin-bottom:16px;">
+        <div class="form-group">
+          <label class="form-label">Homework frequency</label>
+          <select class="form-select" id="s-hw-freq">
+            <option value="daily">Daily</option>
+            <option value="2x_week" selected>Twice a week</option>
+            <option value="weekly">Once a week</option>
+            <option value="fortnightly">Every two weeks</option>
+          </select>
+          <div class="form-hint">Expected homework per class per teacher</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Score upload deadline</label>
+          <select class="form-select" id="s-score-deadline">
+            <option value="24">Within 24 hours of test</option>
+            <option value="48" selected>Within 48 hours of test</option>
+            <option value="72">Within 72 hours of test</option>
+            <option value="168">Within 1 week of test</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Attendance submission deadline</label>
+          <select class="form-select" id="s-attend-deadline">
+            <option value="morning" selected>Same morning by 9am</option>
+            <option value="eod">End of school day</option>
+            <option value="next_day">Next day</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Maximum absences per term</label>
+          <input class="form-input" type="number" id="s-max-absences" value="3" min="1" max="30">
+          <div class="form-hint">Alert admin when a teacher exceeds this</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">⚖️ Appraisal Weights</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Set how much each factor counts toward a teacher's overall performance score. Must add up to 100%.</div>
+      <div class="weight-item">
+        <div class="weight-icon">⏰</div>
+        <div class="weight-label"><div class="weight-title">Punctuality</div><div class="weight-desc">Based on daily sign-in times</div></div>
+        <input class="weight-input" type="number" id="w-punctuality" value="25" min="0" max="100" oninput="updateWeightTotal()">
+        <div class="weight-pct">%</div>
+      </div>
+      <div class="weight-item">
+        <div class="weight-icon">📋</div>
+        <div class="weight-label"><div class="weight-title">Attendance Submissions</div><div class="weight-desc">% of days register was submitted</div></div>
+        <input class="weight-input" type="number" id="w-attendance" value="20" min="0" max="100" oninput="updateWeightTotal()">
+        <div class="weight-pct">%</div>
+      </div>
+      <div class="weight-item">
+        <div class="weight-icon">📝</div>
+        <div class="weight-label"><div class="weight-title">Score Uploads</div><div class="weight-desc">% of tests with scores uploaded on time</div></div>
+        <input class="weight-input" type="number" id="w-scores" value="20" min="0" max="100" oninput="updateWeightTotal()">
+        <div class="weight-pct">%</div>
+      </div>
+      <div class="weight-item">
+        <div class="weight-icon">📚</div>
+        <div class="weight-label"><div class="weight-title">Homework Assigned</div><div class="weight-desc">% of expected homeworks given</div></div>
+        <input class="weight-input" type="number" id="w-homework" value="15" min="0" max="100" oninput="updateWeightTotal()">
+        <div class="weight-pct">%</div>
+      </div>
+      <div class="weight-item">
+        <div class="weight-icon">🎓</div>
+        <div class="weight-label"><div class="weight-title">Class Performance</div><div class="weight-desc">Average score of students in their class</div></div>
+        <input class="weight-input" type="number" id="w-class" value="20" min="0" max="100" oninput="updateWeightTotal()">
+        <div class="weight-pct">%</div>
+      </div>
+      <div class="weight-total">
+        <div class="weight-total-label">Total:</div>
+        <div class="weight-total-value" id="weight-total">100%</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STEP 4: EVENTS ── -->
+  <div id="panel-4" class="step-panel">
+    <div class="step-header">
+      <div class="step-num">Step 4 of 5</div>
+      <div class="step-title">School events & calendar</div>
+      <div class="step-sub">Add upcoming events so EduPing can tell parents about them when asked. You can always add more later from your dashboard.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📅 Upcoming Events</div>
+      <div class="event-list" id="event-list">
+        <div class="event-item">
+          <input class="form-input" placeholder="Event name e.g. Sports Day" value="Sports Day">
+          <input class="form-input" type="date" id="ev-date-1">
+          <button class="remove-btn" onclick="removeEvent(this)">✕</button>
+        </div>
+        <div class="event-item">
+          <input class="form-input" placeholder="Event name e.g. PTA Meeting" value="PTA Meeting">
+          <input class="form-input" type="date" id="ev-date-2">
+          <button class="remove-btn" onclick="removeEvent(this)">✕</button>
+        </div>
+        <div class="event-item">
+          <input class="form-input" placeholder="Event name e.g. End of Term Exams" value="2nd Term Exams">
+          <input class="form-input" type="date" id="ev-date-3">
+          <button class="remove-btn" onclick="removeEvent(this)">✕</button>
+        </div>
+      </div>
+      <button class="add-event-btn" onclick="addEvent()">+ Add another event</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📞 Emergency Contact</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">School Phone Number</label>
+          <input class="form-input" id="s-phone" placeholder="08012345678">
+          <div class="form-hint">Shown to parents when they need to call the school directly</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">School Email</label>
+          <input class="form-input" id="s-email" placeholder="admin@winroseschools.edu.ng">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STEP 5: AI PERSONALITY ── -->
+  <div id="panel-5" class="step-panel">
+    <div class="step-header">
+      <div class="step-num">Step 5 of 5</div>
+      <div class="step-title">How should EduPing sound?</div>
+      <div class="step-sub">EduPing represents your school when talking to parents. Choose how it should communicate.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🎭 Communication Style</div>
+      <div class="tone-grid">
+        <div class="tone-card selected" id="tone-formal" onclick="selectTone('formal')">
+          <div class="tone-emoji">👔</div>
+          <div class="tone-title">Formal & Professional</div>
+          <div class="tone-desc">Proper English, respectful, structured. Best for schools that want to project authority and professionalism.</div>
+        </div>
+        <div class="tone-card" id="tone-warm" onclick="selectTone('warm')">
+          <div class="tone-emoji">😊</div>
+          <div class="tone-title">Warm & Friendly</div>
+          <div class="tone-desc">Approachable, encouraging, uses light emojis. Best for schools that want parents to feel welcomed.</div>
+        </div>
+        <div class="tone-card" id="tone-pidgin" onclick="selectTone('pidgin')">
+          <div class="tone-emoji">🇳🇬</div>
+          <div class="tone-title">Nigerian Casual</div>
+          <div class="tone-desc">Mix of English and Nigerian Pidgin. Relatable and familiar. Best for community-focused schools.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">💬 Custom Greeting</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">This is the first message parents receive when they contact EduPing for the first time.</div>
+      <div class="form-group">
+        <label class="form-label">Welcome Message</label>
+        <textarea class="form-textarea" id="s-greeting" style="height:100px;">Welcome to Winrose Group of Schools! I'm your AI school assistant. I can help you with your child's attendance, results, fees, homework and school updates. How can I help you today?</textarea>
+        <div class="form-hint">Keep it under 200 characters for best results on WhatsApp</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🌍 Languages</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">Which languages do your parents primarily speak?</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+          <input type="checkbox" id="lang-english" checked style="width:16px;height:16px;accent-color:var(--green);">English
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+          <input type="checkbox" id="lang-pidgin" style="width:16px;height:16px;accent-color:var(--green);">Nigerian Pidgin
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+          <input type="checkbox" id="lang-hausa" style="width:16px;height:16px;accent-color:var(--green);">Hausa
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+          <input type="checkbox" id="lang-yoruba" style="width:16px;height:16px;accent-color:var(--green);">Yoruba
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+          <input type="checkbox" id="lang-igbo" style="width:16px;height:16px;accent-color:var(--green);">Igbo
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">✅ Final Check</div>
+      <div style="display:flex;flex-direction:column;gap:10px;" id="final-check">
+        <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span id="check-name" style="font-size:18px;">⏳</span> School name and location</div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span id="check-fees" style="font-size:18px;">⏳</span> Fee amount and deadline</div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span id="check-term" style="font-size:18px;">⏳</span> Current term information</div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span id="check-landmark" style="font-size:18px;">⏳</span> School gate landmark</div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span id="check-grading" style="font-size:18px;">⏳</span> Grading system</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SUCCESS ── -->
+  <div id="panel-success" class="step-panel">
+    <div class="success-screen">
+      <div class="success-icon">🎉</div>
+      <div class="success-title">Your school is live!</div>
+      <div class="success-sub">EduPing has been configured for your school. Parents and teachers can start using it immediately.</div>
+      <div class="success-card">
+        <div class="success-detail"><div class="success-detail-label">School</div><div class="success-detail-value" id="succ-name">—</div></div>
+        <div class="success-detail"><div class="success-detail-label">Admin dashboard</div><div class="success-detail-value"><a href="/" style="color:var(--green);">Open dashboard →</a></div></div>
+        <div class="success-detail"><div class="success-detail-label">WhatsApp number</div><div class="success-detail-value" id="succ-wa">Being connected...</div></div>
+        <div class="success-detail"><div class="success-detail-label">Status</div><div class="success-detail-value" style="color:var(--green);">✅ Live</div></div>
+      </div>
+      <div style="background:#fef3c7;border-radius:var(--radius);padding:16px 20px;max-width:480px;margin:0 auto 24px;text-align:left;font-size:13px;line-height:1.8;">
+        <strong>Next steps:</strong><br>
+        1. Add your students — photo of register or CSV upload<br>
+        2. Add your staff with their WhatsApp numbers<br>
+        3. Share the school WhatsApp number with parents<br>
+        4. Teachers send a photo at the gate every morning to sign in
+      </div>
+      <button class="success-btn" onclick="window.location.href='/'">Go to Admin Dashboard →</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- NAV BAR -->
+<div class="nav-bar" id="nav-bar">
+  <button class="nav-back" id="nav-back" onclick="goBack()" style="visibility:hidden;">← Back</button>
+  <div class="nav-step" id="nav-step">Step 1 of 5</div>
+  <button class="nav-next" id="nav-next" onclick="goNext()">Continue →</button>
+</div>
+
+<!-- LOADING -->
+<div class="loading-overlay" id="loading">
+  <div class="loading-spinner"></div>
+  <div class="loading-text" id="loading-text">Setting up your school...</div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────
+let currentStep = 1;
+const totalSteps = 5;
+let selectedTone = 'formal';
+let landmarkBase64 = '';
+const schoolId = new URLSearchParams(window.location.search).get('school_id') || '';
+
+// ── Navigation ────────────────────────────────────────────
+function goNext() {
+  if (!validateStep(currentStep)) return;
+  if (currentStep === totalSteps) { submitOnboarding(); return; }
+  currentStep++;
+  showStep(currentStep);
+}
+
+function goBack() {
+  if (currentStep <= 1) return;
+  currentStep--;
+  showStep(currentStep);
+}
+
+function showStep(step) {
+  document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + step).classList.add('active');
+
+  // Update progress
+  for (let i = 1; i <= 6; i++) {
+    const circle = document.getElementById('sc' + i);
+    const label = document.getElementById('sl' + i);
+    const line = document.getElementById('line' + i);
+    if (!circle) continue;
+    circle.classList.remove('active','done');
+    label.classList.remove('active');
+    if (i < step) { circle.classList.add('done'); circle.textContent = '✓'; }
+    else if (i === step) { circle.classList.add('active'); circle.textContent = i; label.classList.add('active'); }
+    else circle.textContent = i;
+    if (line && i < step) line.classList.add('done');
+    else if (line) line.classList.remove('done');
+  }
+
+  document.getElementById('nav-back').style.visibility = step > 1 ? 'visible' : 'hidden';
+  document.getElementById('nav-next').textContent = step === totalSteps ? '🚀 Complete Setup' : 'Continue →';
+  document.getElementById('nav-step').textContent = 'Step ' + step + ' of ' + totalSteps;
+
+  if (step === totalSteps) runFinalCheck();
+  window.scrollTo(0, 0);
+}
+
+// ── Validation ────────────────────────────────────────────
+function validateStep(step) {
+  if (step === 1) {
+    const name = document.getElementById('s-name').value.trim();
+    const city = document.getElementById('s-city').value.trim();
+    const term = document.getElementById('s-term').value.trim();
+    const fees = document.getElementById('s-fees').value.trim();
+    const deadline = document.getElementById('s-fee-deadline').value.trim();
+    const landmark = document.getElementById('s-landmark').value.trim();
+    if (!name) { highlight('s-name'); return false; }
+    if (!city) { highlight('s-city'); return false; }
+    if (!term) { highlight('s-term'); return false; }
+    if (!fees) { highlight('s-fees'); return false; }
+    if (!deadline) { highlight('s-fee-deadline'); return false; }
+    if (!landmark) { highlight('s-landmark'); return false; }
+  }
+  if (step === 3) {
+    const total = getWeightTotal();
+    if (total !== 100) {
+      document.getElementById('weight-total').classList.add('error');
+      alert('Appraisal weights must add up to exactly 100%. Currently: ' + total + '%');
+      return false;
+    }
+  }
+  return true;
+}
+
+function highlight(id) {
+  const el = document.getElementById(id);
+  el.classList.add('error');
+  el.focus();
+  el.addEventListener('input', () => el.classList.remove('error'), { once: true });
+}
+
+// ── Grading auto-calculate maxes ─────────────────────────
+['a','b','c','d'].forEach(grade => {
+  const next = {a:'b',b:'c',c:'d',d:'f'}[grade];
+  document.getElementById('g-' + grade + '-min').addEventListener('input', function() {
+    const val = parseInt(this.value) || 0;
+    document.getElementById('g-' + grade + '-max').value = Math.max(val, parseInt(document.getElementById('g-' + next + '-min').value || 0)) - 1;
+  });
+});
+
+// ── Weight total ──────────────────────────────────────────
+function getWeightTotal() {
+  return ['punctuality','attendance','scores','homework','class'].reduce((sum, k) => sum + (parseInt(document.getElementById('w-'+k).value)||0), 0);
+}
+function updateWeightTotal() {
+  const total = getWeightTotal();
+  const el = document.getElementById('weight-total');
+  el.textContent = total + '%';
+  el.classList.toggle('error', total !== 100);
+}
+
+// ── Tone selection ────────────────────────────────────────
+function selectTone(tone) {
+  selectedTone = tone;
+  ['formal','warm','pidgin'].forEach(t => document.getElementById('tone-'+t).classList.toggle('selected', t===tone));
+}
+
+// ── Events ────────────────────────────────────────────────
+function addEvent() {
+  const list = document.getElementById('event-list');
+  const div = document.createElement('div');
+  div.className = 'event-item';
+  div.innerHTML = '<input class="form-input" placeholder="Event name"><input class="form-input" type="date"><button class="remove-btn" onclick="removeEvent(this)">✕</button>';
+  list.appendChild(div);
+}
+function removeEvent(btn) {
+  const items = document.querySelectorAll('.event-item');
+  if (items.length > 1) btn.closest('.event-item').remove();
+}
+
+// ── Landmark photo ────────────────────────────────────────
+function handleLandmarkDrop(e) {
+  e.preventDefault();
+  document.getElementById('landmark-zone').classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) processLandmarkFile(file);
+}
+function handleLandmarkFile(e) { processLandmarkFile(e.target.files[0]); }
+function processLandmarkFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    landmarkBase64 = e.target.result.split(',')[1];
+    document.getElementById('landmark-img').src = e.target.result;
+    document.getElementById('landmark-preview').style.display = 'block';
+    document.getElementById('landmark-zone').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── Final check ───────────────────────────────────────────
+function runFinalCheck() {
+  const checks = {
+    name: document.getElementById('s-name').value.trim(),
+    fees: document.getElementById('s-fees').value.trim() && document.getElementById('s-fee-deadline').value.trim(),
+    term: document.getElementById('s-term').value.trim(),
+    landmark: document.getElementById('s-landmark').value.trim(),
+    grading: document.getElementById('g-a-min').value
+  };
+  Object.entries(checks).forEach(([k,v]) => {
+    document.getElementById('check-'+k).textContent = v ? '✅' : '❌';
+  });
+}
+
+// ── Collect data ──────────────────────────────────────────
+function collectData() {
+  const events = [];
+  document.querySelectorAll('.event-item').forEach(item => {
+    const inputs = item.querySelectorAll('input');
+    if (inputs[0].value.trim()) events.push({ title: inputs[0].value.trim(), date: inputs[1].value });
+  });
+
+  const languages = ['english','pidgin','hausa','yoruba','igbo'].filter(l => document.getElementById('lang-'+l).checked);
+
+  return {
+    school_id: schoolId,
+    name: document.getElementById('s-name').value.trim(),
+    city: document.getElementById('s-city').value.trim(),
+    state: document.getElementById('s-state').value.trim(),
+    address: document.getElementById('s-address').value.trim(),
+    principal: document.getElementById('s-principal').value.trim(),
+    current_term: document.getElementById('s-term').value.trim(),
+    term_start: document.getElementById('s-term-start').value,
+    term_end: document.getElementById('s-term-end').value,
+    midterm_break: document.getElementById('s-midterm').value.trim(),
+    fees: document.getElementById('s-fees').value.trim(),
+    fee_deadline: document.getElementById('s-fee-deadline').value.trim(),
+    fee_instructions: document.getElementById('s-fee-instructions').value.trim(),
+    landmark_description: document.getElementById('s-landmark').value.trim(),
+    landmark_image: landmarkBase64,
+    grading: {
+      A: { min: document.getElementById('g-a-min').value, remark: document.getElementById('g-a-remark').value },
+      B: { min: document.getElementById('g-b-min').value, remark: document.getElementById('g-b-remark').value },
+      C: { min: document.getElementById('g-c-min').value, remark: document.getElementById('g-c-remark').value },
+      D: { min: document.getElementById('g-d-min').value, remark: document.getElementById('g-d-remark').value },
+      F: { min: 0, remark: document.getElementById('g-f-remark').value }
+    },
+    subjects: document.getElementById('s-subjects').value.split(',').map(s => s.trim()).filter(Boolean),
+    working_hours: { opens: document.getElementById('s-opens').value, late_after: document.getElementById('s-late').value, closes: document.getElementById('s-closes').value },
+    homework_frequency: document.getElementById('s-hw-freq').value,
+    score_upload_deadline_hours: document.getElementById('s-score-deadline').value,
+    attendance_deadline: document.getElementById('s-attend-deadline').value,
+    max_absences_per_term: document.getElementById('s-max-absences').value,
+    appraisal_weights: {
+      punctuality: document.getElementById('w-punctuality').value,
+      attendance: document.getElementById('w-attendance').value,
+      scores: document.getElementById('w-scores').value,
+      homework: document.getElementById('w-homework').value,
+      class_performance: document.getElementById('w-class').value
+    },
+    events,
+    school_phone: document.getElementById('s-phone').value.trim(),
+    school_email: document.getElementById('s-email').value.trim(),
+    tone: selectedTone,
+    greeting: document.getElementById('s-greeting').value.trim(),
+    languages
+  };
+}
+
+// ── Submit ────────────────────────────────────────────────
+async function submitOnboarding() {
+  const data = collectData();
+
+  document.getElementById('loading-text').textContent = 'Configuring your school...';
+  document.getElementById('loading').classList.add('show');
+
+  try {
+    const res = await fetch('/api/onboarding', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const result = await res.json();
+
+    if (!result.ok) throw new Error(result.error || 'Setup failed');
+
+    document.getElementById('loading').classList.remove('show');
+    document.getElementById('succ-name').textContent = data.name;
+    document.getElementById('succ-wa').textContent = result.whatsapp_number || 'Contact EduPing support';
+    document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('panel-success').classList.add('active');
+    document.getElementById('nav-bar').style.display = 'none';
+
+    // Update all progress circles to done
+    for (let i = 1; i <= 6; i++) {
+      const circle = document.getElementById('sc' + i);
+      if (circle) { circle.classList.add('done'); circle.textContent = '✓'; }
+    }
+  } catch(e) {
+    document.getElementById('loading').classList.remove('show');
+    alert('Setup failed: ' + e.message + '. Please try again or contact EduPing support on 07015255068.');
+  }
+}
+</script>
+</body>
+</html>

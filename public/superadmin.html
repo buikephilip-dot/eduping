@@ -508,6 +508,23 @@ async function loadRevenue() {
   } catch(e) {}
 }
 
+// ── Generate onboarding link ─────────────────────────────
+async function generateLink(id, name) {
+  try {
+    const res = await sapi('/api/super/schools/' + id + '/onboarding-link', { method:'POST', body:'{}' });
+    if (res.link) {
+      navigator.clipboard.writeText(res.link).then(() => {
+        showToast('📋 Onboarding link copied for ' + name + '!');
+      });
+      // Show in a prompt so they can also see it
+      setTimeout(() => {
+        const msg = 'Onboarding link for ' + name + ':\n\n' + res.link + '\n\nThis link has been copied to your clipboard. Send it to the school owner via WhatsApp.';
+        alert(msg);
+      }, 500);
+    }
+  } catch(e) { showToast('Error generating link ❌'); }
+}
+
 // ── Toast ─────────────────────────────────────────────────
 function showToast(msg) {
   const t = document.getElementById('toast');
