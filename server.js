@@ -407,6 +407,59 @@ app.post('/api/onboarding', async (req, res) => {
   } catch(err) { json(res, { error: err.message }, 500); }
 });
 app.get('/health', async (req, res) => { await q('SELECT 1'); json(res, { ok: true, db: true, ai: hasAi(), text_ai: hasTextAi(), vision_ai: hasVisionAi(), provider: process.env.DEEPSEEK_API_KEY ? 'deepseek' : (process.env.OPENAI_API_KEY ? 'openai' : (process.env.ANTHROPIC_API_KEY ? 'anthropic-vision-only' : 'demo')), twilio: hasTwilio() }); });
+
+// Browser/admin demo chat endpoint.
+// The school admin UI posts here when testing the Parent Chat tab.
+// It deliberately uses school_id from the UI, and falls back to the first active school
+// so demo mode still works immediately after onboarding.
+app.post('/api/chat', async (req, res) => {
+  try {
+    const message = String(req.body.message || req.body.user_message || '').trim();
+    if (!message) return bad(res, 'Message is required', 400);
+
+    let school = null;
+    if (req.body.school_id) school = await getSchool(req.body.school_id);
+    if (!school) {
+      const fallback = await q("SELECT * FROM schools WHERE status='active' ORDER BY created_at DESC LIMIT 1");
+      school = fallback.rows[0];
+    }
+    if (!school) return bad(res, 'No active school found. Add a school first from Super Admin.', 404);
+
+    // Prefer an explicit parent_phone or selected conversation phone if the frontend later sends one.
+    const fromNumber = normalisePhone(req.body.from_number || req.body.parent_phone || 'web-demo');
+    let student = null;
+    if (req.body.student_id) {
+      const byId = await q('SELECT * FROM students WHERE school_id=$1 AND id=$2 LIMIT 1', [school.id, req.body.student_id]);
+      student = byId.rows[0];
+    }
+    if (!student && req.body.parent_phone) {
+      const byPhone = await q('SELECT * FROM students WHERE school_id=$1 AND parent_phone=$2 LIMIT 1', [school.id, normalisePhone(req.body.parent_phone)]);
+      student = byPhone.rows[0];
+    }
+    if (!student) {
+      const firstStudent = await q('SELECT * FROM students WHERE school_id=$1 ORDER BY created_at ASC LIMIT 1', [school.id]);
+      student = firstStudent.rows[0];
+    }
+
+    let reply;
+    if (student) {
+      const first = (await q('SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1', [school.id, fromNumber])).rowCount === 0;
+      const ctx = await buildStudentContext(school, student);
+      reply = await callAI(parentPrompt(ctx, first), message, null);
+      await q('INSERT INTO messages (school_id,from_number,student_id,channel,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5,$6)', [school.id, fromNumber, student.id, 'web', message, reply]);
+    } else {
+      const system = `You are EduPing for ${school.name}. No student has been imported yet for this school. Answer as a school AI demo assistant. If asked about a specific child, explain that the school must import students first. Keep it short and Nigerian friendly. End formal replies with ${school.name} 🏫.`;
+      reply = await callAI(system, message, null);
+      await q('INSERT INTO messages (school_id,from_number,channel,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)', [school.id, fromNumber, 'web', message, reply]);
+    }
+
+    json(res, { ok: true, reply, school_id: school.id, provider: process.env.DEEPSEEK_API_KEY ? 'deepseek' : 'demo' });
+  } catch (err) {
+    console.error('/api/chat error:', err);
+    json(res, { ok: false, reply: 'EduPing demo mode: I received your message, but the chat service hit a backend error. Check Railway logs for details. EduPing 🏫' }, 500);
+  }
+});
+
 app.post('/webhook/whatsapp', (req, res, next) => handleIncomingWhatsApp(req, res).catch(next));
 
 app.post('/api/super/login', (req, res) => json(res, { ok: req.body.password === process.env.SUPER_ADMIN_PASSWORD }));
@@ -453,6 +506,14 @@ app.get('/api/admin/dashboard', requireSchool, async (req, res) => {
 const crud = [
   ['students','name,class_name,parent_name,parent_phone,weekly_performance_score'], ['staff','name,role,subject,class,phone,performance_score'], ['admission_inquiries','parent_name,phone,child_name,class_applying,status'], ['sickbay_log','student_id,reason,action_taken'], ['school_events','title,event_date']
 ];
+
+// Messages route — not in crud because it needs custom ordering
+app.get('/api/admin/messages', requireSchool, async (req, res) => {
+  try {
+    const rows = await q('SELECT * FROM messages WHERE school_id=$1 ORDER BY created_at DESC LIMIT 100', [req.school.id]);
+    json(res, rows.rows);
+  } catch(err) { json(res, { error: err.message }, 500); }
+});
 for (const [table, fields] of crud) {
   app.get(`/api/admin/${table}`, requireSchool, async (req, res) => {
     const orderBy = table === 'sickbay_log' ? 'visited_at' : 'created_at';
