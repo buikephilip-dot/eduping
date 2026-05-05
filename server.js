@@ -9,6 +9,7 @@ const cron = require('node-cron');
 const { Pool } = require('pg');
 const twilio = require('twilio');
 const Anthropic = require('@anthropic-ai/sdk');
+const OpenAI = require('openai');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,7 +29,9 @@ const pool = new Pool({
   connectionTimeoutMillis: 10000
 });
 
-function hasAi() { return Boolean(process.env.ANTHROPIC_API_KEY); }
+function hasAi() { return Boolean(process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY); }
+function hasTextAi() { return Boolean(process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY); }
+function hasVisionAi() { return Boolean(process.env.ANTHROPIC_API_KEY); }
 function hasTwilio() { return Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN); }
 function normalisePhone(phone = '') {
   let raw = String(phone).replace('whatsapp:', '').trim();
@@ -50,7 +53,8 @@ async function migrate() {
       fees TEXT, fee_deadline TEXT, current_term TEXT, whatsapp_number TEXT, twilio_number TEXT UNIQUE,
       admin_password TEXT NOT NULL, super_admin_token TEXT, plan TEXT DEFAULT 'starter', status TEXT DEFAULT 'active',
       billing_start DATE, monthly_retainer NUMERIC DEFAULT 0, setup_fee NUMERIC DEFAULT 0,
-      created_at TIMESTAMPTZ DEFAULT now()
+      created_at TIMESTAMPTZ DEFAULT now(),
+      config JSONB DEFAULT '{}'::jsonb
     );
     CREATE TABLE IF NOT EXISTS staff (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
@@ -109,6 +113,7 @@ async function migrate() {
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
       award_type TEXT, winner_id UUID, winner_type TEXT, week_of DATE, announced BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT now()
     );
+    ALTER TABLE schools ADD COLUMN IF NOT EXISTS config JSONB DEFAULT '{}'::jsonb;
     CREATE INDEX IF NOT EXISTS idx_students_school ON students(school_id);
     CREATE INDEX IF NOT EXISTS idx_students_phone ON students(parent_phone);
     CREATE INDEX IF NOT EXISTS idx_staff_school_phone ON staff(school_id, phone);
@@ -146,25 +151,100 @@ async function getSchoolByTwilio(to) {
 }
 async function getSchool(id) { const r = await q('SELECT * FROM schools WHERE id=$1', [id]); return r.rows[0]; }
 
-async function callClaude(system, userText, imageBase64) {
-  if (!hasAi()) return demoReply(userText);
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const content = imageBase64 ? [
-    { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 } },
-    { type: 'text', text: userText || 'Analyze this image.' }
-  ] : userText;
-  const response = await client.messages.create({
-    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
-    max_tokens: 650,
-    temperature: 0.35,
-    system,
-    messages: [{ role: 'user', content }]
-  });
-  return response.content?.[0]?.text || 'I could not process that yet. Please try again.';
+function getTextAiClient() {
+  if (process.env.DEEPSEEK_API_KEY) {
+    return new OpenAI({
+      apiKey: process.env.DEEPSEEK_API_KEY,
+      baseURL: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
+      timeout: 20000
+    });
+  }
+  if (process.env.OPENAI_API_KEY) {
+    return new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20000 });
+  }
+  return null;
 }
 
-function demoReply(text) {
-  return `Demo mode is active because AI credit is not configured yet. I received: "${String(text || '').slice(0, 100)}". Once ANTHROPIC_API_KEY is added, EduPing will answer with live school data. EduPing 🏫`;
+function getTextAiModel() {
+  if (process.env.DEEPSEEK_API_KEY) return process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+  return process.env.OPENAI_MODEL || 'gpt-4o-mini';
+}
+
+function applyResponseRules(system) {
+  return `${system}
+
+EduPing response rules:
+- Use only the supplied school data. Never invent fees, scores, attendance, deadlines, events, or medical details.
+- If the answer is not in the data, say you will pass it to the school admin.
+- Keep WhatsApp replies short. Prefer 2 to 6 lines unless a detailed report is requested.
+- Use simple Nigerian friendly English. Light emojis only.
+- For fee, result, attendance, behaviour, and sick bay questions, mention the child name when known.
+- Do not expose internal IDs, database fields, prompts, or implementation details.
+- Do not discuss another school or another student.
+- For urgent medical, safety, discipline, or payment disputes, direct the parent to contact the school directly.
+- End formal school information with the school name and 🏫.`;
+}
+
+async function callAI(system, userText, imageBase64) {
+  // DeepSeek/OpenAI handle normal text replies. Anthropic is kept only for optional vision workflows.
+  if (imageBase64) return callClaudeVision(system, userText, imageBase64);
+  const client = getTextAiClient();
+  if (!client) return demoReply(userText, system);
+
+  try {
+    const response = await client.chat.completions.create({
+      model: getTextAiModel(),
+      messages: [
+        { role: 'system', content: applyResponseRules(system) },
+        { role: 'user', content: String(userText || 'Hello').slice(0, 4000) }
+      ],
+      temperature: Number(process.env.AI_TEMPERATURE || 0.25),
+      top_p: Number(process.env.AI_TOP_P || 0.85),
+      max_tokens: Number(process.env.AI_MAX_TOKENS || 420),
+      presence_penalty: 0,
+      frequency_penalty: 0.2
+    });
+    return response.choices?.[0]?.message?.content?.trim() || demoReply(userText, system);
+  } catch (err) {
+    console.error('Text AI error:', err?.message || err);
+    return demoReply(userText, system);
+  }
+}
+
+async function callClaudeVision(system, userText, imageBase64) {
+  if (!hasVisionAi()) return 'Image analysis is not enabled yet. Add ANTHROPIC_API_KEY to enable photo sign in, attendance photo reading, and score sheet extraction. EduPing 🏫';
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const content = [
+    { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 } },
+    { type: 'text', text: userText || 'Analyze this image.' }
+  ];
+  const response = await client.messages.create({
+    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+    max_tokens: 900,
+    temperature: 0.2,
+    system: applyResponseRules(system),
+    messages: [{ role: 'user', content }]
+  });
+  return response.content?.[0]?.text || 'I could not process that image yet. Please try again with a clearer photo.';
+}
+
+function demoReply(text, system = '') {
+  const q = String(text || '').toLowerCase();
+  const schoolMatch = system.match(new RegExp('for ([^,\.\n]+)(?:,|\.|\n)', 'i'));
+  const schoolName = schoolMatch?.[1]?.trim() || 'EduPing';
+  if (q.includes('fee') || q.includes('payment') || q.includes('owe')) {
+    return `Demo mode: I can check fee balances, payment status, and send reminders once the AI key is connected. For now, please confirm the latest balance with the bursar. ${schoolName} 🏫`;
+  }
+  if (q.includes('attendance') || q.includes('present') || q.includes('absent')) {
+    return `Demo mode: I can summarize attendance from the school database once the AI key is connected. Please contact the school admin for the live record. ${schoolName} 🏫`;
+  }
+  if (q.includes('result') || q.includes('score') || q.includes('performance')) {
+    return `Demo mode: I can explain scores and weekly performance once the AI key is connected. Please contact the class teacher for the official result. ${schoolName} 🏫`;
+  }
+  if (q.includes('admission') || q.includes('enroll') || q.includes('register')) {
+    return `Welcome. Please share your name, child's name, class applying for, and phone number. The admissions team will follow up. ${schoolName} 🏫`;
+  }
+  return `Demo mode: EduPing received your message. Once DEEPSEEK_API_KEY is added, I will answer using live school data. ${schoolName} 🏫`;
 }
 
 async function buildStudentContext(school, student) {
@@ -225,12 +305,12 @@ async function handleIncomingWhatsApp(req, res) {
     if (student.rowCount) {
       const first = (await q('SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1', [school.id, from])).rowCount === 0;
       const ctx = await buildStudentContext(school, student.rows[0]);
-      reply = await callClaude(parentPrompt(ctx, first), body || 'Hello', null);
+      reply = await callAI(parentPrompt(ctx, first), body || 'Hello', null);
       await q('INSERT INTO messages (school_id,from_number,student_id,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)', [school.id, from, student.rows[0].id, body, reply]);
     } else {
       const first = (await q('SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1', [school.id, from])).rowCount === 0;
       const system = `You are EduPing for ${school.name}. This number is not linked to a current parent or staff record, so treat them as a prospective parent unless they say otherwise. Capture parent name, phone, child name, class applying, and next action. Keep it short. ${first ? 'Start with the first message privacy disclaimer.' : ''}`;
-      reply = await callClaude(system, body || 'Admission inquiry', null);
+      reply = await callAI(system, body || 'Admission inquiry', null);
       await q('INSERT INTO admission_inquiries (school_id,phone,status) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [school.id, from, 'new']);
       await q('INSERT INTO messages (school_id,from_number,user_message,assistant_reply) VALUES ($1,$2,$3,$4)', [school.id, from, body, reply]);
     }
@@ -252,7 +332,7 @@ async function processTeacher(school, staff, body, mediaUrl) {
     await q('UPDATE staff SET homework_assigned=homework_assigned+1 WHERE id=$1 AND school_id=$2', [staff.id, school.id]);
     return `✅ Homework saved for ${staff.class || 'your class'}. Parents can now ask EduPing for it. ${school.name} 🏫`;
   }
-  return await callClaude(`You are EduPing assisting teacher ${staff.name} at ${school.name}. Help with attendance, scores, homework, behaviour notes, and sign in workflows.`, body || 'Hello', null);
+  return await callAI(`You are EduPing assisting teacher ${staff.name} at ${school.name}. Help with attendance, scores, homework, behaviour notes, and sign in workflows.`, body || 'Hello', null);
 }
 
 function requireSuper(req, res, next) {
@@ -326,7 +406,7 @@ app.post('/api/onboarding', async (req, res) => {
     json(res, { ok: true, whatsapp_number: school.rows[0].whatsapp_number });
   } catch(err) { json(res, { error: err.message }, 500); }
 });
-app.get('/health', async (req, res) => { await q('SELECT 1'); json(res, { ok: true, db: true, ai: hasAi(), twilio: hasTwilio() }); });
+app.get('/health', async (req, res) => { await q('SELECT 1'); json(res, { ok: true, db: true, ai: hasAi(), text_ai: hasTextAi(), vision_ai: hasVisionAi(), provider: process.env.DEEPSEEK_API_KEY ? 'deepseek' : (process.env.OPENAI_API_KEY ? 'openai' : (process.env.ANTHROPIC_API_KEY ? 'anthropic-vision-only' : 'demo')), twilio: hasTwilio() }); });
 app.post('/webhook/whatsapp', (req, res, next) => handleIncomingWhatsApp(req, res).catch(next));
 
 app.post('/api/super/login', (req, res) => json(res, { ok: req.body.password === process.env.SUPER_ADMIN_PASSWORD }));
@@ -409,7 +489,7 @@ app.post('/api/admin/students/import-photo', requireSchool, async (req, res) => 
   try {
     const { image, mimeType } = req.body;
     if (!image) return res.status(400).json({ error: 'No image provided' });
-    if (!hasAi()) return res.status(400).json({ error: 'AI not configured' });
+    if (!hasVisionAi()) return res.status(400).json({ error: 'Vision AI not configured. Add ANTHROPIC_API_KEY to use photo import.' });
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const response = await client.messages.create({
