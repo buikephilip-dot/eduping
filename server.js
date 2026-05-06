@@ -388,11 +388,20 @@ app.post('/api/onboarding', async (req, res) => {
       term_end: d.term_end, midterm_break: d.midterm_break
     });
 
-    await q(`UPDATE schools SET name=$1, city=$2, current_term=$3, fees=$4,
-      fee_deadline=$5, landmark_description=$6, config=$7, status='active'
-      WHERE id=$8`,
-      [d.name, d.city, d.current_term, String(d.fees), d.fee_deadline,
-       d.landmark_description, config, d.school_id]);
+    // Build update query — include password only if school set one
+    if (d.admin_password && d.admin_password.length >= 6) {
+      await q(`UPDATE schools SET name=$1, city=$2, current_term=$3, fees=$4,
+        fee_deadline=$5, landmark_description=$6, config=$7, admin_password=$8, status='active'
+        WHERE id=$9`,
+        [d.name, d.city, d.current_term, String(d.fees), d.fee_deadline,
+         d.landmark_description, config, d.admin_password, d.school_id]);
+    } else {
+      await q(`UPDATE schools SET name=$1, city=$2, current_term=$3, fees=$4,
+        fee_deadline=$5, landmark_description=$6, config=$7, status='active'
+        WHERE id=$8`,
+        [d.name, d.city, d.current_term, String(d.fees), d.fee_deadline,
+         d.landmark_description, config, d.school_id]);
+    }
 
     if (d.events && d.events.length) {
       await q('DELETE FROM school_events WHERE school_id=$1', [d.school_id]);
