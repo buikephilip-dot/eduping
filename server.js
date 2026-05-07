@@ -47,10 +47,14 @@ async function q(text, params = []) { return pool.query(text, params); }
 
 async function migrate() {
   await q('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+
+  // Drop old unique constraint on twilio_number if it exists (allows empty values)
+  await q(`ALTER TABLE schools DROP CONSTRAINT IF EXISTS schools_twilio_number_key`).catch(() => {});
+
   await q(`
     CREATE TABLE IF NOT EXISTS schools (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name TEXT NOT NULL, city TEXT, landmark_description TEXT,
-      fees TEXT, fee_deadline TEXT, current_term TEXT, whatsapp_number TEXT, twilio_number TEXT UNIQUE,
+      fees TEXT, fee_deadline TEXT, current_term TEXT, whatsapp_number TEXT, twilio_number TEXT,
       admin_password TEXT NOT NULL, super_admin_token TEXT, plan TEXT DEFAULT 'starter', status TEXT DEFAULT 'active',
       billing_start DATE, monthly_retainer NUMERIC DEFAULT 0, setup_fee NUMERIC DEFAULT 0,
       created_at TIMESTAMPTZ DEFAULT now(),
@@ -486,7 +490,7 @@ app.post('/api/super/schools', requireSuper, async (req, res) => {
   const b = req.body;
   const r = await q(`INSERT INTO schools (name,city,landmark_description,fees,fee_deadline,current_term,whatsapp_number,twilio_number,admin_password,plan,status,billing_start,monthly_retainer,setup_fee)
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'active',$11,$12,$13) RETURNING *`,
-    [b.name,b.city,b.landmark_description,b.fees,b.fee_deadline,b.current_term,b.whatsapp_number,b.twilio_number,b.admin_password || uuid().slice(0,8),b.plan || 'starter',b.billing_start || new Date(),b.monthly_retainer || 0,b.setup_fee || 0]);
+    [b.name,b.city,b.landmark_description||'',b.fees||'',b.fee_deadline||'',b.current_term||'',b.whatsapp_number||'',b.twilio_number||null,b.admin_password || uuid().slice(0,8),b.plan || 'starter',b.billing_start || new Date(),b.monthly_retainer || 0,b.setup_fee || 0]);
   json(res, r.rows[0], 201);
 });
 app.patch('/api/super/schools/:id', requireSuper, async (req, res) => {
