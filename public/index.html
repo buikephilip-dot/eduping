@@ -172,6 +172,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
 .attend-pct{font-size:11px;font-weight:600;color:var(--green);}
 .broadcast-btn{background:var(--green);color:white;border:none;border-radius:8px;padding:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;width:100%;}
 .broadcast-btn:hover{background:var(--green-light);}
+.action-btn{background:none;border:1px solid #e9edef;color:var(--text-muted);padding:4px 10px;border-radius:6px;font-size:11px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s;}
+.action-btn:hover{border-color:var(--green);color:var(--green);}
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;}
 .modal-overlay.show{display:flex;}
 .modal-box{background:white;border-radius:16px;padding:32px;width:380px;box-shadow:0 8px 32px rgba(0,0,0,.2);}
@@ -296,6 +298,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         <button class="subnav-btn" onclick="switchSection('admissions',this)">📋 Admissions</button>
         <button class="subnav-btn" onclick="switchSection('sickbay',this)">🏥 Sick Bay</button>
         <button class="subnav-btn" onclick="switchSection('broadcast',this)">📢 Broadcast</button>
+        <button class="subnav-btn" onclick="switchSection('documents',this)">📄 AI Training</button>
+        <button class="subnav-btn" onclick="switchSection('appraisal',this)">📈 Appraisal</button>
+        <button class="subnav-btn" onclick="switchSection('usage',this)">📡 Usage</button>
       </div>
 
       <!-- OVERVIEW -->
@@ -512,6 +517,120 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         </div>
       </div>
 
+      <!-- DOCUMENTS / AI TRAINING -->
+      <div id="section-documents" class="dash-section">
+        <div class="dash-grid">
+          <div class="dash-card">
+            <div class="dash-card-header">
+              <div class="dash-card-title">📄 Upload School Documents</div>
+            </div>
+            <div class="dash-card-body">
+              <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6;">
+                Upload your school handbook, fee structure, calendar, or any document. EduPing reads them and uses the information to answer parent questions more accurately.
+              </div>
+              <div style="background:#fef3c7;border-radius:8px;padding:12px;font-size:12px;color:#92400e;margin-bottom:16px;">
+                ⭐ <strong>AI Training Feature</strong> — The more documents you add, the smarter EduPing becomes about your specific school.
+              </div>
+              <div style="display:flex;flex-direction:column;gap:12px;">
+                <div class="form-group">
+                  <label class="form-label">Document Name</label>
+                  <input class="form-input" id="doc-name" placeholder="e.g. Student Handbook 2024/2025">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Document Type</label>
+                  <select class="form-select" id="doc-type">
+                    <option value="handbook">Student Handbook</option>
+                    <option value="calendar">Academic Calendar</option>
+                    <option value="fees">Fee Structure</option>
+                    <option value="admission">Admission Requirements</option>
+                    <option value="rules">School Rules & Policies</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Paste Document Content</label>
+                  <textarea class="form-textarea" id="doc-content" style="height:140px;" placeholder="Paste the text content of your document here. You can copy from Word, PDF, or type directly..."></textarea>
+                </div>
+                <button class="broadcast-btn" onclick="uploadDocument()">📤 Upload & Train AI</button>
+              </div>
+            </div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-header">
+              <div class="dash-card-title">Uploaded Documents</div>
+              <div class="dash-card-action" onclick="loadDocuments()">Refresh</div>
+            </div>
+            <div class="dash-card-body" id="documents-list">
+              <div class="loading">Loading documents...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- APPRAISAL REPORT -->
+      <div id="section-appraisal" class="dash-section">
+        <div class="dash-card full">
+          <div class="dash-card-header">
+            <div class="dash-card-title">📈 Staff Appraisal Report</div>
+            <div class="dash-card-action" onclick="loadAppraisal()">Recalculate</div>
+          </div>
+          <div class="dash-card-body" id="appraisal-content">
+            <div class="loading">Loading appraisal data...</div>
+          </div>
+        </div>
+        <div class="dash-card full" style="margin-top:18px;">
+          <div class="dash-card-header">
+            <div class="dash-card-title">Appraisal Weights</div>
+            <div class="dash-card-action">Set during school onboarding</div>
+          </div>
+          <div class="dash-card-body">
+            <div id="appraisal-weights" style="display:flex;gap:16px;flex-wrap:wrap;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MESSAGE USAGE -->
+      <div id="section-usage" class="dash-section">
+        <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
+          <div class="stat-card blue">
+            <div class="stat-icon">💬</div>
+            <div class="stat-value" id="usage-used">—</div>
+            <div class="stat-label">Messages used this month</div>
+          </div>
+          <div class="stat-card green">
+            <div class="stat-icon">📊</div>
+            <div class="stat-value" id="usage-limit">—</div>
+            <div class="stat-label">Monthly message limit</div>
+          </div>
+          <div class="stat-card gold">
+            <div class="stat-icon">⚡</div>
+            <div class="stat-value" id="usage-remaining">—</div>
+            <div class="stat-label">Remaining this month</div>
+          </div>
+        </div>
+        <div class="dash-card full" style="margin-top:18px;">
+          <div class="dash-card-header"><div class="dash-card-title">Usage Meter</div></div>
+          <div class="dash-card-body">
+            <div style="margin-bottom:8px;display:flex;justify-content:space-between;font-size:13px;">
+              <span id="usage-label">Loading...</span>
+              <span id="usage-pct" style="font-weight:600;"></span>
+            </div>
+            <div style="background:#f0f2f5;border-radius:8px;height:16px;overflow:hidden;">
+              <div id="usage-bar" style="height:100%;background:var(--green);border-radius:8px;transition:width .5s ease;width:0%;"></div>
+            </div>
+            <div style="margin-top:12px;font-size:12px;color:var(--text-muted);">
+              Message limits reset on the 1st of each month. Contact EduPing to upgrade your plan if you need more messages.
+            </div>
+          </div>
+        </div>
+        <div class="dash-card full" style="margin-top:18px;">
+          <div class="dash-card-header"><div class="dash-card-title">Usage History (Last 6 months)</div></div>
+          <div class="dash-card-body">
+            <div id="usage-history" style="display:flex;align-items:flex-end;gap:10px;height:120px;padding-top:10px;"></div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -582,6 +701,9 @@ function switchSection(name, btn) {
   if (name === 'admissions') loadAdmissions();
   if (name === 'sickbay') loadSickbay();
   if (name === 'awards') loadAwards();
+  if (name === 'documents') loadDocuments();
+  if (name === 'appraisal') loadAppraisal();
+  if (name === 'usage') loadUsage();
 }
 
 // ── Dashboard data ────────────────────────────────────────
@@ -1018,6 +1140,136 @@ async function sendBroadcast() {
     document.getElementById('broadcast-msg').value = '';
   } catch(e) { showToast('Broadcast failed ❌'); }
 }
+
+// ── Documents / AI Training ───────────────────────────────
+async function loadDocuments() {
+  const el = document.getElementById('documents-list');
+  try {
+    const docs = await api('/api/admin/documents');
+    if (!docs.length) {
+      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">No documents uploaded yet.<br>Upload your school handbook to make EduPing smarter.</div>';
+      return;
+    }
+    el.innerHTML = docs.map(d => `
+      <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid #f5f5f5;">
+        <div style="width:36px;height:36px;background:var(--green-pale);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">
+          ${{handbook:'📖',calendar:'📅',fees:'💰',admission:'📋',rules:'⚖️',other:'📄'}[d.doc_type]||'📄'}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:13px;">${d.name}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${d.doc_type} · Uploaded ${new Date(d.uploaded_at).toLocaleDateString()}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.preview}...</div>
+        </div>
+        <button class="action-btn" onclick="deleteDocument('${d.id}','${d.name}')" style="flex-shrink:0;color:var(--danger);border-color:var(--danger);">Delete</button>
+      </div>`).join('');
+  } catch(e) { el.innerHTML = '<div class="loading">Could not load documents</div>'; }
+}
+
+async function uploadDocument() {
+  const name = document.getElementById('doc-name').value.trim();
+  const content = document.getElementById('doc-content').value.trim();
+  const doc_type = document.getElementById('doc-type').value;
+  if (!name || !content) { showToast('Please fill document name and content ❌'); return; }
+  try {
+    await api('/api/admin/documents', { method:'POST', body:JSON.stringify({ name, content, doc_type }) });
+    showToast('✅ Document uploaded! EduPing is now trained on ' + name);
+    document.getElementById('doc-name').value = '';
+    document.getElementById('doc-content').value = '';
+    loadDocuments();
+  } catch(e) { showToast('Upload failed ❌'); }
+}
+
+async function deleteDocument(id, name) {
+  if (!confirm('Delete "' + name + '"? EduPing will no longer use this document.')) return;
+  try {
+    await api('/api/admin/documents/' + id, { method:'DELETE' });
+    showToast(name + ' deleted');
+    loadDocuments();
+  } catch(e) { showToast('Error deleting ❌'); }
+}
+
+// ── Appraisal ─────────────────────────────────────────────
+async function loadAppraisal() {
+  const el = document.getElementById('appraisal-content');
+  const weightsEl = document.getElementById('appraisal-weights');
+  try {
+    const data = await api('/api/admin/appraisal');
+    if (!data.staff || !data.staff.length) {
+      el.innerHTML = '<div class="loading">No staff data yet. Add staff and their activity will be tracked automatically.</div>';
+      return;
+    }
+
+    // Weights display
+    const w = data.weights;
+    weightsEl.innerHTML = Object.entries(w).map(([k, v]) => `
+      <div style="background:var(--gray-bg);border-radius:8px;padding:10px 16px;text-align:center;">
+        <div style="font-size:20px;font-weight:700;color:var(--green);">${v}%</div>
+        <div style="font-size:11px;color:var(--text-muted);text-transform:capitalize;">${k.replace('_',' ')}</div>
+      </div>`).join('');
+
+    // Staff table
+    el.innerHTML = `<table class="data-table">
+      <thead><tr>
+        <th>Staff Member</th><th>Role</th>
+        <th>Punctuality</th><th>Attendance Sub.</th>
+        <th>Scores Uploaded</th><th>Homework Set</th>
+        <th>Overall Score</th><th>Grade</th>
+      </tr></thead>
+      <tbody>${data.staff.map(s => {
+        const scoreColor = s.overall_score >= 85 ? 'var(--green)' : s.overall_score >= 70 ? 'var(--info)' : s.overall_score >= 55 ? 'var(--warning)' : 'var(--danger)';
+        const gradeColor = s.grade === 'Excellent' ? 'pill-green' : s.grade === 'Good' ? 'pill-blue' : s.grade === 'Satisfactory' ? 'pill-gold' : 'pill-red';
+        return `<tr>
+          <td><strong>${s.name}</strong></td>
+          <td>${s.role}${s.subject?' — '+s.subject:''}</td>
+          <td>${s.punctuality.on_time}/${s.punctuality.total} days (${s.punctuality.percent}%)</td>
+          <td>${s.submissions.attendance}</td>
+          <td>${s.submissions.scores}</td>
+          <td>${s.submissions.homework}</td>
+          <td><strong style="color:${scoreColor};font-size:16px;">${s.overall_score}/100</strong></td>
+          <td><span class="pill ${gradeColor}">${s.grade}</span></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+    <div style="margin-top:14px;font-size:12px;color:var(--text-muted);">
+      Generated: ${new Date(data.generated_at).toLocaleString('en-NG')} · Scores are weighted based on your appraisal configuration set during onboarding.
+    </div>`;
+  } catch(e) { el.innerHTML = '<div class="loading">Could not load appraisal data</div>'; }
+}
+
+// ── Message Usage ─────────────────────────────────────────
+async function loadUsage() {
+  try {
+    const data = await api('/api/admin/usage');
+    document.getElementById('usage-used').textContent = data.used.toLocaleString();
+    document.getElementById('usage-limit').textContent = data.limit.toLocaleString();
+    document.getElementById('usage-remaining').textContent = data.remaining.toLocaleString();
+    document.getElementById('usage-label').textContent = data.used + ' of ' + data.limit + ' messages used in ' + data.month;
+    document.getElementById('usage-pct').textContent = data.percent + '%';
+    const bar = document.getElementById('usage-bar');
+    bar.style.width = data.percent + '%';
+    bar.style.background = data.percent >= 90 ? 'var(--danger)' : data.percent >= 70 ? 'var(--warning)' : 'var(--green)';
+
+    // History chart
+    const history = data.history || [];
+    const histEl = document.getElementById('usage-history');
+    if (history.length) {
+      const max = Math.max(...history.map(h => h.count), 1);
+      histEl.innerHTML = history.reverse().map(h => `
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end;">
+          <div style="font-size:10px;color:var(--green);font-weight:600;">${h.count}</div>
+          <div style="width:100%;background:var(--green-pale);border-radius:4px 4px 0 0;position:relative;height:90px;">
+            <div style="position:absolute;bottom:0;left:0;right:0;background:var(--green);border-radius:4px 4px 0 0;height:${Math.round((h.count/max)*100)}%;"></div>
+          </div>
+          <div style="font-size:10px;color:var(--text-muted);">${h.month.slice(5)}</div>
+        </div>`).join('');
+    } else {
+      histEl.innerHTML = '<div class="loading">No history yet</div>';
+    }
+  } catch(e) { console.log('Usage error:', e); }
+}
+
+// ── Update switchSection to load data ─────────────────────
+const _origSwitchSection = switchSection;
 
 // ── Toast ─────────────────────────────────────────────────
 function showToast(msg) {

@@ -10,15 +10,54 @@ const { Pool } = require('pg');
 const twilio = require('twilio');
 const Anthropic = require('@anthropic-ai/sdk');
 const OpenAI = require('openai');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
+const Sentry = require('@sentry/node');
+const Queue = require('bull');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Sentry error tracking
+if (process.env.SENTRY_DSN) {
+  Sentry.init({ dsn: process.env.SENTRY_DSN, environment: process.env.NODE_ENV || 'production', tracesSampleRate: 0.1 });
+}
+
+// Message queues (requires Redis — falls back gracefully if not available)
+let messageQueue, reportQueue;
+try {
+  messageQueue = new Queue('whatsapp-messages', process.env.REDIS_URL || 'redis://localhost:6379');
+  reportQueue = new Queue('weekly-reports', process.env.REDIS_URL || 'redis://localhost:6379');
+
+  messageQueue.process(async (job) => {
+    const { to, from, body } = job.data;
+    if (!hasTwilio()) return { skipped: true };
+    await new Promise(r => setTimeout(r, Math.random() * 2000));
+    const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    return client.messages.create({ to: `whatsapp:${normalisePhone(to)}`, from: from?.startsWith('whatsapp:') ? from : `whatsapp:${normalisePhone(from)}`, body });
+  });
+
+  reportQueue.process(async (job) => {
+    await generateWeeklyReportForSchool(job.data.schoolId);
+  });
+  console.log('✅ Message queues initialized');
+} catch(e) {
+  console.log('⚠️ Queue not available (Redis not connected) — using direct sends');
+  messageQueue = null; reportQueue = null;
+}
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 app.use(morgan('combined'));
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+
+const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 300 });
+app.use('/api/', apiLimiter);
+const webhookLimiter = rateLimit({ windowMs: 60 * 1000, max: 30 });
+app.use('/webhooks/', webhookLimiter);
+if (process.env.SENTRY_DSN) app.use(Sentry.Handlers.requestHandler());
 app.use(express.static(path.join(__dirname, 'public')));
 
 const pool = new Pool({
@@ -41,6 +80,21 @@ function normalisePhone(phone = '') {
   return raw;
 }
 function uuid() { return crypto.randomUUID(); }
+function createToken(payload) {
+  return jwt.sign(payload, process.env.JWT_SECRET || 'eduping-secret', { expiresIn: '7d' });
+}
+function authMiddleware(req, res, next) {
+  const auth = req.headers.authorization || '';
+  const token = auth.replace('Bearer ', '');
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    req.user = jwt.verify(token, process.env.JWT_SECRET || 'eduping-secret');
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
 function json(res, data, code = 200) { res.status(code).json(data); }
 function bad(res, message, code = 400) { res.status(code).json({ error: message }); }
 async function q(text, params = []) { return pool.query(text, params); }
@@ -54,7 +108,7 @@ async function migrate() {
   await q(`
     CREATE TABLE IF NOT EXISTS schools (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name TEXT NOT NULL, city TEXT, landmark_description TEXT,
-      fees TEXT, fee_deadline TEXT, current_term TEXT, whatsapp_number TEXT, twilio_number TEXT,
+      fees TEXT, fee_deadline TEXT, current_term TEXT, whatsapp_number TEXT, twilio_number TEXT UNIQUE,
       admin_password TEXT NOT NULL, super_admin_token TEXT, plan TEXT DEFAULT 'starter', status TEXT DEFAULT 'active',
       billing_start DATE, monthly_retainer NUMERIC DEFAULT 0, setup_fee NUMERIC DEFAULT 0,
       created_at TIMESTAMPTZ DEFAULT now(),
@@ -123,6 +177,28 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS idx_staff_school_phone ON staff(school_id, phone);
     CREATE INDEX IF NOT EXISTS idx_messages_school_from ON messages(school_id, from_number);
     CREATE INDEX IF NOT EXISTS idx_fees_school_status ON fees(school_id, status);
+
+    -- Scale-ready tables
+    CREATE TABLE IF NOT EXISTS bulk_upload_errors (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      file_name TEXT, row_number INTEGER, error_message TEXT, row_data JSONB,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS global_announcements (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      title TEXT NOT NULL, message TEXT NOT NULL, audience TEXT DEFAULT 'all_admins',
+      is_active BOOLEAN DEFAULT true, expires_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS message_queue_logs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID REFERENCES schools(id), job_id TEXT, status TEXT, recipient TEXT, error TEXT,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_bulk_errors_school ON bulk_upload_errors(school_id);
+    CREATE INDEX IF NOT EXISTS idx_announcements_active ON global_announcements(is_active);
+    ALTER TABLE schools ADD COLUMN IF NOT EXISTS ai_training_paid BOOLEAN DEFAULT false;
+    ALTER TABLE schools ADD COLUMN IF NOT EXISTS billing_cycle_start DATE DEFAULT CURRENT_DATE;
   `);
 }
 
@@ -633,7 +709,17 @@ async function dailyFeeReminders() {
     WHERE f.status <> 'paid' AND f.due_date <= current_date AND s.status='active'`)).rows;
   for (const r of rows) await twilioSend(r.parent_phone, r.twilio_number || process.env.TWILIO_DEFAULT_FROM, `Reminder: ${r.student_name} has outstanding fees of ₦${Number(r.amount_due - r.amount_paid).toLocaleString()}. ${r.school_name} 🏫`);
 }
-cron.schedule('0 16 * * 5', weeklyReports, { timezone: 'Africa/Lagos' });
+cron.schedule('0 16 * * 5', async () => {
+  console.log('📊 Starting staggered weekly reports...');
+  if (reportQueue) {
+    const schools = await q("SELECT id FROM schools WHERE status='active'");
+    for (const school of schools.rows) {
+      await reportQueue.add({ schoolId: school.id }, { delay: Math.random() * 3600000 });
+    }
+  } else {
+    await weeklyReports(); // fallback direct
+  }
+}, { timezone: 'Africa/Lagos' });
 cron.schedule('0 9 * * *', dailyFeeReminders, { timezone: 'Africa/Lagos' });
 cron.schedule('0 17 * * 5', async () => console.log('Award calculation job placeholder ran'), { timezone: 'Africa/Lagos' });
 
