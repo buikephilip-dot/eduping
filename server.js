@@ -208,7 +208,7 @@ async function seedIfEmpty() {
   const school = await q(`INSERT INTO schools
     (name, city, landmark_description, fees, fee_deadline, current_term, whatsapp_number, twilio_number, admin_password, plan, status, billing_start, monthly_retainer, setup_fee)
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,current_date,$12,$13) RETURNING *`,
-    ['Greenfield Academy', 'Abuja', 'Green gate beside the assembly hall', '85000 per term', '15th of each term month', '2nd Term 2024/2025', '+2347015255068', '+14155238886', 'admin123', 'starter', 'active', 50000, 100000]);
+    ['Greenfield Academy', 'Abuja', 'Green gate beside the assembly hall', '85000 per term', '15th of each term month', '2nd Term 2024/2025', '+2347015255068', process.env.TWILIO_WHATSAPP_NUMBER || '+14246780752', 'admin123', 'starter', 'active', 50000, 100000]);
   const schoolId = school.rows[0].id;
   const students = [
     ['Emeka Okonkwo','JSS2A','Mrs Adaeze Okonkwo','+2348031111111',82],
@@ -226,7 +226,15 @@ async function seedIfEmpty() {
 
 async function getSchoolByTwilio(to) {
   const n = normalisePhone(to);
-  const result = await q('SELECT * FROM schools WHERE twilio_number = $1 OR twilio_number = $2 LIMIT 1', [n, `whatsapp:${n}`]);
+  const result = await q(
+    'SELECT * FROM schools WHERE twilio_number = $1 OR twilio_number = $2 OR twilio_number = $3 LIMIT 1',
+    [n, `whatsapp:${n}`, n.replace('+','')]
+  );
+  // fallback: if only one active school and no match, use it (sandbox mode)
+  if (!result.rows[0] && process.env.NODE_ENV !== 'production') {
+    const fallback = await q("SELECT * FROM schools WHERE status='active' ORDER BY created_at ASC LIMIT 1");
+    return fallback.rows[0];
+  }
   return result.rows[0];
 }
 async function getSchool(id) { const r = await q('SELECT * FROM schools WHERE id=$1', [id]); return r.rows[0]; }
@@ -403,16 +411,63 @@ async function handleIncomingWhatsApp(req, res) {
 async function processTeacher(school, staff, body, mediaUrl) {
   const lower = String(body || '').toLowerCase();
   const today = new Date().toISOString().slice(0,10);
+
+  // ── Sign in ──────────────────────────────────────────────
   if (lower.includes('sign in') || lower.includes('good morning') || mediaUrl) {
     await q('INSERT INTO signin_log (school_id,staff_id,date,time,status,photo_verified) VALUES ($1,$2,current_date,to_char(now(),\'HH24:MI\'),$3,$4)', [school.id, staff.id, 'submitted', Boolean(mediaUrl)]);
     return `✅ ${staff.name}, your sign in has been recorded. ${school.name} 🏫`;
   }
+
+  // ── Exception-based attendance: "absent: Name1, Name2" or "none" ──
+  // Teacher replies to morning prompt with absent names or NONE
+  const absentMatch = lower.match(/absent[:\-\s]+(.+)/i) || lower.match(/^absent$/i);
+  const noneMatch = lower.match(/^none$|^all present$|^full house$/i);
+
+  if (absentMatch || noneMatch) {
+    const className = staff.class || 'Unknown Class';
+    if (noneMatch) {
+      // Mark all students in this class present
+      const students = await q('SELECT id FROM students WHERE school_id=$1 AND class_name=$2', [school.id, className]);
+      for (const s of students.rows) {
+        await q('INSERT INTO attendance (school_id,student_id,date,status) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING', [school.id, s.id, today, 'present']);
+      }
+      await q('UPDATE staff SET attendance_submissions=attendance_submissions+1 WHERE id=$1 AND school_id=$2', [staff.id, school.id]);
+      return `✅ Full attendance recorded for ${className} — all students present. ${school.name} 🏫`;
+    }
+
+    // Parse absent names from message
+    const rawNames = (absentMatch[1] || '').split(/[,\n]+/).map(n => n.trim()).filter(Boolean);
+    const students = await q('SELECT id, name FROM students WHERE school_id=$1 AND class_name=$2', [school.id, className]);
+    const allStudents = students.rows;
+
+    let markedAbsent = [], notFound = [];
+    for (const s of allStudents) {
+      const isAbsent = rawNames.some(n => s.name.toLowerCase().includes(n.toLowerCase()) || n.toLowerCase().includes(s.name.toLowerCase().split(' ')[0]));
+      await q('INSERT INTO attendance (school_id,student_id,date,status) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING',
+        [school.id, s.id, today, isAbsent ? 'absent' : 'present']);
+      if (isAbsent) markedAbsent.push(s.name);
+    }
+    for (const n of rawNames) {
+      const matched = allStudents.some(s => s.name.toLowerCase().includes(n.toLowerCase()));
+      if (!matched) notFound.push(n);
+    }
+    await q('UPDATE staff SET attendance_submissions=attendance_submissions+1 WHERE id=$1 AND school_id=$2', [staff.id, school.id]);
+    let reply = `✅ Attendance recorded for ${className}.\n`;
+    reply += `Present: ${allStudents.length - markedAbsent.length} | Absent: ${markedAbsent.length}`;
+    if (markedAbsent.length) reply += `\nAbsent: ${markedAbsent.join(', ')}`;
+    if (notFound.length) reply += `\n⚠️ Names not matched: ${notFound.join(', ')} — please check spelling.`;
+    reply += `\n${school.name} 🏫`;
+    return reply;
+  }
+
+  // ── Homework ─────────────────────────────────────────────
   if (lower.includes('homework') || lower.includes('assignment')) {
     await q('INSERT INTO homeworks (school_id,assigned_by,class_name,subject,description,due_date) VALUES ($1,$2,$3,$4,$5,current_date + interval \'3 days\')', [school.id, staff.id, staff.class, staff.subject, body]);
     await q('UPDATE staff SET homework_assigned=homework_assigned+1 WHERE id=$1 AND school_id=$2', [staff.id, school.id]);
     return `✅ Homework saved for ${staff.class || 'your class'}. Parents can now ask EduPing for it. ${school.name} 🏫`;
   }
-  return await callAI(`You are EduPing assisting teacher ${staff.name} at ${school.name}. Help with attendance, scores, homework, behaviour notes, and sign in workflows.`, body || 'Hello', null);
+
+  return await callAI(`You are EduPing assisting teacher ${staff.name} at ${school.name}. Help with attendance, scores, homework, behaviour notes, and sign in workflows. For attendance, tell them to reply "Absent: Name1, Name2" or "None" if all are present.`, body || 'Hello', null);
 }
 
 function requireSuper(req, res, next) {
@@ -722,6 +777,19 @@ cron.schedule('0 16 * * 5', async () => {
 }, { timezone: 'Africa/Lagos' });
 cron.schedule('0 9 * * *', dailyFeeReminders, { timezone: 'Africa/Lagos' });
 cron.schedule('0 17 * * 5', async () => console.log('Award calculation job placeholder ran'), { timezone: 'Africa/Lagos' });
+
+// ── Morning attendance prompt — sent to all teachers at 7:45am ──
+cron.schedule('45 7 * * 1-5', async () => {
+  if (!hasTwilio()) return;
+  const schools = (await q("SELECT * FROM schools WHERE status='active'")).rows;
+  for (const school of schools) {
+    const teachers = (await q("SELECT * FROM staff WHERE school_id=$1 AND phone IS NOT NULL AND class IS NOT NULL AND class != ''", [school.id])).rows;
+    for (const teacher of teachers) {
+      const msg = `📋 Good morning ${teacher.name}! Please reply with absent students in ${teacher.class} today.\n\nFormat: "Absent: Emeka, Fatima"\nOr reply "None" if all are present.\n\n${school.name} 🏫`;
+      await twilioSend(teacher.phone, school.twilio_number || process.env.TWILIO_DEFAULT_FROM, msg);
+    }
+  }
+}, { timezone: 'Africa/Lagos' });
 
 app.use((err, req, res, next) => { console.error(err); res.status(500).json({ error: 'Server error', detail: process.env.NODE_ENV === 'production' ? undefined : err.message }); });
 
