@@ -199,6 +199,47 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS idx_announcements_active ON global_announcements(is_active);
     ALTER TABLE schools ADD COLUMN IF NOT EXISTS ai_training_paid BOOLEAN DEFAULT false;
     ALTER TABLE schools ADD COLUMN IF NOT EXISTS billing_cycle_start DATE DEFAULT CURRENT_DATE;
+
+    CREATE TABLE IF NOT EXISTS student_risk_scores (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+      risk_level TEXT NOT NULL DEFAULT 'low',
+      academic_risk BOOLEAN DEFAULT false,
+      attendance_risk BOOLEAN DEFAULT false,
+      engagement_risk BOOLEAN DEFAULT false,
+      trajectory TEXT DEFAULT 'stable',
+      weak_subjects JSONB DEFAULT '[]'::jsonb,
+      avg_score NUMERIC DEFAULT 0,
+      attendance_pct NUMERIC DEFAULT 0,
+      hw_completion_pct NUMERIC DEFAULT 0,
+      assessed_at TIMESTAMPTZ DEFAULT now(),
+      UNIQUE(student_id)
+    );
+    CREATE TABLE IF NOT EXISTS intervention_plans (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+      risk_level TEXT,
+      plan_text TEXT NOT NULL,
+      weak_subjects JSONB DEFAULT '[]'::jsonb,
+      sent_to_parent BOOLEAN DEFAULT false,
+      parent_acknowledged BOOLEAN DEFAULT false,
+      tutor_requested BOOLEAN DEFAULT false,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      follow_up_date DATE
+    );
+    CREATE TABLE IF NOT EXISTS tutors (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL, phone TEXT NOT NULL, email TEXT,
+      subjects JSONB DEFAULT '[]'::jsonb,
+      cities JSONB DEFAULT '[]'::jsonb,
+      rate_per_hour NUMERIC DEFAULT 0,
+      bio TEXT, verified BOOLEAN DEFAULT false,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_risk_school ON student_risk_scores(school_id, risk_level);
+    CREATE INDEX IF NOT EXISTS idx_intervention_student ON intervention_plans(student_id);
   `);
 }
 
@@ -208,7 +249,7 @@ async function seedIfEmpty() {
   const school = await q(`INSERT INTO schools
     (name, city, landmark_description, fees, fee_deadline, current_term, whatsapp_number, twilio_number, admin_password, plan, status, billing_start, monthly_retainer, setup_fee)
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,current_date,$12,$13) RETURNING *`,
-    ['Greenfield Academy', 'Abuja', 'Green gate beside the assembly hall', '85000 per term', '15th of each term month', '2nd Term 2024/2025', '+2347015255068', process.env.TWILIO_WHATSAPP_NUMBER || '+14246780752', 'admin123', 'starter', 'active', 50000, 100000]);
+    ['Greenfield Academy', 'Abuja', 'Green gate beside the assembly hall', '85000 per term', '15th of each term month', '2nd Term 2024/2025', '+2347015255068', '+14155238886', 'admin123', 'starter', 'active', 50000, 100000]);
   const schoolId = school.rows[0].id;
   const students = [
     ['Emeka Okonkwo','JSS2A','Mrs Adaeze Okonkwo','+2348031111111',82],
@@ -226,31 +267,28 @@ async function seedIfEmpty() {
 
 async function getSchoolByTwilio(to) {
   const n = normalisePhone(to);
-  const result = await q(
-    'SELECT * FROM schools WHERE twilio_number = $1 OR twilio_number = $2 OR twilio_number = $3 LIMIT 1',
-    [n, `whatsapp:${n}`, n.replace('+','')]
-  );
-  // fallback: if only one active school and no match, use it (sandbox mode)
-  if (!result.rows[0] && process.env.NODE_ENV !== 'production') {
-    const fallback = await q("SELECT * FROM schools WHERE status='active' ORDER BY created_at ASC LIMIT 1");
-    return fallback.rows[0];
-  }
+  const result = await q('SELECT * FROM schools WHERE twilio_number = $1 OR twilio_number = $2 LIMIT 1', [n, `whatsapp:${n}`]);
   return result.rows[0];
 }
 async function getSchool(id) { const r = await q('SELECT * FROM schools WHERE id=$1', [id]); return r.rows[0]; }
 
+function getDeepSeekClient() {
+  if (!process.env.DEEPSEEK_API_KEY) return null;
+  return new OpenAI({
+    apiKey: process.env.DEEPSEEK_API_KEY,
+    baseURL: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
+    timeout: 20000
+  });
+}
+
+function getOpenAiClient() {
+  if (!process.env.OPENAI_API_KEY) return null;
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20000 });
+}
+
+// Legacy helper kept for hasTextAi() checks elsewhere
 function getTextAiClient() {
-  if (process.env.DEEPSEEK_API_KEY) {
-    return new OpenAI({
-      apiKey: process.env.DEEPSEEK_API_KEY,
-      baseURL: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
-      timeout: 20000
-    });
-  }
-  if (process.env.OPENAI_API_KEY) {
-    return new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20000 });
-  }
-  return null;
+  return getDeepSeekClient() || getOpenAiClient() || null;
 }
 
 function getTextAiModel() {
@@ -273,30 +311,62 @@ EduPing response rules:
 - End formal school information with the school name and 🏫.`;
 }
 
-async function callAI(system, userText, imageBase64) {
-  // DeepSeek/OpenAI handle normal text replies. Anthropic is kept only for optional vision workflows.
-  if (imageBase64) return callClaudeVision(system, userText, imageBase64);
-  const client = getTextAiClient();
-  if (!client) return demoReply(userText, system);
+async function callAiWithClient(client, model, system, userText) {
+  const response = await client.chat.completions.create({
+    model,
+    messages: [
+      { role: 'system', content: applyResponseRules(system) },
+      { role: 'user', content: String(userText || 'Hello').slice(0, 4000) }
+    ],
+    temperature: Number(process.env.AI_TEMPERATURE || 0.25),
+    top_p: Number(process.env.AI_TOP_P || 0.85),
+    max_tokens: Number(process.env.AI_MAX_TOKENS || 420),
+    presence_penalty: 0,
+    frequency_penalty: 0.2
+  });
+  return response.choices?.[0]?.message?.content?.trim() || null;
+}
 
-  try {
-    const response = await client.chat.completions.create({
-      model: getTextAiModel(),
-      messages: [
-        { role: 'system', content: applyResponseRules(system) },
-        { role: 'user', content: String(userText || 'Hello').slice(0, 4000) }
-      ],
-      temperature: Number(process.env.AI_TEMPERATURE || 0.25),
-      top_p: Number(process.env.AI_TOP_P || 0.85),
-      max_tokens: Number(process.env.AI_MAX_TOKENS || 420),
-      presence_penalty: 0,
-      frequency_penalty: 0.2
-    });
-    return response.choices?.[0]?.message?.content?.trim() || demoReply(userText, system);
-  } catch (err) {
-    console.error('Text AI error:', err?.message || err);
-    return demoReply(userText, system);
+async function callAI(system, userText, imageBase64) {
+  if (imageBase64) return callClaudeVision(system, userText, imageBase64);
+
+  const deepseek = getDeepSeekClient();
+  const openai = getOpenAiClient();
+
+  if (deepseek) {
+    try {
+      const result = await callAiWithClient(deepseek, process.env.DEEPSEEK_MODEL || 'deepseek-chat', system, userText);
+      if (result) { console.log('AI via DeepSeek'); return result; }
+    } catch (err) {
+      console.warn('DeepSeek failed, trying OpenAI:', err?.message || err);
+    }
+    if (openai) {
+      try {
+        const result = await callAiWithClient(openai, process.env.OPENAI_MODEL || 'gpt-4o-mini', system, userText);
+        if (result) { console.log('AI via OpenAI (DeepSeek fallback)'); return result; }
+      } catch (err) {
+        console.error('OpenAI fallback failed:', err?.message || err);
+      }
+    }
+  } else if (openai) {
+    try {
+      const result = await callAiWithClient(openai, process.env.OPENAI_MODEL || 'gpt-4o-mini', system, userText);
+      if (result) { console.log('AI via OpenAI'); return result; }
+    } catch (err) {
+      console.warn('OpenAI failed:', err?.message || err);
+    }
+    if (deepseek) {
+      try {
+        const result = await callAiWithClient(deepseek, process.env.DEEPSEEK_MODEL || 'deepseek-chat', system, userText);
+        if (result) { console.log('AI via DeepSeek (OpenAI fallback)'); return result; }
+      } catch (err) {
+        console.error('DeepSeek fallback failed:', err?.message || err);
+      }
+    }
   }
+
+  console.error('All AI providers failed or unavailable');
+  return demoReply(userText, system);
 }
 
 async function callClaudeVision(system, userText, imageBase64) {
@@ -332,7 +402,7 @@ function demoReply(text, system = '') {
   if (q.includes('admission') || q.includes('enroll') || q.includes('register')) {
     return `Welcome. Please share your name, child's name, class applying for, and phone number. The admissions team will follow up. ${schoolName} 🏫`;
   }
-  return `Demo mode: EduPing received your message. Once DEEPSEEK_API_KEY is added, I will answer using live school data. ${schoolName} 🏫`;
+  return `EduPing received your message. I will answer using live school data once fully configured. ${schoolName} 🏫`;
 }
 
 async function buildStudentContext(school, student) {
@@ -391,9 +461,52 @@ async function handleIncomingWhatsApp(req, res) {
   else {
     const student = await q('SELECT * FROM students WHERE school_id=$1 AND parent_phone=$2 LIMIT 1', [school.id, from]);
     if (student.rowCount) {
+      const lower = body.toLowerCase().trim();
       const first = (await q('SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1', [school.id, from])).rowCount === 0;
-      const ctx = await buildStudentContext(school, student.rows[0]);
-      reply = await callAI(parentPrompt(ctx, first), body || 'Hello', null);
+
+      // ── First message — send disclaimer directly, no AI needed ──
+      if (first) {
+        reply = `👋 Welcome to ${school.name}'s AI assistant, powered by EduPing!
+
+Before we continue:
+📋 Your conversations and your child's data are processed by AI to answer your questions.
+🔒 Your data is private and never sold to third parties.
+🤖 For urgent matters, please contact the school directly.
+
+By sending any message, you agree to this.
+
+How can I help you today? You can ask about attendance, results, fees, homework, or school events. ${school.name} 🏫`;
+
+        await q('INSERT INTO messages (school_id,from_number,student_id,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)', [school.id, from, student.rows[0].id, body, reply]);
+        const twiml = new twilio.twiml.MessagingResponse();
+        twiml.message(reply);
+        return res.type('text/xml').send(twiml.toString());
+      }
+
+      // ── TUTOR keyword — parent wants tutor connection ────
+      if (lower === 'tutor' || lower === 'i want a tutor' || lower === 'get tutor') {
+        const riskRow = await q('SELECT weak_subjects FROM student_risk_scores WHERE student_id=$1', [student.rows[0].id]);
+        const enriched = { ...student.rows[0], weak_subjects: riskRow.rows[0]?.weak_subjects || [] };
+        reply = await handleTutorRequest(school, enriched, from);
+        await q('UPDATE intervention_plans SET tutor_requested=true WHERE student_id=$1 AND tutor_requested=false', [student.rows[0].id]);
+      }
+      // ── YES to intervention plan ─────────────────────────
+      else if (lower === 'yes' || lower === 'ok' || lower === 'okay' || lower === 'sure') {
+        const pending = await q(`SELECT ip.*, s.name student_name FROM intervention_plans ip JOIN students s ON s.id=ip.student_id WHERE ip.student_id=$1 AND ip.parent_acknowledged=false ORDER BY ip.created_at DESC LIMIT 1`, [student.rows[0].id]);
+        if (pending.rowCount) {
+          await q('UPDATE intervention_plans SET parent_acknowledged=true WHERE id=$1', [pending.rows[0].id]);
+          reply = `✅ Great! We've noted that you're on board with ${pending.rows[0].student_name}'s study plan.\n\nReply *TUTOR* anytime if you'd like us to connect you with a private tutor.\n\n${school.name} 🏫`;
+        } else {
+          const ctx = await buildStudentContext(school, student.rows[0]);
+          reply = await callAI(parentPrompt(ctx, first), body || 'Hello', null);
+        }
+      }
+      // ── Normal parent query ──────────────────────────────
+      else {
+        const ctx = await buildStudentContext(school, student.rows[0]);
+        reply = await callAI(parentPrompt(ctx, first), body || 'Hello', null);
+      }
+
       await q('INSERT INTO messages (school_id,from_number,student_id,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)', [school.id, from, student.rows[0].id, body, reply]);
     } else {
       const first = (await q('SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1', [school.id, from])).rowCount === 0;
@@ -411,63 +524,16 @@ async function handleIncomingWhatsApp(req, res) {
 async function processTeacher(school, staff, body, mediaUrl) {
   const lower = String(body || '').toLowerCase();
   const today = new Date().toISOString().slice(0,10);
-
-  // ── Sign in ──────────────────────────────────────────────
   if (lower.includes('sign in') || lower.includes('good morning') || mediaUrl) {
     await q('INSERT INTO signin_log (school_id,staff_id,date,time,status,photo_verified) VALUES ($1,$2,current_date,to_char(now(),\'HH24:MI\'),$3,$4)', [school.id, staff.id, 'submitted', Boolean(mediaUrl)]);
     return `✅ ${staff.name}, your sign in has been recorded. ${school.name} 🏫`;
   }
-
-  // ── Exception-based attendance: "absent: Name1, Name2" or "none" ──
-  // Teacher replies to morning prompt with absent names or NONE
-  const absentMatch = lower.match(/absent[:\-\s]+(.+)/i) || lower.match(/^absent$/i);
-  const noneMatch = lower.match(/^none$|^all present$|^full house$/i);
-
-  if (absentMatch || noneMatch) {
-    const className = staff.class || 'Unknown Class';
-    if (noneMatch) {
-      // Mark all students in this class present
-      const students = await q('SELECT id FROM students WHERE school_id=$1 AND class_name=$2', [school.id, className]);
-      for (const s of students.rows) {
-        await q('INSERT INTO attendance (school_id,student_id,date,status) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING', [school.id, s.id, today, 'present']);
-      }
-      await q('UPDATE staff SET attendance_submissions=attendance_submissions+1 WHERE id=$1 AND school_id=$2', [staff.id, school.id]);
-      return `✅ Full attendance recorded for ${className} — all students present. ${school.name} 🏫`;
-    }
-
-    // Parse absent names from message
-    const rawNames = (absentMatch[1] || '').split(/[,\n]+/).map(n => n.trim()).filter(Boolean);
-    const students = await q('SELECT id, name FROM students WHERE school_id=$1 AND class_name=$2', [school.id, className]);
-    const allStudents = students.rows;
-
-    let markedAbsent = [], notFound = [];
-    for (const s of allStudents) {
-      const isAbsent = rawNames.some(n => s.name.toLowerCase().includes(n.toLowerCase()) || n.toLowerCase().includes(s.name.toLowerCase().split(' ')[0]));
-      await q('INSERT INTO attendance (school_id,student_id,date,status) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING',
-        [school.id, s.id, today, isAbsent ? 'absent' : 'present']);
-      if (isAbsent) markedAbsent.push(s.name);
-    }
-    for (const n of rawNames) {
-      const matched = allStudents.some(s => s.name.toLowerCase().includes(n.toLowerCase()));
-      if (!matched) notFound.push(n);
-    }
-    await q('UPDATE staff SET attendance_submissions=attendance_submissions+1 WHERE id=$1 AND school_id=$2', [staff.id, school.id]);
-    let reply = `✅ Attendance recorded for ${className}.\n`;
-    reply += `Present: ${allStudents.length - markedAbsent.length} | Absent: ${markedAbsent.length}`;
-    if (markedAbsent.length) reply += `\nAbsent: ${markedAbsent.join(', ')}`;
-    if (notFound.length) reply += `\n⚠️ Names not matched: ${notFound.join(', ')} — please check spelling.`;
-    reply += `\n${school.name} 🏫`;
-    return reply;
-  }
-
-  // ── Homework ─────────────────────────────────────────────
   if (lower.includes('homework') || lower.includes('assignment')) {
     await q('INSERT INTO homeworks (school_id,assigned_by,class_name,subject,description,due_date) VALUES ($1,$2,$3,$4,$5,current_date + interval \'3 days\')', [school.id, staff.id, staff.class, staff.subject, body]);
     await q('UPDATE staff SET homework_assigned=homework_assigned+1 WHERE id=$1 AND school_id=$2', [staff.id, school.id]);
     return `✅ Homework saved for ${staff.class || 'your class'}. Parents can now ask EduPing for it. ${school.name} 🏫`;
   }
-
-  return await callAI(`You are EduPing assisting teacher ${staff.name} at ${school.name}. Help with attendance, scores, homework, behaviour notes, and sign in workflows. For attendance, tell them to reply "Absent: Name1, Name2" or "None" if all are present.`, body || 'Hello', null);
+  return await callAI(`You are EduPing assisting teacher ${staff.name} at ${school.name}. Help with attendance, scores, homework, behaviour notes, and sign in workflows.`, body || 'Hello', null);
 }
 
 function requireSuper(req, res, next) {
@@ -488,6 +554,84 @@ async function requireSchool(req, res, next) {
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/superadmin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'superadmin.html')));
 app.get('/onboarding', (req, res) => res.sendFile(path.join(__dirname, 'public', 'onboarding.html')));
+app.get('/privacy', (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>
+<title>Privacy Policy — EduPing</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 760px; margin: 0 auto; padding: 2rem 1.5rem; color: #1a1a1a; line-height: 1.7; }
+  h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
+  .brand { color: #0099ee; }
+  .meta { color: #666; font-size: 0.9rem; margin-bottom: 2rem; }
+  h2 { font-size: 1.15rem; font-weight: 600; margin-top: 2rem; }
+  p, li { font-size: 0.97rem; color: #333; }
+  ul { padding-left: 1.25rem; }
+  a { color: #0099ee; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #eee; font-size: 0.85rem; color: #888; }
+</style>
+</head>
+<body>
+<h1>Edu<span class='brand'>Ping</span> Privacy Policy</h1>
+<p class='meta'>Last updated: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+
+<p>EduPing (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;) operates an AI-powered school communication platform accessible via WhatsApp and web. This policy explains how we collect, use, and protect your data.</p>
+
+<h2>1. Data We Collect</h2>
+<ul>
+  <li>School information: name, location, contact details, term dates, and fee schedules</li>
+  <li>Staff information: name, phone number, role, subject, and class assignment</li>
+  <li>Student information: name, class, attendance records, academic scores, and behaviour notes</li>
+  <li>Parent information: name, phone number, and WhatsApp messages sent to EduPing</li>
+  <li>Usage data: message timestamps, feature usage, and system logs</li>
+</ul>
+
+<h2>2. How We Use Your Data</h2>
+<ul>
+  <li>To provide AI-powered responses to parent enquiries via WhatsApp</li>
+  <li>To generate attendance records, score reports, and weekly student summaries</li>
+  <li>To send automated school announcements and fee reminders</li>
+  <li>To identify at-risk students and generate personalised learning support plans</li>
+  <li>To improve platform performance and reliability</li>
+</ul>
+
+<h2>3. AI Processing</h2>
+<p>Your school data and parent messages are processed by AI systems (including OpenAI and/or DeepSeek) to generate responses. Data sent to AI providers is subject to their respective privacy policies. We do not use your data to train AI models.</p>
+
+<h2>4. Data Sharing</h2>
+<p>We do not sell your data to third parties. Data is shared only with:</p>
+<ul>
+  <li>AI providers (OpenAI, DeepSeek) for message processing</li>
+  <li>Twilio for WhatsApp message delivery</li>
+  <li>Railway (our hosting provider) for infrastructure</li>
+</ul>
+
+<h2>5. Data Security</h2>
+<p>All data is stored on encrypted PostgreSQL databases hosted on Railway. Passwords are hashed using bcrypt. All connections use HTTPS/TLS encryption. Access to school data is protected by JWT authentication and school-specific credentials.</p>
+
+<h2>6. Data Retention</h2>
+<p>We retain school and student data for the duration of the active subscription. Upon cancellation, data is retained for 90 days then permanently deleted upon written request.</p>
+
+<h2>7. Your Rights</h2>
+<p>You have the right to access, correct, or delete your data at any time. Contact us at <a href='mailto:buikephilip@gmail.com'>buikephilip@gmail.com</a> with any data requests.</p>
+
+<h2>8. Children's Data</h2>
+<p>EduPing processes student data on behalf of schools. Schools are responsible for obtaining appropriate consent from parents and guardians as required by applicable law.</p>
+
+<h2>9. Changes to This Policy</h2>
+<p>We may update this policy from time to time. Schools will be notified of significant changes via WhatsApp or email.</p>
+
+<h2>10. Contact</h2>
+<p>Philip Buike — EduPing<br>
+Email: <a href='mailto:buikephilip@gmail.com'>buikephilip@gmail.com</a><br>
+Phone: 07015255068<br>
+Website: <a href='https://eduping.org'>eduping.org</a></p>
+
+<footer>© ${new Date().getFullYear()} EduPing. All rights reserved.</footer>
+</body>
+</html>`);
+});
 
 // ── Generate onboarding link ────────────────────────────────
 app.post('/api/super/schools/:id/onboarding-link', requireSuper, async (req, res) => {
@@ -730,6 +874,91 @@ app.post('/api/admin/students/import-photo', requireSchool, async (req, res) => 
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
+
+// ── Student PDF import (AI extracts student data from PDF text) ────
+app.post('/api/admin/students/import-pdf', requireSchool, async (req, res) => {
+  try {
+    const { pdfText } = req.body;
+    if (!pdfText || pdfText.trim().length < 10) return res.status(400).json({ error: 'No PDF text provided.' });
+    const prompt = 'Extract ALL student records from this school register text. Return ONLY a JSON array, no explanation, no markdown: [{"name":"Full Name","class_name":"Class","parent_name":"Parent name if visible","parent_phone":"Phone if visible"}]. Text: ' + pdfText.slice(0, 8000);
+    const result = await callAI('You are a data extraction assistant. Extract student records and return only valid JSON array.', prompt, null);
+    let students = [];
+    try {
+      const clean = result.replace(/```json|```/g, '').trim();
+      const match = clean.match(/\[.*\]/s);
+      students = JSON.parse(match ? match[0] : clean);
+    } catch(e) {
+      return res.status(400).json({ error: 'Could not parse student data from PDF. Try manual entry instead.' });
+    }
+    const sid = req.school.id;
+    let imported = 0, skipped = 0;
+    for (const s of students) {
+      if (!s.name || s.name.length < 2) { skipped++; continue; }
+      try {
+        let phone = s.parent_phone ? String(s.parent_phone).trim() : '';
+        if (phone.startsWith('0')) phone = '+234' + phone.slice(1);
+        else if (phone.startsWith('234')) phone = '+' + phone;
+        await q('INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING',
+          [sid, s.name.trim(), s.class_name||'', s.parent_name||'', phone, 0]);
+        imported++;
+      } catch(e) { skipped++; }
+    }
+    res.json({ ok: true, imported, skipped, total: students.length });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Manual single student add ─────────────────────────────
+app.post('/api/admin/students/add-manual', requireSchool, async (req, res) => {
+  try {
+    const { name, class_name, parent_name, parent_phone } = req.body;
+    if (!name || name.trim().length < 2) return res.status(400).json({ error: 'Student name is required' });
+    const sid = req.school.id;
+    let phone = '';
+    if (parent_phone) {
+      phone = String(parent_phone).trim();
+      if (phone.startsWith('0')) phone = '+234' + phone.slice(1);
+      else if (phone.startsWith('234')) phone = '+' + phone;
+      else if (!phone.startsWith('+')) phone = '+234' + phone;
+    }
+    const existing = await q('SELECT id FROM students WHERE school_id=$1 AND name=$2 AND class_name=$3 LIMIT 1', [sid, name.trim(), class_name||'']);
+    if (existing.rows.length) return res.status(409).json({ error: 'A student with this name and class already exists' });
+    const result = await q(
+      'INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id,name,class_name,parent_name,parent_phone',
+      [sid, name.trim(), class_name||'', parent_name||'', phone, 0]
+    );
+    res.json({ ok: true, student: result.rows[0] });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Bulk text paste import (Name, ParentName, Phone per line) ─
+app.post('/api/admin/students/import-text', requireSchool, async (req, res) => {
+  try {
+    const { text, class_name } = req.body;
+    if (!text || text.trim().length < 2) return res.status(400).json({ error: 'No text provided' });
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 1);
+    const sid = req.school.id;
+    let imported = 0, skipped = 0, errors = [];
+    for (const line of lines) {
+      try {
+        const parts = line.split(/[,\t|]/).map(p => p.trim());
+        const name = parts[0];
+        if (!name || name.length < 2) { skipped++; continue; }
+        const parent_name = parts[1] || '';
+        let parent_phone = parts[2] || '';
+        if (parent_phone.startsWith('0')) parent_phone = '+234' + parent_phone.slice(1);
+        else if (parent_phone.startsWith('234')) parent_phone = '+' + parent_phone;
+        else if (parent_phone && !parent_phone.startsWith('+')) parent_phone = '+234' + parent_phone;
+        const existing = await q('SELECT id FROM students WHERE school_id=$1 AND name=$2 LIMIT 1', [sid, name]);
+        if (existing.rows.length) { skipped++; continue; }
+        await q('INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6)',
+          [sid, name, class_name||'', parent_name, parent_phone, 0]);
+        imported++;
+      } catch(e) { errors.push(line); skipped++; }
+    }
+    res.json({ ok: true, imported, skipped, errors: errors.slice(0, 10) });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Delete student ────────────────────────────────────────
 app.delete('/api/admin/students/:id', requireSchool, async (req, res) => {
   try {
@@ -749,6 +978,289 @@ app.post('/api/admin/broadcast', requireSchool, async (req, res) => {
   const sent = [];
   for (const r of rows) sent.push(await twilioSend(r.phone, req.school.twilio_number || process.env.TWILIO_DEFAULT_FROM, message));
   json(res, { queued: rows.length, twilio_enabled: hasTwilio() });
+});
+
+// ══════════════════════════════════════════════════════════
+// INTERVENTION & LEARNING SUPPORT ENGINE
+// ══════════════════════════════════════════════════════════
+
+async function calculateStudentRisk(student, schoolId) {
+  const today = new Date().toISOString().slice(0, 10);
+  const threeWeeksAgo = new Date(Date.now() - 21 * 86400000).toISOString().slice(0, 10);
+  const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+
+  const [scoresRes, attendRes, hwRes, recentScoresRes] = await Promise.all([
+    q('SELECT subject, score FROM scores WHERE student_id=$1 AND school_id=$2 ORDER BY uploaded_at DESC LIMIT 20', [student.id, schoolId]),
+    q('SELECT status FROM attendance WHERE student_id=$1 AND date >= $2', [student.id, twoWeeksAgo]),
+    q('SELECT id FROM homeworks WHERE school_id=$1 AND class_name=$2 AND created_at >= $3', [schoolId, student.class_name, threeWeeksAgo]),
+    q('SELECT score, uploaded_at FROM scores WHERE student_id=$1 AND school_id=$2 ORDER BY uploaded_at DESC LIMIT 6', [student.id, schoolId])
+  ]);
+
+  const scores = scoresRes.rows;
+  const attendance = attendRes.rows;
+  const homeworksAssigned = hwRes.rows.length;
+
+  // Average score per subject — find weak ones (below 50%)
+  const subjectMap = {};
+  for (const s of scores) {
+    if (!subjectMap[s.subject]) subjectMap[s.subject] = [];
+    subjectMap[s.subject].push(Number(s.score));
+  }
+  const subjectAvgs = Object.entries(subjectMap).map(([subject, vals]) => ({
+    subject,
+    avg: vals.reduce((a, b) => a + b, 0) / vals.length
+  }));
+  const weakSubjects = subjectAvgs.filter(s => s.avg < 50).map(s => s.subject);
+  const avgScore = subjectAvgs.length
+    ? subjectAvgs.reduce((a, b) => a + b.avg, 0) / subjectAvgs.length
+    : null;
+
+  // Attendance rate
+  const totalDays = attendance.length;
+  const presentDays = attendance.filter(a => a.status === 'present').length;
+  const attendancePct = totalDays > 0 ? (presentDays / totalDays) * 100 : 100;
+
+  // Homework completion estimate (rough — based on submissions vs assigned)
+  const hwCompletionPct = homeworksAssigned > 0
+    ? Math.min(100, (scores.length / Math.max(homeworksAssigned, 1)) * 100)
+    : 100;
+
+  // Score trajectory — compare first 3 vs last 3 recent scores
+  let trajectory = 'stable';
+  if (recentScoresRes.rows.length >= 4) {
+    const recent = recentScoresRes.rows.map(r => Number(r.score));
+    const older = recent.slice(Math.floor(recent.length / 2));
+    const newer = recent.slice(0, Math.floor(recent.length / 2));
+    const olderAvg = older.reduce((a, b) => a + b, 0) / older.length;
+    const newerAvg = newer.reduce((a, b) => a + b, 0) / newer.length;
+    if (newerAvg - olderAvg < -8) trajectory = 'declining';
+    else if (newerAvg - olderAvg > 8) trajectory = 'improving';
+  }
+
+  const academicRisk = (avgScore !== null && avgScore < 50) || weakSubjects.length >= 2;
+  const attendanceRisk = attendancePct < 75;
+  const engagementRisk = hwCompletionPct < 50;
+  const trajectoryRisk = trajectory === 'declining';
+
+  const riskCount = [academicRisk, attendanceRisk, engagementRisk, trajectoryRisk].filter(Boolean).length;
+  let riskLevel = 'low';
+  if (riskCount === 1) riskLevel = 'medium';
+  if (riskCount === 2) riskLevel = 'high';
+  if (riskCount >= 3) riskLevel = 'critical';
+
+  return {
+    riskLevel, academicRisk, attendanceRisk, engagementRisk, trajectory,
+    weakSubjects, avgScore: avgScore || 0, attendancePct, hwCompletionPct
+  };
+}
+
+async function generateInterventionPlan(student, school, risk) {
+  if (!hasTextAi()) {
+    return buildFallbackPlan(student, school, risk);
+  }
+
+  const prompt = `You are EduPing, an educational intervention AI for Nigerian schools.
+
+Student Profile:
+- Name: ${student.name}
+- Class: ${student.class_name}
+- School: ${school.name}, ${school.city}
+- Average score: ${Math.round(risk.avgScore)}%
+- Weak subjects: ${risk.weakSubjects.join(', ') || 'none identified'}
+- Attendance rate: ${Math.round(risk.attendancePct)}% (last 2 weeks)
+- Score trend: ${risk.trajectory}
+- Risk areas: ${[risk.academicRisk && 'academic performance', risk.attendanceRisk && 'attendance', risk.engagementRisk && 'homework engagement'].filter(Boolean).join(', ')}
+
+Generate a warm, practical 4-week intervention plan for the parent. The plan must:
+1. Open with an encouraging, non-alarming message about the child
+2. Include a 20-minute daily study routine (realistic for Nigerian households)
+3. Suggest 2-3 FREE online resources (Khan Academy, YouTube — available in Nigeria)
+4. Give specific weekly focus topics for the weak subjects
+5. Include one teacher support action (notify their teacher)
+6. Include one behavioural/motivation tip
+7. End with whether a private tutor is recommended (yes/no and why)
+8. Be formatted for WhatsApp — use emojis, short lines, clear sections
+9. Close with the school name and a check-in date (7 days from now)
+
+Keep tone warm, encouraging, and specific. Written for a Nigerian parent. Not alarming.`;
+
+  try {
+    const client = getTextAiClient();
+    const res = await client.chat.completions.create({
+      model: getTextAiModel(),
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: prompt }]
+    });
+    return res.choices[0].message.content;
+  } catch (e) {
+    console.error('Intervention AI error:', e.message);
+    return buildFallbackPlan(student, school, risk);
+  }
+}
+
+function buildFallbackPlan(student, school, risk) {
+  const subjects = risk.weakSubjects.length ? risk.weakSubjects.join(' and ') : 'some subjects';
+  const followUp = new Date(Date.now() + 7 * 86400000).toLocaleDateString('en-NG', { weekday: 'long', day: 'numeric', month: 'long' });
+  return `📋 *${student.name}'s Study Support Plan*\n\nDear parent, we noticed ${student.name} may benefit from some extra support in ${subjects} this term. Here's a simple plan to help:\n\n📅 *Daily Routine (20 mins)*\n• Morning: Review notes from previous day\n• Evening: 10 practice questions in weak subject\n\n🎥 *Free Resources*\n• Khan Academy (khanacademy.org) — search "${subjects}"\n• YouTube: search "${subjects} for beginners"\n\n👨‍🏫 *Teacher Support*\nWe have notified ${student.name}'s class teacher to give extra attention this week.\n\n💡 *Motivation Tip*\nCelebrate small wins — praise effort, not just scores.\n\n📞 *Need a tutor?*\nReply TUTOR and we'll connect you with a vetted tutor near you.\n\nNext check-in: ${followUp}\n${school.name} 🏫`;
+}
+
+async function runRiskAssessmentForSchool(school) {
+  const students = (await q('SELECT * FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL', [school.id])).rows;
+  let flagged = 0;
+
+  for (const student of students) {
+    try {
+      const risk = await calculateStudentRisk(student, school.id);
+
+      // Save or update risk score
+      await q(`INSERT INTO student_risk_scores
+        (school_id, student_id, risk_level, academic_risk, attendance_risk, engagement_risk, trajectory, weak_subjects, avg_score, attendance_pct, hw_completion_pct, assessed_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,now())
+        ON CONFLICT (student_id) DO UPDATE SET
+          risk_level=$3, academic_risk=$4, attendance_risk=$5, engagement_risk=$6,
+          trajectory=$7, weak_subjects=$8, avg_score=$9, attendance_pct=$10,
+          hw_completion_pct=$11, assessed_at=now()`,
+        [school.id, student.id, risk.riskLevel, risk.academicRisk, risk.attendanceRisk,
+         risk.engagementRisk, risk.trajectory, JSON.stringify(risk.weakSubjects),
+         risk.avgScore, risk.attendancePct, risk.hwCompletionPct]);
+
+      // Only send intervention for medium risk and above
+      if (['medium', 'high', 'critical'].includes(risk.riskLevel)) {
+        // Check if we already sent one in the last 14 days
+        const recent = await q(`SELECT id FROM intervention_plans WHERE student_id=$1 AND created_at > now() - interval '14 days' LIMIT 1`, [student.id]);
+        if (recent.rowCount) continue;
+
+        const planText = await generateInterventionPlan(student, school, risk);
+        const followUpDate = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+
+        const plan = await q(`INSERT INTO intervention_plans
+          (school_id, student_id, risk_level, plan_text, weak_subjects, follow_up_date)
+          VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+          [school.id, student.id, risk.riskLevel, planText, JSON.stringify(risk.weakSubjects), followUpDate]);
+
+        // Send to parent via WhatsApp
+        if (hasTwilio() && student.parent_phone) {
+          await twilioSend(student.parent_phone, school.twilio_number || process.env.TWILIO_DEFAULT_FROM, planText);
+          await q('UPDATE intervention_plans SET sent_to_parent=true WHERE id=$1', [plan.rows[0].id]);
+          flagged++;
+        }
+
+        // ── Notify internal school teachers ──────────────
+        // For each weak subject, find the matching subject teacher in this school
+        if (hasTwilio() && risk.weakSubjects.length) {
+          for (const subject of risk.weakSubjects) {
+            const teacherRes = await q(
+              `SELECT * FROM staff WHERE school_id=$1 AND phone IS NOT NULL
+               AND (LOWER(subject) LIKE $2 OR LOWER(class) = $3)
+               LIMIT 1`,
+              [school.id, `%${subject.toLowerCase()}%`, (student.class_name || '').toLowerCase()]
+            );
+
+            if (teacherRes.rowCount) {
+              const teacher = teacherRes.rows[0];
+              const urgency = risk.riskLevel === 'critical' ? '🚨 URGENT' : '📋';
+              const teacherMsg =
+                `${urgency} *Student Support Needed*\n\n` +
+                `Hi ${teacher.name}, EduPing has flagged *${student.name}* (${student.class_name}) ` +
+                `as needing extra support in *${subject}*.\n\n` +
+                `📊 Current average: ${Math.round(risk.avgScore)}%\n` +
+                `📉 Trend: ${risk.trajectory}\n` +
+                (risk.attendanceRisk ? `⚠️ Also missing classes frequently\n` : '') +
+                `\n🙏 Could you give them 10 minutes of extra attention this week?\n\n` +
+                `The parent has been notified and is on board.\n` +
+                `${school.name} 🏫`;
+
+              await twilioSend(
+                teacher.phone,
+                school.twilio_number || process.env.TWILIO_DEFAULT_FROM,
+                teacherMsg
+              );
+              console.log(`👨‍🏫 Teacher notified: ${teacher.name} about ${student.name} (${subject})`);
+            }
+          }
+        }
+
+        // Also notify the school admin dashboard
+        console.log(`🚨 Intervention sent: ${student.name} (${risk.riskLevel} risk) — ${school.name}`);
+      }
+    } catch (e) {
+      console.error(`Risk assessment failed for student ${student.id}:`, e.message);
+    }
+  }
+  return flagged;
+}
+
+// ── Tutor matching ────────────────────────────────────────
+async function findTutors(subjects, city) {
+  const res = await q(`SELECT * FROM tutors WHERE verified=true AND cities @> $1::jsonb ORDER BY rate_per_hour ASC LIMIT 3`, [JSON.stringify([city])]);
+  if (res.rows.length) return res.rows;
+  // Fallback — any verified tutor matching subject
+  const res2 = await q(`SELECT * FROM tutors WHERE verified=true AND subjects @> $1::jsonb ORDER BY rate_per_hour ASC LIMIT 3`, [JSON.stringify([subjects[0]])]);
+  return res2.rows;
+}
+
+// ── Handle parent replying TUTOR ─────────────────────────
+async function handleTutorRequest(school, student, parentPhone) {
+  const subjects = student.weak_subjects || [];
+  const tutors = await findTutors(subjects, school.city || '');
+  if (!tutors.length) {
+    return `📞 *Tutor Request Received*\n\nThank you! We're building our tutor network in ${school.city}. We'll contact you within 24 hours with available tutors.\n\nFor urgent support call Philip: 07015255068\n\n${school.name} 🏫`;
+  }
+  let msg = `👨‍🏫 *Verified Tutors Near You*\n\nHere are tutors available for ${subjects.join(', ')}:\n\n`;
+  for (const t of tutors) {
+    msg += `*${t.name}*\n📚 ${(t.subjects || []).join(', ')}\n💰 ₦${Number(t.rate_per_hour).toLocaleString()}/hour\n📞 ${t.phone}\n\n`;
+  }
+  msg += `Contact them directly to book a session.\n${school.name} 🏫`;
+  return msg;
+}
+
+// ── API: Get at-risk students for admin dashboard ─────────
+app.get('/api/admin/at-risk', requireSchool, async (req, res) => {
+  const rows = await q(`
+    SELECT s.name, s.class_name, s.parent_phone,
+           r.risk_level, r.avg_score, r.attendance_pct, r.weak_subjects, r.trajectory, r.assessed_at,
+           ip.sent_to_parent, ip.created_at as plan_sent_at, ip.tutor_requested
+    FROM student_risk_scores r
+    JOIN students s ON s.id = r.student_id
+    LEFT JOIN intervention_plans ip ON ip.student_id = r.student_id
+    WHERE r.school_id = $1 AND r.risk_level != 'low'
+    ORDER BY CASE r.risk_level WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END
+  `, [req.school.id]);
+  json(res, rows.rows);
+});
+
+// ── API: Manually trigger risk assessment ─────────────────
+app.post('/api/admin/run-risk-assessment', requireSchool, async (req, res) => {
+  const flagged = await runRiskAssessmentForSchool(req.school);
+  json(res, { ok: true, flagged, message: `Risk assessment complete. ${flagged} parent(s) notified.` });
+});
+
+// ── API: Get intervention plans ───────────────────────────
+app.get('/api/admin/interventions', requireSchool, async (req, res) => {
+  const rows = await q(`
+    SELECT ip.*, s.name student_name, s.class_name, s.parent_phone
+    FROM intervention_plans ip JOIN students s ON s.id = ip.student_id
+    WHERE ip.school_id = $1 ORDER BY ip.created_at DESC LIMIT 50
+  `, [req.school.id]);
+  json(res, rows.rows);
+});
+
+// ── API: Tutor registration ───────────────────────────────
+app.post('/api/tutors/register', async (req, res) => {
+  const { name, phone, email, subjects, cities, rate_per_hour, bio } = req.body;
+  if (!name || !phone) return bad(res, 'Name and phone are required');
+  const r = await q(`INSERT INTO tutors (name,phone,email,subjects,cities,rate_per_hour,bio) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+    [name, phone, email || '', JSON.stringify(subjects || []), JSON.stringify(cities || []), rate_per_hour || 0, bio || '']);
+  json(res, { ok: true, id: r.rows[0].id, message: 'Application received. We will verify and activate your profile within 24 hours.' }, 201);
+});
+
+// ── API: Super admin — verify tutors ─────────────────────
+app.patch('/api/super/tutors/:id/verify', requireSuper, async (req, res) => {
+  await q('UPDATE tutors SET verified=true WHERE id=$1', [req.params.id]);
+  json(res, { ok: true });
+});
+app.get('/api/super/tutors', requireSuper, async (req, res) => {
+  json(res, (await q('SELECT * FROM tutors ORDER BY created_at DESC')).rows);
 });
 
 async function weeklyReports() {
@@ -778,15 +1290,16 @@ cron.schedule('0 16 * * 5', async () => {
 cron.schedule('0 9 * * *', dailyFeeReminders, { timezone: 'Africa/Lagos' });
 cron.schedule('0 17 * * 5', async () => console.log('Award calculation job placeholder ran'), { timezone: 'Africa/Lagos' });
 
-// ── Morning attendance prompt — sent to all teachers at 7:45am ──
-cron.schedule('45 7 * * 1-5', async () => {
-  if (!hasTwilio()) return;
+// ── Weekly risk assessment — every Monday at 6am ──────────
+cron.schedule('0 6 * * 1', async () => {
+  console.log('🔍 Running weekly risk assessment for all schools...');
   const schools = (await q("SELECT * FROM schools WHERE status='active'")).rows;
   for (const school of schools) {
-    const teachers = (await q("SELECT * FROM staff WHERE school_id=$1 AND phone IS NOT NULL AND class IS NOT NULL AND class != ''", [school.id])).rows;
-    for (const teacher of teachers) {
-      const msg = `📋 Good morning ${teacher.name}! Please reply with absent students in ${teacher.class} today.\n\nFormat: "Absent: Emeka, Fatima"\nOr reply "None" if all are present.\n\n${school.name} 🏫`;
-      await twilioSend(teacher.phone, school.twilio_number || process.env.TWILIO_DEFAULT_FROM, msg);
+    try {
+      const flagged = await runRiskAssessmentForSchool(school);
+      console.log(`✅ ${school.name}: ${flagged} students flagged`);
+    } catch (e) {
+      console.error(`Risk assessment failed for ${school.name}:`, e.message);
     }
   }
 }, { timezone: 'Africa/Lagos' });
@@ -797,5 +1310,10 @@ app.use((err, req, res, next) => { console.error(err); res.status(500).json({ er
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required. Add Railway PostgreSQL and expose DATABASE_URL.');
   await migrate();
   await seedIfEmpty();
-  app.listen(PORT, () => console.log(`EduPing multi tenant server running on ${PORT}`));
+  app.listen(PORT, () => {
+    console.log(`EduPing multi tenant server running on ${PORT}`);
+    console.log(`🤖 AI providers: DeepSeek=${Boolean(process.env.DEEPSEEK_API_KEY)} | OpenAI=${Boolean(process.env.OPENAI_API_KEY)} | Anthropic=${Boolean(process.env.ANTHROPIC_API_KEY)}`);
+    console.log(`📱 Twilio=${Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN)} | DB=${Boolean(process.env.DATABASE_URL)}`);
+    if (!process.env.DEEPSEEK_API_KEY && !process.env.OPENAI_API_KEY) console.warn(`⚠️  WARNING: No AI key found — running in demo mode`);
+  });
 })();
