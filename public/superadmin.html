@@ -216,7 +216,7 @@ tr:hover td{background:rgba(255,255,255,.02);}
             <div class="form-group"><label class="form-label">Plan</label><select class="form-select" id="ns-plan" onchange="updatePricing()"><option value="starter">Starter — Small</option><option value="medium">Medium</option><option value="enterprise">Enterprise — Large</option><option value="beta">Beta Partner</option></select></div>
           </div>
           <div class="form-group"><label class="form-label">Twilio Number (for WhatsApp routing)</label><input class="form-input" id="ns-twilio" placeholder="+14155238886"><div style="font-size:11px;color:var(--text-muted);margin-top:4px;">The Twilio number assigned to this school. Parents WhatsApp this number.</div></div>
-          <div class="form-group"><label class="form-label">Temporary Password (optional)</label><input class="form-input" id="ns-password" placeholder="Leave blank — school sets their own via onboarding link"><div style="font-size:11px;color:var(--text-muted);margin-top:4px;">If left blank, the school creates their password during onboarding. You can also set one manually here.</div></div>
+          <div class="form-group"><label class="form-label">Admin Password *</label><input class="form-input" id="ns-password" placeholder="Set a strong password"><div style="font-size:11px;color:var(--text-muted);margin-top:4px;">School admin uses this + their school ID to log in to the dashboard.</div></div>
           <div style="background:rgba(26,122,74,.1);border:1px solid rgba(26,122,74,.3);border-radius:8px;padding:12px;font-size:12px;color:#4ade80;line-height:1.8;">
             ℹ️ <strong>Everything else</strong> (fees, term, grading, events, staff rules, AI tone) is filled by the school through their onboarding link. Just add the school here, then send them the link.
           </div>
@@ -473,7 +473,7 @@ async function addSchool() {
   const name = document.getElementById('ns-name').value;
   const city = document.getElementById('ns-city').value;
   const password = document.getElementById('ns-password').value;
-  if (!name || !city) { showToast('Please fill school name and city ❌'); return; }
+  if (!name || !city || !password) { showToast('Please fill required fields ❌'); return; }
   try {
     const school = await sapi('/api/super/schools', { method:'POST', body:JSON.stringify({
       name, city,
@@ -505,46 +505,20 @@ async function loadRevenue() {
 }
 
 // ── Generate onboarding link ─────────────────────────────
-let currentOnboardingLink = '';
-let currentSchoolName = '';
-
 async function generateLink(id, name) {
   try {
     const res = await sapi('/api/super/schools/' + id + '/onboarding-link', { method:'POST', body:'{}' });
     if (res.link) {
-      currentOnboardingLink = res.link;
-      currentSchoolName = name;
-
-      // Populate modal
-      document.getElementById('modal-school-name').textContent = name;
-      document.getElementById('modal-link-text').textContent = res.link;
-
-      // Build WhatsApp message preview
-      const waMsg = `Good morning! Here is your EduPing setup link for ${name}. Please open it and complete your school configuration — it takes about 15 minutes:\n\n${res.link}\n\nCall me on 07015255068 if you need any help. 🏫`;
-      document.getElementById('modal-wa-preview').textContent = waMsg;
-
-      // Show modal
-      document.getElementById('onboarding-modal').classList.add('show');
-
-      // Also copy to clipboard silently
-      navigator.clipboard.writeText(res.link).catch(() => {});
+      navigator.clipboard.writeText(res.link).then(() => {
+        showToast('📋 Onboarding link copied for ' + name + '!');
+      });
+      // Show in a prompt so they can also see it
+      setTimeout(() => {
+        const msg = 'Onboarding link for ' + name + ':\n\n' + res.link + '\n\nThis link has been copied to your clipboard. Send it to the school owner via WhatsApp.';
+        alert(msg);
+      }, 500);
     }
   } catch(e) { showToast('Error generating link ❌'); }
-}
-
-function copyModalLink() {
-  navigator.clipboard.writeText(currentOnboardingLink).then(() => {
-    const btn = document.getElementById('copy-btn');
-    btn.textContent = '✅ Copied!';
-    btn.style.background = '#065f46';
-    setTimeout(() => { btn.textContent = '📋 Copy'; btn.style.background = 'var(--green)'; }, 2000);
-  });
-}
-
-function sendViaWhatsApp() {
-  const msg = `Good morning! Here is your EduPing setup link for ${currentSchoolName}. Please open it and complete your school configuration — it takes about 15 minutes:\n\n${currentOnboardingLink}\n\nCall me on 07015255068 if you need any help. 🏫`;
-  const encoded = encodeURIComponent(msg);
-  window.open('https://wa.me/?text=' + encoded, '_blank');
 }
 
 // ── Toast ─────────────────────────────────────────────────
@@ -554,48 +528,5 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 3000);
 }
 </script>
-
-<!-- Onboarding Link Modal -->
-<div class="modal-overlay" id="onboarding-modal">
-  <div class="modal" style="width:520px;">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
-      <div style="width:48px;height:48px;background:rgba(26,122,74,.2);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">🔗</div>
-      <div>
-        <div class="modal-title" style="margin-bottom:2px;">Onboarding Link Ready</div>
-        <div style="font-size:13px;color:var(--text-muted);" id="modal-school-name">Loading...</div>
-      </div>
-    </div>
-
-    <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;line-height:1.6;">
-      Send this link to the school owner. They open it, fill in their school details, create their admin password, and they're ready to go. Takes about 15 minutes.
-    </div>
-
-    <!-- Link box -->
-    <div style="background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
-      <div id="modal-link-text" style="font-size:12px;color:var(--green-light);font-family:monospace;flex:1;word-break:break-all;line-height:1.5;"></div>
-      <button onclick="copyModalLink()" style="background:var(--green);border:none;color:white;padding:6px 12px;border-radius:6px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;white-space:nowrap;flex-shrink:0;" id="copy-btn">📋 Copy</button>
-    </div>
-
-    <!-- WhatsApp message preview -->
-    <div style="background:rgba(26,122,74,.08);border:1px solid rgba(26,122,74,.2);border-radius:8px;padding:12px 14px;margin-bottom:16px;">
-      <div style="font-size:11px;color:var(--green-light);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">WhatsApp Message Preview</div>
-      <div id="modal-wa-preview" style="font-size:13px;color:var(--text);line-height:1.6;"></div>
-    </div>
-
-    <!-- Action buttons -->
-    <div style="display:flex;gap:10px;">
-      <button onclick="sendViaWhatsApp()" style="flex:1;background:#25d366;border:none;color:white;padding:12px;border-radius:8px;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
-        💬 Open in WhatsApp
-      </button>
-      <button onclick="document.getElementById('onboarding-modal').classList.remove('show')" style="background:var(--card);border:1px solid var(--border);color:var(--text-muted);padding:12px 20px;border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;cursor:pointer;">
-        Close
-      </button>
-    </div>
-
-    <div style="margin-top:12px;font-size:11px;color:var(--text-muted);text-align:center;">
-      ⚠️ This link gives access to configure the school. Only share with the authorised school admin.
-    </div>
-  </div>
-</div>
 </body>
 </html>

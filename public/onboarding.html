@@ -234,29 +234,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
     </div>
 
     <div class="card">
-      <div class="card-title">🔐 Create Your Admin Login</div>
-      <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.6;">
-        Set a password for your school admin dashboard. Keep it safe — you'll use it every time you log in.
-      </div>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">Admin Password <span class="req">*</span></label>
-          <input class="form-input" id="s-password" type="password" placeholder="Create a strong password">
-          <div class="form-hint">Minimum 6 characters</div>
-          <div class="err-msg" id="err-password">Please create a password (min 6 characters)</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Confirm Password <span class="req">*</span></label>
-          <input class="form-input" id="s-password-confirm" type="password" placeholder="Repeat your password">
-          <div class="err-msg" id="err-password-confirm">Passwords do not match</div>
-        </div>
-      </div>
-      <div style="background:#fef3c7;border-radius:8px;padding:12px;font-size:12px;color:#92400e;margin-top:8px;">
-        ⚠️ Write this password down somewhere safe. If you forget it contact EduPing support on 07015255068.
-      </div>
-    </div>
-
-    <div class="card">
       <div class="card-title">📅 Current Term</div>
       <div class="form-grid" style="margin-bottom:16px;">
         <div class="form-group">
@@ -706,24 +683,12 @@ function validateStep(step) {
     const fees = document.getElementById('s-fees').value.trim();
     const deadline = document.getElementById('s-fee-deadline').value.trim();
     const landmark = document.getElementById('s-landmark').value.trim();
-    const password = document.getElementById('s-password').value;
-    const confirm = document.getElementById('s-password-confirm').value;
     if (!name) { highlight('s-name'); return false; }
     if (!city) { highlight('s-city'); return false; }
     if (!term) { highlight('s-term'); return false; }
     if (!fees) { highlight('s-fees'); return false; }
     if (!deadline) { highlight('s-fee-deadline'); return false; }
     if (!landmark) { highlight('s-landmark'); return false; }
-    if (!password || password.length < 6) {
-      highlight('s-password');
-      document.getElementById('err-password').style.display = 'block';
-      return false;
-    }
-    if (password !== confirm) {
-      highlight('s-password-confirm');
-      document.getElementById('err-password-confirm').style.display = 'block';
-      return false;
-    }
   }
   if (step === 3) {
     const total = getWeightTotal();
@@ -827,7 +792,6 @@ function collectData() {
 
   return {
     school_id: schoolId,
-    admin_password: document.getElementById('s-password').value,
     name: document.getElementById('s-name').value.trim(),
     city: document.getElementById('s-city').value.trim(),
     state: document.getElementById('s-state').value.trim(),
