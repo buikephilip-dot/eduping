@@ -17,6 +17,7 @@ const Sentry = require('@sentry/node');
 const Queue = require('bull');
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
 // Sentry error tracking
@@ -508,6 +509,28 @@ How can I help you today? You can ask about attendance, results, fees, homework,
       }
 
       await q('INSERT INTO messages (school_id,from_number,student_id,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)', [school.id, from, student.rows[0].id, body, reply]);
+
+      // ── Escalation detection — notify admin if AI couldn't answer ──
+      const escalationPhrases = ['pass your question', 'contact the school directly', 'reach out directly', 'speak to the school', 'please contact'];
+      const isEscalation = escalationPhrases.some(p => (reply||'').toLowerCase().includes(p));
+      if (isEscalation && school.admin_phone) {
+        try {
+          const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+          await twilioClient.messages.create({
+            from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+            to: `whatsapp:${school.admin_phone}`,
+            body: `⚠️ *EduPing Alert — Parent needs follow-up*
+
+From: ${from}
+Student: ${student.rows[0].name}
+Message: "${body}"
+
+EduPing could not fully answer this. Please follow up directly.
+
+${school.name} 🏫`
+          });
+        } catch(e) { console.warn('Admin escalation notify failed:', e.message); }
+      }
     } else {
       const first = (await q('SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1', [school.id, from])).rowCount === 0;
       const system = `You are EduPing for ${school.name}. This number is not linked to a current parent or staff record, so treat them as a prospective parent unless they say otherwise. Capture parent name, phone, child name, class applying, and next action. Keep it short. ${first ? 'Start with the first message privacy disclaimer.' : ''}`;
@@ -531,7 +554,30 @@ async function processTeacher(school, staff, body, mediaUrl) {
   if (lower.includes('homework') || lower.includes('assignment')) {
     await q('INSERT INTO homeworks (school_id,assigned_by,class_name,subject,description,due_date) VALUES ($1,$2,$3,$4,$5,current_date + interval \'3 days\')', [school.id, staff.id, staff.class, staff.subject, body]);
     await q('UPDATE staff SET homework_assigned=homework_assigned+1 WHERE id=$1 AND school_id=$2', [staff.id, school.id]);
-    return `✅ Homework saved for ${staff.class || 'your class'}. Parents can now ask EduPing for it. ${school.name} 🏫`;
+
+    // Notify parents of students in this class
+    if (staff.class) {
+      const parents = await q(
+        'SELECT name, parent_phone FROM students WHERE school_id=$1 AND class_name=$2 AND parent_phone IS NOT NULL AND parent_phone != \'\'',
+        [school.id, staff.class]
+      );
+      const fromNumber = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
+      const dueDate = new Date(Date.now() + 3 * 86400000).toLocaleDateString('en-NG', { weekday: 'long', day: 'numeric', month: 'long' });
+      let notified = 0;
+      for (const p of parents.rows) {
+        try {
+          const msg = `📚 *Homework Alert — ${school.name}*\n\nDear parent, ${staff.name} has assigned new ${staff.subject || 'class'} homework to *${staff.class}*:\n\n"${body}"\n\n📅 Due: ${dueDate}\n\nReply to this number to ask EduPing any questions.\n${school.name} 🏫`;
+          await twilioSend(p.parent_phone, fromNumber, msg);
+          notified++;
+          console.log(`📱 Homework notification sent to parent of ${p.name} (${p.parent_phone})`);
+        } catch(e) {
+          console.warn(`⚠️ Failed to notify parent of ${p.name}: ${e.message}`);
+        }
+      }
+      console.log(`📚 Homework saved for ${staff.class}. Notified ${notified}/${parents.rows.length} parents.`);
+    }
+
+    return `✅ Homework saved for ${staff.class || 'your class'}. ${staff.class ? 'Parents have been notified via WhatsApp.' : 'Parents can now ask EduPing for it.'} ${school.name} 🏫`;
   }
   return await callAI(`You are EduPing assisting teacher ${staff.name} at ${school.name}. Help with attendance, scores, homework, behaviour notes, and sign in workflows.`, body || 'Hello', null);
 }
@@ -956,6 +1002,26 @@ app.post('/api/admin/students/import-text', requireSchool, async (req, res) => {
       } catch(e) { errors.push(line); skipped++; }
     }
     res.json({ ok: true, imported, skipped, errors: errors.slice(0, 10) });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Admin send WhatsApp message to parent ────────────────
+app.post('/api/admin/send-message', requireSchool, async (req, res) => {
+  try {
+    const { to, message } = req.body;
+    if (!to || !message) return res.status(400).json({ error: 'to and message are required' });
+    const school = req.school;
+    const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    await twilioClient.messages.create({
+      from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+      to: `whatsapp:${to}`,
+      body: `${message}
+
+— ${school.name} Admin 🏫`
+    });
+    await q('INSERT INTO messages (school_id,from_number,user_message,assistant_reply) VALUES ($1,$2,$3,$4)',
+      [school.id, to, '[Admin reply]', message]);
+    res.json({ ok: true });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
