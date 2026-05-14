@@ -304,6 +304,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         <button class="subnav-btn" onclick="switchSection('documents',this)">📄 AI Training</button>
         <button class="subnav-btn" onclick="switchSection('appraisal',this)">📈 Appraisal</button>
         <button class="subnav-btn" onclick="switchSection('usage',this)">📡 Usage</button>
+        <button class="subnav-btn" onclick="switchSection('chats',this)">💬 Parent Chats</button>
       </div>
 
       <!-- OVERVIEW -->
@@ -596,6 +597,34 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         </div>
       </div>
 
+      <!-- PARENT CHATS -->
+      <div id="section-chats" class="dash-section">
+        <div style="display:grid;grid-template-columns:280px 1fr;gap:16px;height:calc(100vh - 120px);">
+          <div class="dash-card" style="overflow:hidden;display:flex;flex-direction:column;">
+            <div class="dash-card-header">
+              <div class="dash-card-title">💬 Conversations</div>
+              <div id="escalation-badge" style="display:none;background:#ef4444;color:white;border-radius:12px;padding:2px 8px;font-size:11px;font-weight:600;"></div>
+            </div>
+            <div style="padding:10px 12px;border-bottom:1px solid var(--border);">
+              <input class="form-input" id="chat-search" placeholder="Search by name or number..." oninput="filterChats()" style="margin:0;">
+            </div>
+            <div id="chat-list" style="overflow-y:auto;flex:1;"></div>
+          </div>
+          <div class="dash-card" style="overflow:hidden;display:flex;flex-direction:column;">
+            <div class="dash-card-header" id="chat-window-header">
+              <div class="dash-card-title">Select a conversation</div>
+            </div>
+            <div id="chat-window-body" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;">
+              <div style="text-align:center;color:var(--text-muted);font-size:13px;margin-top:40px;">Select a conversation from the left to view messages</div>
+            </div>
+            <div id="chat-reply-bar" style="padding:12px 16px;border-top:1px solid var(--border);display:none;gap:8px;align-items:flex-end;">
+              <input class="form-input" id="admin-reply-input" placeholder="Type a reply to send via WhatsApp..." style="margin:0;flex:1;">
+              <button class="broadcast-btn" style="margin:0;padding:8px 16px;white-space:nowrap;" onclick="sendAdminReply()">Send ↗</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- APPRAISAL REPORT -->
       <div id="section-appraisal" class="dash-section">
         <div class="dash-card full">
@@ -733,6 +762,7 @@ function switchSection(name, btn) {
   if (name === 'documents') loadDocuments();
   if (name === 'appraisal') loadAppraisal();
   if (name === 'usage') loadUsage();
+  if (name === 'chats') loadChats();
 }
 
 // ── Dashboard data ────────────────────────────────────────
@@ -1363,6 +1393,123 @@ async function importFromText() {
   }
   btn.textContent = '➕ Import Students';
   btn.disabled = false;
+}
+
+// ── Parent Chats ──────────────────────────────────────────
+let allMessages = [];
+let activePhone = null;
+
+async function loadChats() {
+  try {
+    const msgs = await api('/api/admin/messages');
+    allMessages = msgs;
+    renderChatList(msgs);
+    // Show escalation badge
+    const escalated = msgs.filter(m => m.assistant_reply && (
+      m.assistant_reply.includes('pass your question') ||
+      m.assistant_reply.includes('contact the school') ||
+      m.assistant_reply.includes('reach out directly')
+    ));
+    const badge = document.getElementById('escalation-badge');
+    if (escalated.length) {
+      const uniquePhones = [...new Set(escalated.map(m => m.from_number))];
+      badge.style.display = 'inline-block';
+      badge.textContent = uniquePhones.length + ' need attention';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch(e) { console.error('loadChats error', e); }
+}
+
+function renderChatList(msgs) {
+  // Group by phone number
+  const grouped = {};
+  for (const m of msgs) {
+    const phone = m.from_number;
+    if (!grouped[phone]) grouped[phone] = [];
+    grouped[phone].push(m);
+  }
+  const phones = Object.keys(grouped).sort((a,b) => {
+    const la = grouped[a][grouped[a].length-1].created_at;
+    const lb = grouped[b][grouped[b].length-1].created_at;
+    return new Date(lb) - new Date(la);
+  });
+  const list = document.getElementById('chat-list');
+  if (!phones.length) { list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No conversations yet</div>'; return; }
+  list.innerHTML = phones.map(phone => {
+    const convMsgs = grouped[phone];
+    const last = convMsgs[convMsgs.length-1];
+    const needsAttention = convMsgs.some(m => m.assistant_reply && (
+      m.assistant_reply.includes('pass your question') ||
+      m.assistant_reply.includes('contact the school') ||
+      m.assistant_reply.includes('reach out directly')
+    ));
+    const isActive = phone === activePhone;
+    const time = last.created_at ? new Date(last.created_at).toLocaleTimeString('en-NG', {hour:'2-digit',minute:'2-digit'}) : '';
+    return '<div onclick="openChat('' + phone + '')" style="padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--border);background:' + (isActive ? 'var(--green-pale)' : 'white') + ';transition:background .15s;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
+      '<span style="font-size:13px;font-weight:600;color:var(--text);">' + phone + '</span>' +
+      '<span style="font-size:11px;color:var(--text-muted);">' + time + '</span>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+      '<span style="font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;">' + (last.user_message||'').slice(0,50) + '</span>' +
+      (needsAttention ? '<span style="background:#fef2f2;color:#ef4444;font-size:10px;font-weight:600;padding:2px 6px;border-radius:8px;flex-shrink:0;">⚠️ Review</span>' : '') +
+      '</div>' +
+      '</div>';
+  }).join('');
+}
+
+function openChat(phone) {
+  activePhone = phone;
+  const msgs = allMessages.filter(m => m.from_number === phone);
+  const header = document.getElementById('chat-window-header');
+  header.innerHTML = '<div class="dash-card-title">💬 ' + phone + '</div><span style="font-size:12px;color:var(--text-muted);">' + msgs.length + ' messages</span>';
+  const body = document.getElementById('chat-window-body');
+  body.innerHTML = msgs.map(m => {
+    const time = m.created_at ? new Date(m.created_at).toLocaleString('en-NG') : '';
+    const needsReview = m.assistant_reply && (
+      m.assistant_reply.includes('pass your question') ||
+      m.assistant_reply.includes('contact the school') ||
+      m.assistant_reply.includes('reach out directly')
+    );
+    return '<div style="display:flex;flex-direction:column;gap:6px;">' +
+      '<div style="align-self:flex-start;max-width:75%;">' +
+      '<div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">Parent · ' + time + '</div>' +
+      '<div style="background:#f0f2f5;padding:10px 12px;border-radius:0 12px 12px 12px;font-size:13px;line-height:1.5;">' + (m.user_message||'') + '</div>' +
+      '</div>' +
+      '<div style="align-self:flex-end;max-width:75%;">' +
+      '<div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;text-align:right;">EduPing AI</div>' +
+      '<div style="background:' + (needsReview ? '#fef2f2;border:1px solid #fecaca' : 'var(--green);color:white') + ';padding:10px 12px;border-radius:12px 0 12px 12px;font-size:13px;line-height:1.5;">' +
+      (m.assistant_reply||'') +
+      (needsReview ? '<div style="margin-top:6px;font-size:11px;color:#ef4444;font-weight:600;">⚠️ Admin follow-up needed</div>' : '') +
+      '</div>' +
+      '</div>' +
+      '</div>';
+  }).join('');
+  body.scrollTop = body.scrollHeight;
+  // Show reply bar
+  const replyBar = document.getElementById('chat-reply-bar');
+  replyBar.style.display = 'flex';
+  // Highlight active in list
+  renderChatList(allMessages);
+}
+
+function filterChats() {
+  const q = document.getElementById('chat-search').value.toLowerCase();
+  const filtered = allMessages.filter(m => m.from_number.includes(q) || (m.user_message||'').toLowerCase().includes(q));
+  renderChatList(filtered);
+}
+
+async function sendAdminReply() {
+  const msg = document.getElementById('admin-reply-input').value.trim();
+  if (!msg || !activePhone) return;
+  try {
+    await api('/api/admin/send-message', { method:'POST', body: JSON.stringify({ to: activePhone, message: msg }) });
+    document.getElementById('admin-reply-input').value = '';
+    showToast('Message sent via WhatsApp ✅');
+    await loadChats();
+    openChat(activePhone);
+  } catch(e) { showToast('Failed to send: ' + e.message); }
 }
 
 // ── Toast ─────────────────────────────────────────────────
