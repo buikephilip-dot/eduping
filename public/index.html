@@ -192,6 +192,86 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
 .loading{color:var(--text-muted);font-size:13px;padding:20px;text-align:center;}
 ::-webkit-scrollbar{width:4px;}
 ::-webkit-scrollbar-thumb{background:#ccc;border-radius:4px;}
+/* STUDENT PROFILE PANEL */
+.profile-panel{position:fixed;top:56px;right:0;bottom:0;width:520px;background:white;z-index:500;box-shadow:-4px 0 24px rgba(0,0,0,.14);transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;overflow:hidden;}
+.profile-panel.open{transform:translateX(0);}
+.profile-panel-header{padding:18px 20px;border-bottom:1px solid #f0f2f5;display:flex;align-items:center;gap:12px;flex-shrink:0;background:var(--green);color:white;}
+.profile-panel-title{font-weight:600;font-size:16px;flex:1;}
+.profile-panel-close{background:rgba(255,255,255,.2);border:none;color:white;width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.profile-panel-body{flex:1;overflow-y:auto;padding:0;}
+.profile-section{padding:16px 20px;border-bottom:1px solid #f0f2f5;}
+.profile-section-title{font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--text-muted);margin-bottom:12px;}
+.profile-stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;}
+.profile-stat{background:var(--gray-bg);border-radius:8px;padding:10px;text-align:center;}
+.profile-stat-val{font-size:20px;font-weight:700;color:var(--green);}
+.profile-stat-label{font-size:10px;color:var(--text-muted);margin-top:2px;}
+.attend-mini{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px;}
+.attend-dot{width:20px;height:20px;border-radius:4px;font-size:9px;display:flex;align-items:center;justify-content:center;color:white;font-weight:600;}
+.attend-dot.present{background:var(--green);}
+.attend-dot.absent{background:var(--danger);}
+.attend-dot.none{background:#e9edef;}
+.overlay-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:499;}
+.overlay-bg.show{display:block;}
+.date-filter-row{display:flex;gap:6px;margin-bottom:12px;}
+.date-filter-btn{background:var(--gray-bg);border:1.5px solid #e9edef;color:var(--text-muted);padding:5px 12px;border-radius:16px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s;font-weight:500;}
+.date-filter-btn.active{background:var(--green);color:white;border-color:var(--green);}
+.absent-class-group{margin-bottom:16px;}
+.absent-class-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);padding:6px 0;border-bottom:2px solid var(--green-pale);margin-bottom:8px;}
+.pill-paid{background:#d1fae5;color:#065f46;}
+.pill-partial{background:#fef3c7;color:#92400e;}
+.pill-unpaid,.pill-owing{background:#fee2e2;color:#991b1b;}
+.pill-norecord{background:#f3f4f6;color:#374151;}
+.class-group-header{background:var(--green-pale);padding:8px 12px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;border-top:2px solid var(--green);margin-top:4px;}
+.class-group-header:first-child{margin-top:0;}
+.class-group-title{font-weight:700;font-size:13px;color:var(--green);}
+.class-group-count{font-size:11px;color:var(--text-muted);}
+.export-btn{background:none;border:1.5px solid #e9edef;color:var(--text-muted);padding:6px 14px;border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s;font-weight:500;}
+.export-btn:hover{border-color:var(--green);color:var(--green);}
+.payment-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;align-items:center;justify-content:center;}
+.payment-modal.show{display:flex;}
+.payment-modal-box{background:white;border-radius:16px;padding:28px;width:400px;box-shadow:0 8px 32px rgba(0,0,0,.2);}
+
+
+/* CHARTS */
+.chart-bar-wrap{display:flex;flex-direction:column;gap:8px;}
+.chart-bar-row{display:flex;align-items:center;gap:10px;font-size:12px;}
+.chart-bar-label{width:100px;color:var(--text-muted);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;}
+.chart-bar-track{flex:1;background:#f0f2f5;border-radius:20px;height:14px;overflow:hidden;}
+.chart-bar-fill{height:100%;border-radius:20px;transition:width .6s ease;background:var(--green);}
+.chart-bar-fill.danger{background:var(--danger);}
+.chart-bar-fill.gold{background:var(--gold);}
+.chart-bar-val{width:36px;font-weight:600;font-size:12px;color:var(--text);}
+
+/* RISK BANNER */
+.risk-banner{background:#fee2e2;border:1.5px solid #fca5a5;border-radius:10px;padding:12px 16px;margin-bottom:16px;display:none;}
+.risk-banner.show{display:block;}
+.risk-banner-title{font-weight:700;font-size:13px;color:#991b1b;margin-bottom:8px;}
+.risk-item{font-size:12px;color:#7f1d1d;padding:3px 0;display:flex;justify-content:space-between;}
+
+/* LEADERBOARD */
+.leaderboard-item{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #f5f5f5;}
+.leaderboard-rank{width:24px;height:24px;border-radius:50%;background:var(--green-pale);color:var(--green);font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.leaderboard-rank.gold{background:#fef3c7;color:#92400e;}
+.leaderboard-rank.silver{background:#f3f4f6;color:#374151;}
+.leaderboard-rank.bronze{background:#fef3c7;color:#b45309;}
+.leaderboard-name{flex:1;font-size:13px;font-weight:500;}
+.leaderboard-class{font-size:11px;color:var(--text-muted);}
+.leaderboard-score{font-weight:700;color:var(--green);font-size:14px;}
+
+/* SEND MESSAGE MODAL */
+.msg-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:700;align-items:center;justify-content:center;}
+.msg-modal.show{display:flex;}
+.msg-modal-box{background:white;border-radius:16px;padding:28px;width:420px;box-shadow:0 8px 32px rgba(0,0,0,.2);}
+
+/* STAFF NOT SIGNED IN */
+.staff-no-signin{background:#fee2e2;color:#991b1b;font-size:11px;padding:2px 7px;border-radius:10px;margin-left:6px;font-weight:600;}
+
+/* ATTENDANCE TREND */
+.trend-chart{display:flex;align-items:flex-end;gap:3px;height:60px;padding:4px 0;}
+.trend-bar{flex:1;background:var(--green);border-radius:3px 3px 0 0;min-height:2px;transition:height .4s ease;position:relative;}
+.trend-bar:hover::after{content:attr(data-tip);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#333;color:white;font-size:10px;padding:2px 6px;border-radius:4px;white-space:nowrap;}
+.trend-labels{display:flex;gap:3px;margin-top:4px;}
+.trend-label{flex:1;font-size:9px;color:var(--text-muted);text-align:center;}
 </style>
 </head>
 <body>
@@ -305,6 +385,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         <button class="subnav-btn" onclick="switchSection('appraisal',this)">📈 Appraisal</button>
         <button class="subnav-btn" onclick="switchSection('usage',this)">📡 Usage</button>
         <button class="subnav-btn" onclick="switchSection('chats',this)">💬 Parent Chats</button>
+        <button class="subnav-btn" onclick="switchSection('fees',this)">💳 Fees</button>
+        <button class="subnav-btn" onclick="switchSection('classsummary',this)">📋 Class View</button>
       </div>
 
       <!-- OVERVIEW -->
@@ -314,6 +396,46 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
           <div class="stat-card blue"><div class="stat-icon">👩‍🏫</div><div class="stat-value" id="stat-staff">—</div><div class="stat-label">Staff members</div></div>
           <div class="stat-card gold"><div class="stat-icon">💰</div><div class="stat-value" id="stat-fees">—</div><div class="stat-label">Fees outstanding</div></div>
           <div class="stat-card red"><div class="stat-icon">📋</div><div class="stat-value" id="stat-admissions">—</div><div class="stat-label">New admissions</div></div>
+        </div>
+        <!-- Risk Alert Banner -->
+        <div class="risk-banner" id="risk-banner">
+          <div class="risk-banner-title">⚠️ At-Risk Students Require Attention</div>
+          <div id="risk-banner-list"></div>
+        </div>
+
+        <!-- Attendance Trend + Leaderboard row -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px;">
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">📈 Attendance Trend (30 days)</div></div>
+            <div class="dash-card-body" style="padding:14px 18px;">
+              <div class="trend-chart" id="attend-trend-chart"></div>
+              <div class="trend-labels" id="attend-trend-labels"></div>
+            </div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">🏆 Top Performing Students</div></div>
+            <div class="dash-card-body" style="padding:14px 18px;" id="leaderboard-body"><div class="loading">Loading...</div></div>
+          </div>
+        </div>
+
+        <!-- Today Absentees Card -->
+        <div class="dash-card full" style="margin-top:18px;" id="absentees-card">
+          <div class="dash-card-header">
+            <div class="dash-card-title">🔴 Today's Absentees</div>
+            <div class="dash-card-action" onclick="loadAbsentees()">Refresh</div>
+          </div>
+          <div class="dash-card-body" id="absentees-body"><div class="loading">Loading...</div></div>
+        </div>
+
+        <!-- Homework History -->
+        <div class="dash-card full" style="margin-top:18px;">
+          <div class="dash-card-header">
+            <div class="dash-card-title">📚 Recent Homework Assignments</div>
+            <select class="form-select" id="hw-class-filter" onchange="filterHomeworkHistory()" style="width:140px;font-size:12px;padding:5px 10px;">
+              <option value="">All classes</option>
+            </select>
+          </div>
+          <div class="dash-card-body" style="padding:0;" id="homework-history-body"><div class="loading" style="padding:20px;">Loading...</div></div>
         </div>
         <div class="dash-grid">
           <div class="dash-card">
@@ -342,6 +464,28 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
       <!-- STAFF AUDIT -->
       <div id="section-staff" class="dash-section">
         <div class="staff-grid" id="staff-grid"><div class="loading">Loading staff...</div></div>
+        <!-- Sign-in log -->
+        <div class="dash-card full" style="margin-top:18px;">
+          <div class="dash-card-header">
+            <div class="dash-card-title">📋 Teacher Sign-in Log</div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input class="search-box" id="signin-search" placeholder="Search teacher..." oninput="filterSigninLog()" style="width:160px;font-size:12px;">
+              <button class="export-btn" onclick="exportSigninLog()">⬇ CSV</button>
+            </div>
+          </div>
+          <div class="dash-card-body" style="padding:14px 18px;">
+            <div class="date-filter-row">
+              <button class="date-filter-btn active" onclick="setSigninPeriod('today',this)">Today</button>
+              <button class="date-filter-btn" onclick="setSigninPeriod('yesterday',this)">Yesterday</button>
+              <button class="date-filter-btn" onclick="setSigninPeriod('week',this)">This Week</button>
+              <button class="date-filter-btn" onclick="setSigninPeriod('custom',this)">Custom</button>
+              <input type="date" id="signin-custom-date" style="display:none;padding:4px 8px;border:1.5px solid #e9edef;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:12px;" onchange="loadSigninLog()">
+            </div>
+            <div id="signin-absent-warning" style="display:none;background:#fee2e2;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#991b1b;"></div>
+            <div id="signin-log-body"><div class="loading">Loading...</div></div>
+          </div>
+        </div>
+
         <div class="dash-card full" style="margin-top:18px;">
           <div class="dash-card-header"><div class="dash-card-title">Add New Staff Member</div></div>
           <div class="dash-card-body">
@@ -689,9 +833,102 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         </div>
       </div>
 
+      <!-- FEES -->
+      <div id="section-fees" class="dash-section">
+        <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:18px;">
+          <div class="stat-card green"><div class="stat-icon">💰</div><div class="stat-value" id="fees-total-expected">—</div><div class="stat-label">Total Expected</div></div>
+          <div class="stat-card blue"><div class="stat-icon">✅</div><div class="stat-value" id="fees-total-collected">—</div><div class="stat-label">Total Collected</div></div>
+          <div class="stat-card red"><div class="stat-icon">⚠️</div><div class="stat-value" id="fees-total-outstanding">—</div><div class="stat-label">Outstanding</div></div>
+        </div>
+        <div class="dash-card full">
+          <div class="dash-card-header">
+            <div class="dash-card-title">Fee Records</div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input class="search-box" id="fees-search" placeholder="🔍 Search student..." oninput="filterFees()" style="width:180px;font-size:13px;">
+              <button class="export-btn" onclick="exportFees()">⬇ CSV</button>
+            </div>
+          </div>
+          <div class="dash-card-body" style="padding:0;" id="fees-table-wrap">
+            <div class="loading">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CLASS SUMMARY -->
+      <div id="section-classsummary" class="dash-section">
+        <div class="dash-card full">
+          <div class="dash-card-header">
+            <div class="dash-card-title">Class Summary</div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <select class="form-select" id="class-select" onchange="loadClassSummary()" style="width:160px;font-size:13px;padding:6px 10px;">
+                <option value="">Select class...</option>
+              </select>
+              <button class="export-btn" onclick="exportClassSummary()">⬇ CSV</button>
+            </div>
+          </div>
+          <div class="dash-card-body" style="padding:0;" id="class-summary-body">
+            <div style="padding:40px;text-align:center;color:var(--text-muted);font-size:13px;">Select a class from the dropdown above</div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
+</div>
+
+<!-- STUDENT PROFILE PANEL -->
+<div class="overlay-bg" id="profile-overlay" onclick="closeProfile()"></div>
+<div class="profile-panel" id="profile-panel">
+  <div class="profile-panel-header">
+    <div>
+      <div class="profile-panel-title" id="profile-name">Student Profile</div>
+      <div style="font-size:12px;opacity:.8;" id="profile-class"></div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="export-btn" style="color:white;border-color:rgba(255,255,255,.4);" onclick="openMsgModal()">💬 Message</button>
+      <button class="export-btn" style="color:white;border-color:rgba(255,255,255,.4);" onclick="printReportCard()">🖨️ Report</button>
+      <button class="profile-panel-close" onclick="closeProfile()">✕</button>
+    </div>
+  </div>
+  <div class="profile-panel-body" id="profile-body">
+    <div class="loading" style="padding:40px;">Loading profile...</div>
+  </div>
+</div>
+
+<!-- PAYMENT MODAL -->
+<div class="payment-modal" id="payment-modal">
+  <div class="payment-modal-box">
+    <div class="modal-title">💳 Record Payment</div>
+    <div class="modal-sub" id="payment-modal-student" style="margin-bottom:16px;"></div>
+    <input type="hidden" id="payment-student-id">
+    <div class="form-group"><label class="form-label">Amount Paid (₦)</label><input class="form-input" id="payment-amount" type="number" placeholder="50000"></div>
+    <div class="form-group"><label class="form-label">Payment Method</label>
+      <select class="form-select" id="payment-method">
+        <option value="cash">Cash</option>
+        <option value="transfer">Bank Transfer</option>
+        <option value="pos">POS</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="payment-date" type="date"></div>
+    <button class="broadcast-btn" onclick="submitPayment()" style="margin-bottom:8px;">✅ Save Payment</button>
+    <button class="modal-btn secondary" onclick="closePaymentModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- SEND MESSAGE MODAL -->
+<div class="msg-modal" id="msg-modal">
+  <div class="msg-modal-box">
+    <div class="modal-title">💬 Send WhatsApp Message</div>
+    <div class="modal-sub" id="msg-modal-recipient" style="margin-bottom:16px;color:var(--text-muted);font-size:13px;"></div>
+    <input type="hidden" id="msg-parent-phone">
+    <div class="form-group">
+      <label class="form-label">Message</label>
+      <textarea class="form-textarea" id="msg-content" placeholder="Type your message to the parent..." style="height:100px;"></textarea>
+    </div>
+    <button class="broadcast-btn" onclick="sendDirectMessage()" style="margin-bottom:8px;">📤 Send via WhatsApp</button>
+    <button class="modal-btn secondary" onclick="closeMsgModal()">Cancel</button>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -755,7 +992,7 @@ function switchSection(name, btn) {
   document.getElementById('section-' + name).classList.add('active');
   if (btn) btn.classList.add('active');
   if (name === 'students') loadStudents();
-  if (name === 'staff') loadStaff();
+  if (name === 'staff') { loadStaff(); loadSigninLog(); }
   if (name === 'admissions') loadAdmissions();
   if (name === 'sickbay') loadSickbay();
   if (name === 'awards') loadAwards();
@@ -763,6 +1000,8 @@ function switchSection(name, btn) {
   if (name === 'appraisal') loadAppraisal();
   if (name === 'usage') loadUsage();
   if (name === 'chats') loadChats();
+  if (name === 'fees') loadFees();
+  if (name === 'classsummary') loadClassOptions();
 }
 
 // ── Dashboard data ────────────────────────────────────────
@@ -776,6 +1015,7 @@ async function loadDashboard() {
     document.getElementById('admit-alert-sub').textContent = d.new_admissions + ' new inquiries pending';
     renderSignins(d.signin);
     loadRecentConvos();
+    loadAbsentees();
   } catch(e) { console.log('Dashboard error:', e); }
 
   // Attendance chart
@@ -805,38 +1045,96 @@ async function loadRecentConvos() {
 
 // ── Students ──────────────────────────────────────────────
 let allStudents = [];
+let collapsedClasses = new Set();
 
 async function loadStudents() {
   try {
-    allStudents = await api('/api/admin/students');
-    renderStudentsTable(allStudents);
+    allStudents = await api('/api/admin/students/list');
+    renderStudentsGrouped(allStudents);
   } catch(e) {
-    document.getElementById('students-tbody').innerHTML = '<tr><td colspan="6" class="loading">Error loading students</td></tr>';
+    try {
+      allStudents = await api('/api/admin/students');
+      renderStudentsGrouped(allStudents);
+    } catch(e2) {
+      document.getElementById('students-grouped-list').innerHTML = '<div class="loading" style="padding:20px;">Error loading students</div>';
+    }
   }
 }
 
-function renderStudentsTable(rows) {
+function renderStudentsGrouped(rows) {
   const count = document.getElementById('student-count');
   if (count) count.textContent = '(' + rows.length + ' students)';
-  document.getElementById('students-tbody').innerHTML = rows.length
-    ? rows.map(r => `<tr>
-        <td><strong>${r.name}</strong></td>
-        <td>${r.class_name||'—'}</td>
-        <td>${r.parent_name||'—'}</td>
-        <td>${r.parent_phone||'—'}</td>
-        <td>${r.weekly_performance_score||0}%</td>
-        <td><button class="action-btn" onclick="removeStudent('${r.id}','${r.name}')">Remove</button></td>
-      </tr>`).join('')
-    : '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">No students yet — import from photo, Excel, or add manually above</td></tr>';
+  const el = document.getElementById('students-grouped-list');
+  if (!rows.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:13px;">No students yet</div>';
+    return;
+  }
+  // Group by class
+  const grouped = {};
+  for (const r of rows) {
+    const cls = r.class_name || 'No Class';
+    if (!grouped[cls]) grouped[cls] = [];
+    grouped[cls].push(r);
+  }
+  const classes = Object.keys(grouped).sort();
+  let html = '<table class="data-table" style="width:100%"><thead><tr><th>Student</th><th>Parent</th><th>Parent Phone</th><th>Fee Status</th><th>Perf.</th><th>Action</th></tr></thead><tbody>';
+  for (const cls of classes) {
+    const students = grouped[cls];
+    const isCollapsed = collapsedClasses.has(cls);
+    html += '<tr class="class-group-header" onclick="toggleClassGroup(this,'' + cls + '')">' +
+      '<td colspan="6" style="padding:8px 12px;background:var(--green-pale);border-top:2px solid var(--green);">' +
+      '<span class="class-group-title">' + cls + '</span>' +
+      '<span class="class-group-count" style="margin-left:10px;">' + students.length + ' students</span>' +
+      '<span style="float:right;font-size:12px;color:var(--text-muted);">' + (isCollapsed ? '▶' : '▼') + '</span></td></tr>';
+    if (!isCollapsed) {
+      html += students.map(r => {
+        const feeStatus = r.fee_status || 'no record';
+        const feePill = feeStatus === 'paid' ? 'pill-green' : feeStatus === 'partial' ? 'pill-gold' : feeStatus === 'unpaid' ? 'pill-red' : 'pill-gray';
+        return '<tr data-class="' + cls + '">' +
+          '<td><strong style="cursor:pointer;color:var(--green);" onclick="openProfile('' + r.id + '')">' + r.name + '</strong></td>' +
+          '<td>' + (r.parent_name||'—') + '</td>' +
+          '<td>' + (r.parent_phone||'—') + '</td>' +
+          '<td><span class="pill ' + feePill + '">' + feeStatus + '</span></td>' +
+          '<td>' + (r.weekly_performance_score||0) + '%</td>' +
+          '<td style="display:flex;gap:6px;">' +
+          '<button class="action-btn" onclick="openProfile('' + r.id + '')">View</button>' +
+          '<button class="action-btn" style="color:var(--danger);border-color:var(--danger);" onclick="removeStudent('' + r.id + '','' + r.name + '')">Remove</button>' +
+          '</td></tr>';
+      }).join('');
+    }
+  }
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+function toggleClassGroup(row, cls) {
+  if (collapsedClasses.has(cls)) collapsedClasses.delete(cls);
+  else collapsedClasses.add(cls);
+  renderStudentsGrouped(allStudents.filter(s => {
+    const q = document.getElementById('students-search') ? document.getElementById('students-search').value.toLowerCase() : '';
+    if (!q) return true;
+    return s.name.toLowerCase().includes(q) || (s.class_name||'').toLowerCase().includes(q) || (s.parent_name||'').toLowerCase().includes(q) || (s.parent_phone||'').includes(q);
+  }));
 }
 
 function filterStudents(query) {
   const filtered = allStudents.filter(s =>
     s.name.toLowerCase().includes(query.toLowerCase()) ||
     (s.class_name||'').toLowerCase().includes(query.toLowerCase()) ||
-    (s.parent_name||'').toLowerCase().includes(query.toLowerCase())
+    (s.parent_name||'').toLowerCase().includes(query.toLowerCase()) ||
+    (s.parent_phone||'').includes(query)
   );
-  renderStudentsTable(filtered);
+  renderStudentsGrouped(filtered);
+}
+
+function exportStudents() {
+  const rows = allStudents;
+  if (!rows.length) { showToast('No students to export'); return; }
+  const csv = 'Name,Class,Parent Name,Parent Phone,Performance Score
+' +
+    rows.map(r => [r.name, r.class_name||'', r.parent_name||'', r.parent_phone||'', r.weekly_performance_score||0].map(v => '"'+String(v).replace(/"/g,'""')+'"').join(',')).join('
+');
+  downloadCSV(csv, 'students_export.csv');
 }
 
 function toggleManualForm() {
@@ -1029,28 +1327,38 @@ function downloadTemplate() {
 }
 
 // ── Staff ─────────────────────────────────────────────────
+let todaySignedIn = new Set();
+
 async function loadStaff() {
   const grid = document.getElementById('staff-grid');
   try {
     const rows = await api('/api/admin/staff');
+    window._lastStaffRows = rows;
     if (!rows.length) { grid.innerHTML = '<div class="loading">No staff added yet</div>'; return; }
-    grid.innerHTML = rows.map(s => {
-      const initials = s.name.split(' ').slice(1).map(n => n[0]).join('').slice(0,2) || s.name[0];
-      const color = colors[Math.abs(s.name.charCodeAt(0)) % colors.length];
-      return `<div class="staff-card">
-        <div class="staff-avatar" style="background:${color}">${initials}</div>
-        <div class="staff-name">${s.name}</div>
-        <div class="staff-role">${s.role}${s.subject?' — '+s.subject:''}</div>
-        <div class="staff-metrics">
-          <div class="staff-metric"><div class="staff-metric-value">${s.attendance_submissions||0}</div><div class="staff-metric-label">Attendance updates</div></div>
-          <div class="staff-metric"><div class="staff-metric-value">${s.scores_uploaded||0}</div><div class="staff-metric-label">Scores uploaded</div></div>
-          <div class="staff-metric"><div class="staff-metric-value">${s.homework_assigned||0}</div><div class="staff-metric-label">Homeworks set</div></div>
-          <div class="staff-metric"><div class="staff-metric-value">${s.absences||0}</div><div class="staff-metric-label">Absences</div></div>
-        </div>
-        <div style="margin-top:8px;font-size:12px;color:var(--text-muted);">🏆 ${s.staff_of_week_count||0}x Staff of Week</div>
-      </div>`;
-    }).join('');
+    renderStaffGrid(rows);
   } catch(e) { grid.innerHTML = '<div class="loading">Error loading staff</div>'; }
+}
+
+function renderStaffGrid(rows) {
+  const grid = document.getElementById('staff-grid');
+  if (!grid) return;
+  grid.innerHTML = rows.map(s => {
+    const initials = s.name.split(' ').slice(1).map(n => n[0]).join('').slice(0,2) || s.name[0];
+    const color = colors[Math.abs(s.name.charCodeAt(0)) % colors.length];
+    const notSignedIn = todaySignedIn.size > 0 && !todaySignedIn.has(s.name);
+    return `<div class="staff-card" style="${notSignedIn ? 'border:2px solid var(--danger);' : ''}">
+      <div class="staff-avatar" style="background:${color}">${initials}</div>
+      <div class="staff-name">${s.name}${notSignedIn ? '<span class="staff-no-signin">Not signed in</span>' : ''}</div>
+      <div class="staff-role">${s.role}${s.subject?' — '+s.subject:''}</div>
+      <div class="staff-metrics">
+        <div class="staff-metric"><div class="staff-metric-value">${s.attendance_submissions||0}</div><div class="staff-metric-label">Attendance</div></div>
+        <div class="staff-metric"><div class="staff-metric-value">${s.scores_uploaded||0}</div><div class="staff-metric-label">Scores</div></div>
+        <div class="staff-metric"><div class="staff-metric-value">${s.homework_assigned||0}</div><div class="staff-metric-label">Homeworks</div></div>
+        <div class="staff-metric"><div class="staff-metric-value">${s.absences||0}</div><div class="staff-metric-label">Absences</div></div>
+      </div>
+      <div style="margin-top:8px;font-size:12px;color:var(--text-muted);">🏆 ${s.staff_of_week_count||0}x Staff of Week</div>
+    </div>`;
+  }).join('');
 }
 
 async function addStaff() {
@@ -1511,6 +1819,638 @@ async function sendAdminReply() {
     openChat(activePhone);
   } catch(e) { showToast('Failed to send: ' + e.message); }
 }
+
+
+// ── CSV Helper ────────────────────────────────────────────
+function downloadCSV(csv, filename) {
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  a.click(); URL.revokeObjectURL(url);
+  showToast('📥 ' + filename + ' downloaded!');
+}
+
+// ── Absentees Today ───────────────────────────────────────
+async function loadAbsentees() {
+  const el = document.getElementById('absentees-body');
+  if (!el) return;
+  try {
+    const rows = await api('/api/admin/absentees/today');
+    if (!rows.length) {
+      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--green);font-size:13px;">✅ No absences recorded today!</div>';
+      return;
+    }
+    // Group by class
+    const grouped = {};
+    for (const r of rows) {
+      const cls = r.class_name || 'Unknown';
+      if (!grouped[cls]) grouped[cls] = [];
+      grouped[cls].push(r);
+    }
+    let html = '';
+    for (const [cls, students] of Object.entries(grouped)) {
+      html += '<div class="absent-class-group">' +
+        '<div class="absent-class-label">' + cls + ' — ' + students.length + ' absent</div>' +
+        '<table class="data-table"><thead><tr><th>Student</th><th>Class</th><th>Parent Phone</th><th>Marked By</th></tr></thead><tbody>' +
+        students.map(s => '<tr><td><strong>' + s.name + '</strong></td><td>' + (s.class_name||'—') + '</td><td>' + (s.parent_phone||'—') + '</td><td>' + (s.marked_by||'System') + '</td></tr>').join('') +
+        '</tbody></table></div>';
+    }
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = '<div class="loading">Could not load absentees</div>'; }
+}
+
+// ── Student Profile Panel ─────────────────────────────────
+async function openProfile(studentId) {
+  document.getElementById('profile-panel').classList.add('open');
+  document.getElementById('profile-overlay').classList.add('show');
+  document.getElementById('profile-name').textContent = 'Loading...';
+  document.getElementById('profile-class').textContent = '';
+  document.getElementById('profile-body').innerHTML = '<div class="loading" style="padding:40px;">Loading profile...</div>';
+  try {
+    const data = await api('/api/admin/students/' + studentId + '/profile');
+    const s = data.student;
+    document.getElementById('profile-name').textContent = s.name;
+    document.getElementById('profile-class').textContent = (s.class_name||'') + ' — ' + (s.parent_name||'');
+    
+    const fee = data.fees && data.fees.length ? data.fees[0] : null;
+    const feeStatus = fee ? fee.status : 'no record';
+    const feePill = feeStatus === 'paid' ? 'pill-green' : feeStatus === 'partial' ? 'pill-gold' : 'pill-red';
+    
+    // Attendance dots (last 10 days)
+    const attDots = (data.attendance || []).slice(0, 10).map(a =>
+      '<div class="attend-dot ' + a.status + '" title="' + a.date + '">' + (a.status === 'present' ? 'P' : 'A') + '</div>'
+    ).join('');
+
+    // Scores by subject
+    const subjects = {};
+    (data.scores || []).forEach(sc => {
+      if (!subjects[sc.subject]) subjects[sc.subject] = [];
+      subjects[sc.subject].push(Number(sc.score));
+    });
+    const scoresHtml = Object.entries(subjects).map(([subj, vals]) => {
+      const avg = Math.round(vals.reduce((a,b) => a+b,0)/vals.length);
+      const color = avg >= 70 ? 'var(--green)' : avg >= 50 ? 'var(--info)' : 'var(--danger)';
+      return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f5f5f5;font-size:13px;">' +
+        '<span>' + subj + '</span><strong style="color:' + color + ';">' + avg + '%</strong></div>';
+    }).join('') || '<div class="loading">No scores recorded</div>';
+
+    const risk = data.risk;
+    const riskHtml = risk ? '<div style="background:' + (risk.risk_level === 'critical' ? '#fee2e2' : risk.risk_level === 'high' ? '#fef3c7' : '#f0fdf4') + ';border-radius:8px;padding:12px;font-size:13px;margin-top:8px;">' +
+      '<strong>Risk Level: ' + risk.risk_level.toUpperCase() + '</strong>' +
+      (risk.plan_text ? '<div style="margin-top:8px;font-size:12px;color:var(--text-muted);white-space:pre-wrap;">' + risk.plan_text.slice(0,300) + '...</div>' : '') +
+      '</div>' : '<div style="color:var(--text-muted);font-size:13px;">No risk assessment yet</div>';
+
+    document.getElementById('profile-body').innerHTML =
+      '<div class="profile-section">' +
+        '<div class="profile-section-title">Overview</div>' +
+        '<div class="profile-stat-row">' +
+          '<div class="profile-stat"><div class="profile-stat-val">' + (data.attendance_pct !== null ? data.attendance_pct + '%' : '—') + '</div><div class="profile-stat-label">Attendance</div></div>' +
+          '<div class="profile-stat"><div class="profile-stat-val">' + (data.hw_completion !== null ? data.hw_completion + '%' : '—') + '</div><div class="profile-stat-label">HW Completion</div></div>' +
+          '<div class="profile-stat"><div class="profile-stat-val"><span class="pill ' + feePill + '">' + feeStatus + '</span></div><div class="profile-stat-label">Fee Status</div></div>' +
+        '</div>' +
+        '<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Last 10 school days attendance:</div>' +
+        '<div class="attend-mini">' + (attDots || '<div class="loading" style="font-size:12px;">No attendance data</div>') + '</div>' +
+      '</div>' +
+      '<div class="profile-section">' +
+        '<div class="profile-section-title">Contact Info</div>' +
+        '<div style="font-size:13px;display:flex;flex-direction:column;gap:8px;">' +
+          '<div><strong>Parent:</strong> ' + (s.parent_name||'—') + '</div>' +
+          '<div style="display:flex;align-items:center;gap:8px;"><strong>Phone:</strong> <span id="profile-phone">' + (s.parent_phone||'—') + '</span>' +
+          '<button class="action-btn" onclick="editParentPhone('' + s.id + '')">Edit</button></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="profile-section">' +
+        '<div class="profile-section-title">Score History</div>' +
+        scoresHtml +
+      '</div>' +
+      '<div class="profile-section">' +
+        '<div class="profile-section-title">Fees</div>' +
+        (fee ? '<div style="font-size:13px;display:flex;flex-direction:column;gap:6px;">' +
+          '<div><strong>Amount Due:</strong> ₦' + Number(fee.amount_due).toLocaleString() + '</div>' +
+          '<div><strong>Amount Paid:</strong> ₦' + Number(fee.amount_paid).toLocaleString() + '</div>' +
+          '<div><strong>Balance:</strong> ₦' + (Number(fee.amount_due) - Number(fee.amount_paid)).toLocaleString() + '</div>' +
+          '<button class="broadcast-btn" style="margin-top:8px;" onclick="openPaymentModal('' + s.id + '','' + s.name + '')">💳 Record Payment</button>' +
+          '</div>' : '<div style="font-size:13px;color:var(--text-muted);">No fee record. <button class="action-btn" onclick="openPaymentModal('' + s.id + '','' + s.name + '')">Add payment</button></div>') +
+      '</div>' +
+      '<div class="profile-section">' +
+        '<div class="profile-section-title">Risk & Intervention</div>' +
+        riskHtml +
+      '</div>';
+  } catch(e) {
+    document.getElementById('profile-body').innerHTML = '<div class="loading" style="padding:40px;">Could not load profile: ' + e.message + '</div>';
+  }
+}
+
+function closeProfile() {
+  document.getElementById('profile-panel').classList.remove('open');
+  document.getElementById('profile-overlay').classList.remove('show');
+}
+
+async function editParentPhone(studentId) {
+  const phone = prompt('Enter new parent WhatsApp number:');
+  if (!phone) return;
+  try {
+    await api('/api/admin/students/' + studentId, { method: 'PATCH', body: JSON.stringify({ parent_phone: phone }) });
+    showToast('✅ Parent phone updated');
+    openProfile(studentId);
+    loadStudents();
+  } catch(e) { showToast('Failed to update ❌'); }
+}
+
+// ── Sign-in Log ───────────────────────────────────────────
+let allSigninLogs = [];
+let signinPeriod = 'today';
+
+async function loadSigninLog() {
+  const body = document.getElementById('signin-log-body');
+  if (!body) return;
+  body.innerHTML = '<div class="loading">Loading...</div>';
+  try {
+    let url = '/api/admin/signin-log?period=' + signinPeriod;
+    const customDate = document.getElementById('signin-custom-date');
+    if (signinPeriod === 'custom' && customDate && customDate.value) url = '/api/admin/signin-log?date=' + customDate.value;
+    allSigninLogs = await api(url);
+    renderSigninLog(allSigninLogs);
+  } catch(e) { body.innerHTML = '<div class="loading">Error loading sign-in log</div>'; }
+}
+
+function renderSigninLog(rows) {
+  const body = document.getElementById('signin-log-body');
+  if (!rows.length) {
+    body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">No sign-in records found</div>';
+    return;
+  }
+  // Track who signed in today for staff list highlighting
+  if (signinPeriod === 'today') {
+    todaySignedIn = new Set(rows.map(r => r.staff_name).filter(Boolean));
+    if (window._lastStaffRows) renderStaffGrid(window._lastStaffRows);
+  }
+  const warning = document.getElementById('signin-absent-warning');
+  if (signinPeriod === 'today' && warning) {
+    const signedInNames = new Set(rows.map(r => r.staff_name).filter(Boolean));
+    if (signedInNames.size > 0) {
+      warning.style.display = 'block';
+      warning.textContent = 'Signed in today: ' + [...signedInNames].join(', ');
+    } else { warning.style.display = 'none'; }
+  } else if (warning) { warning.style.display = 'none'; }
+
+  body.innerHTML = '<table class="data-table"><thead><tr><th>Teacher</th><th>Class</th><th>Date</th><th>Time</th><th>Photo Verified</th><th>Status</th></tr></thead><tbody>' +
+    rows.map(r => '<tr>' +
+      '<td><strong>' + (r.staff_name||'—') + '</strong></td>' +
+      '<td>' + (r.class||'—') + '</td>' +
+      '<td>' + (r.date ? new Date(r.date).toLocaleDateString('en-NG') : '—') + '</td>' +
+      '<td>' + (r.time||'—') + '</td>' +
+      '<td>' + (r.photo_verified ? '✅ Yes' : '⬜ No') + '</td>' +
+      '<td><span class="pill ' + (r.status === 'submitted' ? 'pill-green' : 'pill-gold') + '">' + (r.status||'—') + '</span></td>' +
+    '</tr>').join('') +
+    '</tbody></table>';
+}
+
+function setSigninPeriod(period, btn) {
+  signinPeriod = period;
+  document.querySelectorAll('.date-filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const customInput = document.getElementById('signin-custom-date');
+  if (customInput) customInput.style.display = period === 'custom' ? 'inline-block' : 'none';
+  if (period !== 'custom') loadSigninLog();
+}
+
+function filterSigninLog() {
+  const q = (document.getElementById('signin-search')?.value || '').toLowerCase();
+  const filtered = allSigninLogs.filter(r => (r.staff_name||'').toLowerCase().includes(q) || (r.class||'').toLowerCase().includes(q));
+  renderSigninLog(filtered);
+}
+
+function exportSigninLog() {
+  if (!allSigninLogs.length) { showToast('No data to export'); return; }
+  const csv = 'Teacher,Class,Date,Time,Photo Verified,Status
+' +
+    allSigninLogs.map(r => [r.staff_name||'', r.class||'', r.date||'', r.time||'', r.photo_verified ? 'Yes' : 'No', r.status||''].map(v => '"'+v+'"').join(',')).join('
+');
+  downloadCSV(csv, 'signin_log_export.csv');
+}
+
+// ── Fees ──────────────────────────────────────────────────
+let allFees = [];
+
+async function loadFees() {
+  const wrap = document.getElementById('fees-table-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="loading" style="padding:20px;">Loading...</div>';
+  try {
+    const data = await api('/api/admin/fees/summary');
+    allFees = data.students || [];
+    document.getElementById('fees-total-expected').textContent = '₦' + Number(data.totals?.expected||0).toLocaleString();
+    document.getElementById('fees-total-collected').textContent = '₦' + Number(data.totals?.collected||0).toLocaleString();
+    document.getElementById('fees-total-outstanding').textContent = '₦' + Number(data.totals?.outstanding||0).toLocaleString();
+    renderFeesTable(allFees);
+  } catch(e) { wrap.innerHTML = '<div class="loading">Error loading fees</div>'; }
+}
+
+function renderFeesTable(rows) {
+  const wrap = document.getElementById('fees-table-wrap');
+  if (!rows.length) { wrap.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No fee records found</div>'; return; }
+  wrap.innerHTML = '<table class="data-table"><thead><tr><th>Student</th><th>Class</th><th>Amount Due</th><th>Amount Paid</th><th>Balance</th><th>Status</th><th>Action</th></tr></thead><tbody>' +
+    rows.map(r => {
+      const status = r.fee_status || 'no record';
+      const pill = status === 'paid' ? 'pill-green' : status === 'partial' ? 'pill-gold' : status === 'unpaid' ? 'pill-red' : 'pill-gray';
+      return '<tr>' +
+        '<td><strong>' + r.name + '</strong></td>' +
+        '<td>' + (r.class_name||'—') + '</td>' +
+        '<td>₦' + Number(r.amount_due||0).toLocaleString() + '</td>' +
+        '<td>₦' + Number(r.amount_paid||0).toLocaleString() + '</td>' +
+        '<td>₦' + Number(r.balance||0).toLocaleString() + '</td>' +
+        '<td><span class="pill ' + pill + '">' + status + '</span></td>' +
+        '<td><button class="action-btn" onclick="openPaymentModal('' + r.id + '','' + r.name + '')">💳 Record</button></td>' +
+      '</tr>';
+    }).join('') + '</tbody></table>';
+}
+
+function filterFees() {
+  const q = (document.getElementById('fees-search')?.value || '').toLowerCase();
+  const filtered = allFees.filter(r => r.name.toLowerCase().includes(q) || (r.class_name||'').toLowerCase().includes(q));
+  renderFeesTable(filtered);
+}
+
+function exportFees() {
+  if (!allFees.length) { showToast('No data to export'); return; }
+  const csv = 'Student,Class,Amount Due,Amount Paid,Balance,Status
+' +
+    allFees.map(r => [r.name, r.class_name||'', r.amount_due||0, r.amount_paid||0, r.balance||0, r.fee_status||''].map(v => '"'+v+'"').join(',')).join('
+');
+  downloadCSV(csv, 'fees_export.csv');
+}
+
+// ── Payment Modal ─────────────────────────────────────────
+function openPaymentModal(studentId, studentName) {
+  document.getElementById('payment-student-id').value = studentId;
+  document.getElementById('payment-modal-student').textContent = 'Recording payment for: ' + studentName;
+  document.getElementById('payment-amount').value = '';
+  document.getElementById('payment-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('payment-modal').classList.add('show');
+}
+
+function closePaymentModal() {
+  document.getElementById('payment-modal').classList.remove('show');
+}
+
+async function submitPayment() {
+  const student_id = document.getElementById('payment-student-id').value;
+  const amount = document.getElementById('payment-amount').value;
+  const payment_method = document.getElementById('payment-method').value;
+  const payment_date = document.getElementById('payment-date').value;
+  if (!amount || Number(amount) <= 0) { showToast('Enter a valid amount ❌'); return; }
+  try {
+    await api('/api/admin/fees/payment', { method: 'POST', body: JSON.stringify({ student_id, amount: Number(amount), payment_method, payment_date }) });
+    showToast('✅ Payment recorded!');
+    closePaymentModal();
+    loadFees();
+    // Reload students to update fee status column
+    if (allStudents.length) loadStudents();
+  } catch(e) { showToast('Failed to save payment ❌'); }
+}
+
+// ── Class Summary ─────────────────────────────────────────
+let classSummaryData = [];
+
+async function loadClassOptions() {
+  const select = document.getElementById('class-select');
+  if (!select) return;
+  try {
+    const classes = await api('/api/admin/classes');
+    select.innerHTML = '<option value="">Select class...</option>' + classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
+  } catch(e) { console.log('Could not load classes'); }
+}
+
+async function loadClassSummary() {
+  const cls = document.getElementById('class-select')?.value;
+  const body = document.getElementById('class-summary-body');
+  if (!cls || !body) return;
+  body.innerHTML = '<div class="loading" style="padding:20px;">Loading class data...</div>';
+  try {
+    const data = await api('/api/admin/class-summary/' + encodeURIComponent(cls));
+    classSummaryData = data.students || [];
+    if (!classSummaryData.length) { body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">No students in this class</div>'; return; }
+    body.innerHTML = '<table class="data-table"><thead><tr><th>Student</th><th>Attendance %</th><th>Avg Score</th><th>HW Completion</th><th>Fee Status</th></tr></thead><tbody>' +
+      classSummaryData.map(r => {
+        const feeStatus = r.fee_status || 'no record';
+        const feePill = feeStatus === 'paid' ? 'pill-green' : feeStatus === 'partial' ? 'pill-gold' : 'pill-red';
+        return '<tr>' +
+          '<td><strong style="cursor:pointer;color:var(--green);" onclick="openProfile('' + r.id + '')">' + r.name + '</strong></td>' +
+          '<td>' + (r.attendance_pct !== null ? r.attendance_pct + '%' : '—') + '</td>' +
+          '<td>' + (r.avg_score !== null ? r.avg_score + '%' : '—') + '</td>' +
+          '<td>' + (r.hw_completion !== null ? r.hw_completion + '%' : '—') + '</td>' +
+          '<td><span class="pill ' + feePill + '">' + feeStatus + '</span></td>' +
+        '</tr>';
+      }).join('') + '</tbody></table>';
+  } catch(e) { body.innerHTML = '<div class="loading">Error loading class data: ' + e.message + '</div>'; }
+}
+
+function exportClassSummary() {
+  if (!classSummaryData.length) { showToast('Select a class first'); return; }
+  const csv = 'Student,Class,Attendance %,Average Score,HW Completion,Fee Status
+' +
+    classSummaryData.map(r => [r.name, r.class_name||'', r.attendance_pct??'', r.avg_score??'', r.hw_completion??'', r.fee_status||''].map(v => '"'+v+'"').join(',')).join('
+');
+  downloadCSV(csv, 'class_summary_export.csv');
+}
+
+// ── Init date for payment modal ───────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const d = document.getElementById('payment-date');
+  if (d) d.value = new Date().toISOString().slice(0,10);
+});
+
+
+// ── Attendance Trend Chart ────────────────────────────────
+async function loadAttendanceTrend() {
+  const chart = document.getElementById('attend-trend-chart');
+  const labels = document.getElementById('attend-trend-labels');
+  if (!chart) return;
+  try {
+    const rows = await api('/api/admin/attendance?from=' + new Date(Date.now() - 29*86400000).toISOString().slice(0,10));
+    const days = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(Date.now() - i*86400000);
+      days.push({ date: d.toISOString().slice(0,10), label: d.toLocaleDateString('en-NG',{day:'numeric',month:'short'}) });
+    }
+    const byDate = {};
+    (rows || []).forEach(r => {
+      if (!byDate[r.date]) byDate[r.date] = { present: 0, total: 0 };
+      byDate[r.date].total++;
+      if (r.status === 'present') byDate[r.date].present++;
+    });
+    const maxTotal = Math.max(...days.map(d => (byDate[d.date]?.total || 0)), 1);
+    chart.innerHTML = days.map(d => {
+      const data = byDate[d.date];
+      const pct = data ? Math.round((data.present/data.total)*100) : 0;
+      const height = data ? Math.max(4, Math.round((data.present/maxTotal)*56)) : 2;
+      const color = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--gold)' : 'var(--danger)';
+      return '<div class="trend-bar" style="height:' + height + 'px;background:' + color + ';" data-tip="' + d.label + ': ' + pct + '%"></div>';
+    }).join('');
+    labels.innerHTML = days.map((d, i) => '<div class="trend-label">' + (i % 5 === 0 ? d.label : '') + '</div>').join('');
+  } catch(e) {
+    if (chart) chart.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:10px;">No attendance data yet</div>';
+  }
+}
+
+// ── Top Performing Students (Leaderboard) ─────────────────
+async function loadLeaderboard() {
+  const el = document.getElementById('leaderboard-body');
+  if (!el) return;
+  try {
+    const students = await api('/api/admin/students/list');
+    const top = students.filter(s => s.weekly_performance_score > 0).sort((a, b) => (b.weekly_performance_score||0) - (a.weekly_performance_score||0)).slice(0, 7);
+    if (!top.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">No score data yet</div>'; return; }
+    const medals = ['gold', 'silver', 'bronze'];
+    el.innerHTML = top.map((s, i) =>
+      '<div class="leaderboard-item">' +
+      '<div class="leaderboard-rank ' + (medals[i]||'') + '">' + (i+1) + '</div>' +
+      '<div><div class="leaderboard-name" style="cursor:pointer;color:var(--green);" onclick="openProfile('' + s.id + '')">' + s.name + '</div>' +
+      '<div class="leaderboard-class">' + (s.class_name||'') + '</div></div>' +
+      '<div class="leaderboard-score">' + (s.weekly_performance_score||0) + '%</div></div>'
+    ).join('');
+  } catch(e) { el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">Could not load</div>'; }
+}
+
+// ── At-Risk Students Banner ───────────────────────────────
+async function loadRiskBanner() {
+  try {
+    const rows = await api('/api/admin/students/list');
+    const atRisk = rows.filter(s => s.weekly_performance_score > 0 && s.weekly_performance_score < 40);
+    const banner = document.getElementById('risk-banner');
+    const list = document.getElementById('risk-banner-list');
+    if (!banner || !list) return;
+    if (!atRisk.length) { banner.classList.remove('show'); return; }
+    banner.classList.add('show');
+    list.innerHTML = atRisk.slice(0, 5).map(s =>
+      '<div class="risk-item"><span>⚠️ ' + s.name + ' (' + (s.class_name||'—') + ')</span>' +
+      '<span style="cursor:pointer;color:var(--green);text-decoration:underline;" onclick="openProfile('' + s.id + '')">View profile</span></div>'
+    ).join('') + (atRisk.length > 5 ? '<div style="font-size:11px;margin-top:6px;color:#7f1d1d;">...and ' + (atRisk.length - 5) + ' more at-risk students</div>' : '');
+  } catch(e) {}
+}
+
+// ── Homework History ──────────────────────────────────────
+let allHomeworks = [];
+
+async function loadHomeworkHistory() {
+  const el = document.getElementById('homework-history-body');
+  if (!el) return;
+  try {
+    allHomeworks = await api('/api/admin/homeworks');
+    const classFilter = document.getElementById('hw-class-filter');
+    if (classFilter) {
+      const classes = [...new Set(allHomeworks.map(h => h.class_name).filter(Boolean))].sort();
+      classFilter.innerHTML = '<option value="">All classes</option>' + classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
+    }
+    renderHomeworkHistory(allHomeworks);
+  } catch(e) { if(el) el.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:13px;">No homework records yet</div>'; }
+}
+
+function renderHomeworkHistory(rows) {
+  const el = document.getElementById('homework-history-body');
+  if (!rows.length) { el.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:13px;">No homework records</div>'; return; }
+  el.innerHTML = '<table class="data-table"><thead><tr><th>Date</th><th>Class</th><th>Subject</th><th>Description</th><th>Due</th></tr></thead><tbody>' +
+    rows.slice(0, 30).map(h =>
+      '<tr><td>' + (h.created_at ? new Date(h.created_at).toLocaleDateString('en-NG') : '—') + '</td>' +
+      '<td><strong>' + (h.class_name||'—') + '</strong></td>' +
+      '<td>' + (h.subject||'—') + '</td>' +
+      '<td style="max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (h.description||'—') + '</td>' +
+      '<td>' + (h.due_date ? new Date(h.due_date).toLocaleDateString('en-NG') : '—') + '</td></tr>'
+    ).join('') + '</tbody></table>';
+}
+
+function filterHomeworkHistory() {
+  const cls = document.getElementById('hw-class-filter')?.value;
+  renderHomeworkHistory(cls ? allHomeworks.filter(h => h.class_name === cls) : allHomeworks);
+}
+
+// ── Score Bar Chart ───────────────────────────────────────
+function renderScoreChart(subjects) {
+  const entries = Object.entries(subjects);
+  if (!entries.length) return '<div style="color:var(--text-muted);font-size:13px;">No scores recorded</div>';
+  const sorted = entries.sort((a,b) => b[1].avg - a[1].avg);
+  return '<div class="chart-bar-wrap">' + sorted.map(([subj, data]) => {
+    const avg = data.avg;
+    const fillClass = avg >= 70 ? '' : avg >= 50 ? 'gold' : 'danger';
+    return '<div class="chart-bar-row">' +
+      '<div class="chart-bar-label" title="' + subj + '">' + subj + '</div>' +
+      '<div class="chart-bar-track"><div class="chart-bar-fill ' + fillClass + '" style="width:' + avg + '%;"></div></div>' +
+      '<div class="chart-bar-val">' + avg + '%</div></div>';
+  }).join('') + '</div>';
+}
+
+// ── Send Message to Parent ────────────────────────────────
+let _currentProfilePhone = '';
+let _currentProfileData = null;
+
+function openMsgModal() {
+  if (!_currentProfilePhone) { showToast('No parent phone on record ❌'); return; }
+  const nameEl = document.getElementById('profile-name');
+  document.getElementById('msg-modal-recipient').textContent = 'To: ' + (nameEl?.textContent || 'Parent') + "'s parent (" + _currentProfilePhone + ')';
+  document.getElementById('msg-content').value = '';
+  document.getElementById('msg-modal').classList.add('show');
+}
+
+function closeMsgModal() {
+  document.getElementById('msg-modal').classList.remove('show');
+}
+
+async function sendDirectMessage() {
+  const msg = document.getElementById('msg-content').value.trim();
+  if (!msg) { showToast('Type a message first ❌'); return; }
+  if (!_currentProfilePhone) { showToast('No parent phone ❌'); return; }
+  try {
+    await api('/api/admin/message/send', { method: 'POST', body: JSON.stringify({ to: _currentProfilePhone, message: msg }) });
+    showToast('✅ Message sent to parent!');
+    closeMsgModal();
+  } catch(e) { showToast('Failed to send message ❌'); }
+}
+
+// ── Print PDF Report Card ─────────────────────────────────
+function printReportCard() {
+  const data = _currentProfileData;
+  if (!data) { showToast('Open a student profile first ❌'); return; }
+  const s = data.student;
+  const fee = data.fees?.[0];
+  const subjects = {};
+  (data.scores||[]).forEach(sc => {
+    if (!subjects[sc.subject]) subjects[sc.subject] = [];
+    subjects[sc.subject].push(Number(sc.score));
+  });
+  const subjectRows = Object.entries(subjects).map(([subj, vals]) => {
+    const avg = Math.round(vals.reduce((a,b)=>a+b,0)/vals.length);
+    const grade = avg>=70?'A':avg>=60?'B':avg>=50?'C':avg>=40?'D':'F';
+    const gc = avg>=70?'a':avg>=60?'b':avg>=50?'c':'f';
+    const remark = avg>=70?'Excellent':avg>=60?'Good':avg>=50?'Average':avg>=40?'Below Average':'Needs Improvement';
+    return '<tr><td>' + subj + '</td><td>' + avg + '%</td><td class="grade ' + gc + '">' + grade + '</td><td>' + remark + '</td></tr>';
+  }).join('');
+
+  const schoolName = window._schoolName || document.querySelector('.topnav-name')?.textContent || 'EduPing School';
+  const win = window.open('', '_blank');
+  win.document.write('<!DOCTYPE html><html><head><title>Report Card - ' + s.name + '</title><style>' +
+    'body{font-family:Arial,sans-serif;margin:40px auto;max-width:700px;color:#111;}' +
+    '.header{text-align:center;border-bottom:3px solid #1a7a4a;padding-bottom:16px;margin-bottom:24px;}' +
+    '.school-name{font-size:22px;font-weight:700;color:#1a7a4a;}' +
+    '.report-title{font-size:14px;color:#667781;margin-top:4px;}' +
+    '.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;background:#f5f5f5;padding:16px;border-radius:8px;}' +
+    '.info-item label{font-size:10px;text-transform:uppercase;color:#667781;display:block;margin-bottom:2px;}' +
+    '.info-item span{font-weight:600;font-size:14px;}' +
+    '.stat-row{display:flex;gap:16px;margin-bottom:20px;}' +
+    '.stat{flex:1;text-align:center;background:#f5f5f5;border-radius:8px;padding:12px;}' +
+    '.stat-val{font-size:22px;font-weight:700;color:#1a7a4a;}' +
+    '.stat-lbl{font-size:11px;color:#667781;}' +
+    'table{width:100%;border-collapse:collapse;margin-bottom:20px;}' +
+    'th{background:#1a7a4a;color:white;padding:10px;text-align:left;font-size:13px;}' +
+    'td{padding:8px 10px;border-bottom:1px solid #e9edef;font-size:13px;}' +
+    'tr:nth-child(even){background:#f9fafb;}' +
+    '.grade{font-weight:700;}.grade.a{color:#1a7a4a;}.grade.b{color:#3b82f6;}.grade.c{color:#f59e0b;}.grade.f{color:#e53935;}' +
+    '.footer{text-align:center;font-size:11px;color:#667781;border-top:1px solid #e9edef;padding-top:16px;}' +
+    '</style></head><body>' +
+    '<div class="header"><div class="school-name">' + schoolName + '</div>' +
+    '<div class="report-title">Student Academic Report — ' + new Date().toLocaleDateString('en-NG',{year:'numeric',month:'long'}) + '</div></div>' +
+    '<div class="info-grid">' +
+    '<div class="info-item"><label>Student Name</label><span>' + s.name + '</span></div>' +
+    '<div class="info-item"><label>Class</label><span>' + (s.class_name||'—') + '</span></div>' +
+    '<div class="info-item"><label>Parent / Guardian</label><span>' + (s.parent_name||'—') + '</span></div>' +
+    '<div class="info-item"><label>Contact</label><span>' + (s.parent_phone||'—') + '</span></div></div>' +
+    '<div class="stat-row">' +
+    '<div class="stat"><div class="stat-val">' + (data.attendance_pct !== null ? data.attendance_pct + '%' : '—') + '</div><div class="stat-lbl">Attendance</div></div>' +
+    '<div class="stat"><div class="stat-val">' + (data.hw_completion !== null ? data.hw_completion + '%' : '—') + '</div><div class="stat-lbl">HW Completion</div></div>' +
+    '<div class="stat"><div class="stat-val">' + (fee ? fee.status : 'No record') + '</div><div class="stat-lbl">Fee Status</div></div></div>' +
+    '<table><thead><tr><th>Subject</th><th>Average Score</th><th>Grade</th><th>Remark</th></tr></thead><tbody>' + subjectRows + '</tbody></table>' +
+    '<div class="footer">Generated by EduPing • ' + new Date().toLocaleString('en-NG') + ' • eduping.org</div>' +
+    '<script>window.onload=()=>window.print();<\/script></body></html>');
+  win.document.close();
+}
+
+// ── Full Student Profile (replaces earlier version) ───────
+async function openProfile(studentId) {
+  document.getElementById('profile-panel').classList.add('open');
+  document.getElementById('profile-overlay').classList.add('show');
+  document.getElementById('profile-name').textContent = 'Loading...';
+  document.getElementById('profile-class').textContent = '';
+  document.getElementById('profile-body').innerHTML = '<div class="loading" style="padding:40px;">Loading profile...</div>';
+  try {
+    const data = await api('/api/admin/students/' + studentId + '/profile');
+    _currentProfileData = data;
+    const s = data.student;
+    _currentProfilePhone = s.parent_phone || '';
+    document.getElementById('profile-name').textContent = s.name;
+    document.getElementById('profile-class').textContent = (s.class_name||'') + ' — ' + (s.parent_name||'');
+    const fee = data.fees && data.fees.length ? data.fees[0] : null;
+    const feeStatus = fee ? fee.status : 'no record';
+    const feePill = feeStatus==='paid'?'pill-green':feeStatus==='partial'?'pill-gold':'pill-red';
+    const attDots = (data.attendance||[]).slice(0,10).map(a =>
+      '<div class="attend-dot ' + a.status + '" title="' + a.date + '">' + (a.status==='present'?'P':'A') + '</div>'
+    ).join('');
+    const subjects = {};
+    (data.scores||[]).forEach(sc => {
+      if (!subjects[sc.subject]) subjects[sc.subject] = { vals: [] };
+      subjects[sc.subject].vals.push(Number(sc.score));
+    });
+    Object.keys(subjects).forEach(k => {
+      const v = subjects[k].vals;
+      subjects[k].avg = Math.round(v.reduce((a,b)=>a+b,0)/v.length);
+    });
+    const risk = data.risk;
+    const riskColor = risk ? (risk.risk_level==='critical'?'#fee2e2':risk.risk_level==='high'?'#fef3c7':'#f0fdf4') : '';
+    const riskHtml = risk
+      ? '<div style="background:' + riskColor + ';border-radius:8px;padding:12px;font-size:13px;margin-top:8px;">' +
+        '<strong>Risk Level: ' + risk.risk_level.toUpperCase() + '</strong>' +
+        (risk.plan_text ? '<div style="margin-top:8px;font-size:12px;color:var(--text-muted);white-space:pre-wrap;">' + risk.plan_text.slice(0,300) + '...</div>' : '') + '</div>'
+      : '<div style="color:var(--text-muted);font-size:13px;">No risk assessment yet</div>';
+
+    document.getElementById('profile-body').innerHTML =
+      '<div class="profile-section"><div class="profile-section-title">Overview</div>' +
+      '<div class="profile-stat-row">' +
+      '<div class="profile-stat"><div class="profile-stat-val">' + (data.attendance_pct!==null?data.attendance_pct+'%':'—') + '</div><div class="profile-stat-label">Attendance</div></div>' +
+      '<div class="profile-stat"><div class="profile-stat-val">' + (data.hw_completion!==null?data.hw_completion+'%':'—') + '</div><div class="profile-stat-label">HW Completion</div></div>' +
+      '<div class="profile-stat"><div class="profile-stat-val"><span class="pill ' + feePill + '">' + feeStatus + '</span></div><div class="profile-stat-label">Fee Status</div></div>' +
+      '</div><div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Last 10 school days:</div>' +
+      '<div class="attend-mini">' + (attDots||'<div style="font-size:12px;color:var(--text-muted);">No data</div>') + '</div></div>' +
+      '<div class="profile-section"><div class="profile-section-title">Contact Info</div>' +
+      '<div style="font-size:13px;display:flex;flex-direction:column;gap:8px;">' +
+      '<div><strong>Parent:</strong> ' + (s.parent_name||'—') + '</div>' +
+      '<div style="display:flex;align-items:center;gap:8px;"><strong>Phone:</strong> <span>' + (s.parent_phone||'—') + '</span>' +
+      '<button class="action-btn" onclick="editParentPhone('' + s.id + '')">Edit</button></div></div></div>' +
+      '<div class="profile-section"><div class="profile-section-title">Score History</div>' + renderScoreChart(subjects) + '</div>' +
+      '<div class="profile-section"><div class="profile-section-title">Fees</div>' +
+      (fee
+        ? '<div style="font-size:13px;display:flex;flex-direction:column;gap:6px;">' +
+          '<div><strong>Amount Due:</strong> ₦' + Number(fee.amount_due).toLocaleString() + '</div>' +
+          '<div><strong>Amount Paid:</strong> ₦' + Number(fee.amount_paid).toLocaleString() + '</div>' +
+          '<div><strong>Balance:</strong> ₦' + (Number(fee.amount_due)-Number(fee.amount_paid)).toLocaleString() + '</div>' +
+          '<button class="broadcast-btn" style="margin-top:8px;" onclick="openPaymentModal('' + s.id + '','' + s.name + '')">💳 Record Payment</button></div>'
+        : '<div style="font-size:13px;color:var(--text-muted);">No fee record. <button class="action-btn" onclick="openPaymentModal('' + s.id + '','' + s.name + '')">Add payment</button></div>') +
+      '</div>' +
+      '<div class="profile-section"><div class="profile-section-title">Risk & Intervention</div>' + riskHtml + '</div>';
+  } catch(e) {
+    document.getElementById('profile-body').innerHTML = '<div class="loading" style="padding:40px;">Could not load profile: ' + e.message + '</div>';
+  }
+}
+
+// ── Override loadDashboard to include new widgets ─────────
+async function loadDashboard() {
+  try {
+    const d = await api('/api/admin/dashboard');
+    document.getElementById('stat-conversations').textContent = d.conversations;
+    document.getElementById('stat-staff').textContent = d.staff;
+    document.getElementById('stat-fees').textContent = '₦' + Number(d.outstanding_fees || 0).toLocaleString();
+    document.getElementById('stat-admissions').textContent = d.new_admissions;
+    document.getElementById('admit-alert-sub').textContent = d.new_admissions + ' new inquiries pending';
+    renderSignins(d.signin);
+    loadRecentConvos();
+    loadAbsentees();
+    loadAttendanceTrend();
+    loadLeaderboard();
+    loadRiskBanner();
+    loadHomeworkHistory();
+    window._schoolName = d.school_name || document.querySelector('.topnav-name')?.textContent || 'EduPing School';
+  } catch(e) { console.log('Dashboard error:', e); }
+}
+
 
 // ── Toast ─────────────────────────────────────────────────
 function showToast(msg) {

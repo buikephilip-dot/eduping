@@ -1370,6 +1370,48 @@ cron.schedule('0 6 * * 1', async () => {
   }
 }, { timezone: 'Africa/Lagos' });
 
+
+// GET /api/admin/homeworks — recent homework assignments
+app.get('/api/admin/homeworks', requireSchool, async (req, res) => {
+  try {
+    const rows = await q(`
+      SELECT h.*, st.name as assigned_by_name
+      FROM homeworks h
+      LEFT JOIN staff st ON st.id = h.assigned_by
+      WHERE h.school_id=$1
+      ORDER BY h.created_at DESC LIMIT 100
+    `, [req.school.id]);
+    json(res, rows.rows);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// POST /api/admin/message/send — admin sends direct WhatsApp to parent
+app.post('/api/admin/message/send', requireSchool, async (req, res) => {
+  try {
+    const { to, message } = req.body;
+    if (!to || !message) return bad(res, 'to and message are required');
+    const school = req.school;
+    const fromNumber = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
+    if (!fromNumber) return bad(res, 'No Twilio number configured');
+    await twilioSend(to, fromNumber, message);
+    json(res, { ok: true });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// GET /api/admin/attendance?from=&to=&student_id= — for trend chart
+app.get('/api/admin/attendance', requireSchool, async (req, res) => {
+  try {
+    const { from, to, student_id } = req.query;
+    let sql = 'SELECT a.date, a.status, a.student_id, s.name, s.class_name FROM attendance a JOIN students s ON s.id=a.student_id WHERE a.school_id=$1';
+    const params = [req.school.id];
+    if (from) { params.push(from); sql += ` AND a.date >= $${params.length}`; }
+    if (to) { params.push(to); sql += ` AND a.date <= $${params.length}`; }
+    if (student_id) { params.push(student_id); sql += ` AND a.student_id = $${params.length}`; }
+    sql += ' ORDER BY a.date DESC LIMIT 2000';
+    json(res, (await q(sql, params)).rows);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
 app.use((err, req, res, next) => { console.error(err); res.status(500).json({ error: 'Server error', detail: process.env.NODE_ENV === 'production' ? undefined : err.message }); });
 
 (async () => {
