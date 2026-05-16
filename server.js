@@ -1625,6 +1625,89 @@ app.get('/gallery/:token', async (req, res) => {
 });
 
 
+
+// ══════════════════════════════════════════════════════════
+// WAITLIST / LEAD CAPTURE
+// ══════════════════════════════════════════════════════════
+
+// Create waitlist table if not exists (run once)
+// CREATE TABLE IF NOT EXISTS waitlist (
+//   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+//   name TEXT, role TEXT, school TEXT, city TEXT,
+//   phone TEXT, email TEXT, students TEXT, timeline TEXT,
+//   features TEXT, challenge TEXT, submitted_at TIMESTAMPTZ,
+//   contacted BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT NOW()
+// );
+
+app.post('/api/waitlist', async (req, res) => {
+  try {
+    const { name, role, school, city, phone, email, students, timeline, features, challenge, submitted_at } = req.body;
+    if (!name || !school || !phone) return bad(res, 'name, school and phone are required');
+
+    // Save to DB
+    await q(`INSERT INTO waitlist (name,role,school,city,phone,email,students,timeline,features,challenge,submitted_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [name, role||null, school, city||null, phone, email||null, students||null, timeline||null, features||null, challenge||null, submitted_at||new Date().toISOString()]);
+
+    // Notify Philip via WhatsApp immediately
+    const notifyPhone = process.env.ADMIN_PHONE || '+2347015255068';
+    const fromNumber = process.env.TWILIO_DEFAULT_FROM;
+    if (fromNumber) {
+      const msg = `🎉 *New EduPing Waitlist Lead!*
+
+` +
+        `👤 *Name:* ${name}
+` +
+        `🏫 *School:* ${school}
+` +
+        `📍 *City:* ${city||'—'}
+` +
+        `💼 *Role:* ${role||'—'}
+` +
+        `📱 *Phone:* ${phone}
+` +
+        `📧 *Email:* ${email||'—'}
+` +
+        `👥 *Students:* ${students||'—'}
+` +
+        `⏱ *Timeline:* ${timeline||'—'}
+` +
+        `✨ *Features wanted:* ${features||'—'}
+` +
+        `💬 *Challenge:* ${challenge||'—'}`;
+      try { await twilioSend(notifyPhone, fromNumber, msg); } catch(e) { console.warn('Could not notify admin of lead:', e.message); }
+    }
+
+    json(res, { ok: true });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// GET /api/admin/waitlist — view all leads in dashboard
+app.get('/api/admin/waitlist', requireSchool, async (req, res) => {
+  try {
+    const rows = await q('SELECT * FROM waitlist ORDER BY created_at DESC', []);
+    json(res, rows.rows);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// PATCH /api/admin/waitlist/:id/contacted — mark lead as contacted
+app.patch('/api/admin/waitlist/:id/contacted', requireSchool, async (req, res) => {
+  try {
+    await q('UPDATE waitlist SET contacted=true WHERE id=$1', [req.params.id]);
+    json(res, { ok: true });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// Serve landing page at root for non-admin users
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'landing.html'));
+});
+
+// Serve admin dashboard at /admin
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 app.use((err, req, res, next) => { console.error(err); res.status(500).json({ error: 'Server error', detail: process.env.NODE_ENV === 'production' ? undefined : err.message }); });
 
 (async () => {

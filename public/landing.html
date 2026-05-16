@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EduPing — School AI Assistant | Smarter Communication. Stronger Schools.</title>
+<meta name="description" content="EduPing connects Nigerian schools with parents, teachers and administrators through WhatsApp-powered AI. Real-time attendance, homework alerts, fee tracking and more.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --green:#1a7a4a;
+  --green-deep:#0d4a2c;
+  --green-mid:#156040;
+  --green-pale:#e8f5ee;
+  --blue:#0055CC;
+  --cyan:#00AEEF;
+  --text:#0a0a0a;
+  --muted:#5a6672;
+  --border:#e2e8f0;
+  --bg:#f7f9f7;
+  --white:#ffffff;
+}
+
+html{scroll-behavior:smooth;}
+body{font-family:'Instrument Sans',sans-serif;color:var(--text);background:var(--white);overflow-x:hidden;}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-thumb{background:var(--green);border-radius:4px;}
+
+/* ── NAV ── */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 5%;display:flex;align-items:center;justify-content:space-between;height:72px;transition:all .3s;}
+nav.scrolled{background:rgba(255,255,255,.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);box-shadow:0 2px 20px rgba(0,0,0,.04);}
+.nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none;}
+.nav-logo-icon{width:38px;height:38px;}
+.nav-logo-text{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.5px;}
+.nav-logo-text span{color:var(--blue);}
+.nav-links{display:flex;align-items:center;gap:32px;}
+.nav-links a{font-size:14px;font-weight:500;color:var(--muted);text-decoration:none;transition:color .2s;}
+.nav-links a:hover{color:var(--green);}
+.nav-cta{background:var(--green);color:white;font-size:13px;font-weight:600;padding:10px 24px;border-radius:100px;text-decoration:none;transition:all .2s;font-family:'Syne',sans-serif;letter-spacing:.3px;}
+.nav-cta:hover{background:var(--green-deep);transform:translateY(-1px);}
+
+/* ── HERO ── */
+.hero{min-height:100vh;background:var(--green-deep);position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:center;padding:120px 5% 80px;}
+.hero-grid{position:absolute;inset:0;opacity:.04;background-image:linear-gradient(var(--white) 1px,transparent 1px),linear-gradient(90deg,var(--white) 1px,transparent 1px);background-size:60px 60px;}
+.hero-glow{position:absolute;top:-200px;right:-200px;width:700px;height:700px;border-radius:50%;background:radial-gradient(circle,rgba(0,174,239,.15),transparent 70%);}
+.hero-glow2{position:absolute;bottom:-100px;left:-100px;width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(26,122,74,.3),transparent 70%);}
+.hero-inner{position:relative;z-index:2;max-width:1200px;margin:0 auto;width:100%;display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center;}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(0,174,239,.1);border:1px solid rgba(0,174,239,.25);color:var(--cyan);font-size:12px;font-weight:600;padding:6px 16px;border-radius:100px;letter-spacing:.5px;margin-bottom:28px;}
+.hero-badge-dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(1.3);}}
+.hero-title{font-family:'Syne',sans-serif;font-size:64px;font-weight:800;line-height:1.02;color:white;letter-spacing:-2px;margin-bottom:24px;}
+.hero-title .accent{color:var(--cyan);}
+.hero-title .line2{color:rgba(255,255,255,.5);}
+.hero-sub{font-size:18px;color:rgba(255,255,255,.6);line-height:1.75;max-width:480px;margin-bottom:40px;font-weight:400;}
+.hero-actions{display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
+.btn-primary{background:var(--cyan);color:var(--green-deep);font-size:15px;font-weight:700;padding:14px 32px;border-radius:100px;text-decoration:none;transition:all .25s;font-family:'Syne',sans-serif;letter-spacing:.3px;display:inline-flex;align-items:center;gap:8px;}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,174,239,.35);}
+.btn-ghost{color:rgba(255,255,255,.7);font-size:14px;font-weight:500;text-decoration:none;display:inline-flex;align-items:center;gap:6px;transition:color .2s;}
+.btn-ghost:hover{color:white;}
+.hero-stats{display:flex;gap:32px;margin-top:48px;padding-top:48px;border-top:1px solid rgba(255,255,255,.08);}
+.hero-stat-val{font-family:'Syne',sans-serif;font-size:32px;font-weight:800;color:white;}
+.hero-stat-label{font-size:12px;color:rgba(255,255,255,.4);margin-top:2px;letter-spacing:.3px;}
+
+/* HERO RIGHT — Phone mockup */
+.hero-right{position:relative;display:flex;justify-content:center;align-items:center;}
+.phone-wrap{position:relative;width:280px;}
+.phone-frame{background:#1a1a1a;border-radius:40px;padding:14px;box-shadow:0 40px 80px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.08);position:relative;}
+.phone-notch{width:80px;height:24px;background:#1a1a1a;border-radius:0 0 16px 16px;margin:0 auto 10px;position:relative;z-index:2;}
+.phone-screen{background:#075E54;border-radius:28px;overflow:hidden;min-height:480px;}
+.wa-header{background:#075E54;padding:12px 14px;display:flex;align-items:center;gap:10px;}
+.wa-avatar{width:36px;height:36px;border-radius:50%;background:var(--cyan);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:white;flex-shrink:0;}
+.wa-name{font-size:13px;font-weight:600;color:white;}
+.wa-status{font-size:10px;color:rgba(255,255,255,.6);}
+.wa-body{background:#ECE5DD;padding:12px;min-height:400px;display:flex;flex-direction:column;gap:8px;}
+.wa-msg{max-width:85%;border-radius:8px;padding:8px 10px;font-size:11px;line-height:1.5;position:relative;}
+.wa-msg.received{background:white;align-self:flex-start;border-radius:0 8px 8px 8px;}
+.wa-msg.sent{background:#DCF8C6;align-self:flex-end;border-radius:8px 0 8px 8px;}
+.wa-msg-time{font-size:9px;color:#999;text-align:right;margin-top:2px;}
+.wa-typing{background:white;border-radius:0 8px 8px 8px;padding:10px 14px;align-self:flex-start;display:flex;gap:4px;align-items:center;}
+.wa-dot{width:6px;height:6px;border-radius:50%;background:#999;animation:typing 1.4s infinite;}
+.wa-dot:nth-child(2){animation-delay:.2s;}
+.wa-dot:nth-child(3){animation-delay:.4s;}
+@keyframes typing{0%,60%,100%{transform:translateY(0);}30%{transform:translateY(-6px);}}
+.floating-card{position:absolute;background:white;border-radius:14px;padding:12px 16px;box-shadow:0 8px 32px rgba(0,0,0,.15);white-space:nowrap;}
+.floating-card.top-right{top:-20px;right:-60px;font-size:12px;}
+.floating-card.bottom-left{bottom:40px;left:-70px;font-size:12px;}
+.fc-icon{font-size:18px;margin-bottom:4px;}
+.fc-label{font-weight:700;font-size:12px;color:var(--text);}
+.fc-sub{font-size:10px;color:var(--muted);}
+
+/* ── LOGOS / SOCIAL PROOF ── */
+.proof{padding:40px 5%;background:var(--bg);border-bottom:1px solid var(--border);}
+.proof-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:40px;}
+.proof-label{font-size:12px;color:var(--muted);font-weight:500;white-space:nowrap;letter-spacing:.3px;}
+.proof-schools{display:flex;gap:32px;flex-wrap:wrap;}
+.proof-school{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:#ccc;letter-spacing:.5px;transition:color .2s;}
+.proof-school:hover{color:var(--green);}
+
+/* ── SECTION SHARED ── */
+.section{padding:100px 5%;}
+.section-inner{max-width:1200px;margin:0 auto;}
+.section-eyebrow{font-size:11px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:var(--green);margin-bottom:16px;}
+.section-title{font-family:'Syne',sans-serif;font-size:48px;font-weight:800;line-height:1.08;letter-spacing:-1.5px;color:var(--text);margin-bottom:20px;}
+.section-sub{font-size:17px;color:var(--muted);line-height:1.75;max-width:560px;}
+
+/* ── PROBLEM ── */
+.problem{background:var(--white);}
+.problem-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:2px;margin-top:60px;border-radius:20px;overflow:hidden;border:1px solid var(--border);}
+.problem-card{padding:36px;background:white;transition:background .2s;}
+.problem-card:hover{background:var(--bg);}
+.problem-card:nth-child(2){border-left:1px solid var(--border);}
+.problem-card:nth-child(3){border-top:1px solid var(--border);}
+.problem-card:nth-child(4){border-top:1px solid var(--border);border-left:1px solid var(--border);}
+.p-card-num{font-family:'Syne',sans-serif;font-size:48px;font-weight:800;color:var(--border);margin-bottom:16px;line-height:1;}
+.p-card-title{font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--text);margin-bottom:10px;}
+.p-card-body{font-size:14px;color:var(--muted);line-height:1.7;}
+
+/* ── FEATURES ── */
+.features{background:var(--green-deep);padding:100px 5%;}
+.features-inner{max-width:1200px;margin:0 auto;}
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:rgba(255,255,255,.06);border-radius:24px;overflow:hidden;margin-top:60px;}
+.feat-card{padding:36px;background:var(--green-deep);transition:background .2s;position:relative;overflow:hidden;}
+.feat-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(0,174,239,.05),transparent);opacity:0;transition:opacity .3s;}
+.feat-card:hover::before{opacity:1;}
+.feat-card:hover{background:rgba(255,255,255,.03);}
+.feat-icon{font-size:32px;margin-bottom:20px;display:block;}
+.feat-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:white;margin-bottom:10px;}
+.feat-desc{font-size:13px;color:rgba(255,255,255,.5);line-height:1.7;}
+.feat-tag{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.5px;padding:3px 10px;border-radius:100px;background:rgba(0,174,239,.1);color:var(--cyan);margin-top:14px;}
+
+/* ── HOW IT WORKS ── */
+.how{background:var(--bg);}
+.how-grid{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center;margin-top:60px;}
+.how-steps{display:flex;flex-direction:column;gap:0;}
+.how-step{display:flex;gap:20px;padding:24px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:all .2s;}
+.how-step:last-child{border-bottom:none;}
+.how-step.active .step-num{background:var(--green);color:white;border-color:var(--green);}
+.how-step.active .step-title{color:var(--green);}
+.step-num{width:40px;height:40px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--muted);flex-shrink:0;transition:all .2s;}
+.step-title{font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--muted);margin-bottom:6px;transition:color .2s;}
+.step-desc{font-size:13px;color:var(--muted);line-height:1.6;}
+.how-visual{background:var(--green-deep);border-radius:24px;padding:40px;min-height:400px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;}
+.how-visual-content{text-align:center;color:white;}
+.how-visual-icon{font-size:64px;margin-bottom:20px;}
+.how-visual-title{font-family:'Syne',sans-serif;font-size:22px;font-weight:700;margin-bottom:10px;}
+.how-visual-desc{font-size:14px;color:rgba(255,255,255,.5);line-height:1.7;max-width:280px;margin:0 auto;}
+
+/* ── STAKEHOLDERS ── */
+.stake{background:white;}
+.stake-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:60px;}
+.stake-card{border-radius:20px;padding:36px;border:1px solid var(--border);transition:all .3s;position:relative;overflow:hidden;}
+.stake-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:var(--green);transform:scaleX(0);transition:transform .3s;}
+.stake-card:hover{border-color:var(--green);transform:translateY(-4px);box-shadow:0 20px 40px rgba(26,122,74,.1);}
+.stake-card:hover::after{transform:scaleX(1);}
+.stake-emoji{font-size:36px;margin-bottom:20px;display:block;}
+.stake-title{font-family:'Syne',sans-serif;font-size:20px;font-weight:700;margin-bottom:16px;}
+.stake-list{list-style:none;}
+.stake-list li{font-size:13px;color:var(--muted);padding:6px 0;border-bottom:1px solid var(--bg);display:flex;gap:10px;align-items:flex-start;line-height:1.5;}
+.stake-list li:last-child{border-bottom:none;}
+.check{color:var(--green);font-weight:700;flex-shrink:0;margin-top:1px;}
+
+/* ── STATS ── */
+.stats-band{background:var(--green);padding:60px 5%;}
+.stats-inner{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:40px;}
+.stat-item{text-align:center;}
+.stat-num{font-family:'Syne',sans-serif;font-size:52px;font-weight:800;color:white;line-height:1;}
+.stat-accent{color:var(--cyan);}
+.stat-label{font-size:13px;color:rgba(255,255,255,.6);margin-top:8px;line-height:1.5;}
+
+/* ── TESTIMONIAL ── */
+.testimonial{background:var(--bg);padding:100px 5%;}
+.testimonial-inner{max-width:800px;margin:0 auto;text-align:center;}
+.quote-mark{font-family:'Syne',sans-serif;font-size:120px;color:var(--green);opacity:.1;line-height:.8;margin-bottom:-20px;}
+.quote-text{font-family:'Syne',sans-serif;font-size:28px;font-weight:600;line-height:1.45;color:var(--text);margin-bottom:36px;letter-spacing:-.5px;}
+.quote-author{display:inline-flex;align-items:center;gap:14px;}
+.quote-av{width:48px;height:48px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:16px;}
+.quote-name{font-weight:600;font-size:15px;text-align:left;}
+.quote-role{font-size:12px;color:var(--muted);text-align:left;}
+
+/* ── WAITLIST / FORM ── */
+.waitlist{background:var(--green-deep);padding:100px 5%;position:relative;overflow:hidden;}
+.waitlist-bg{position:absolute;inset:0;opacity:.03;background-image:radial-gradient(circle,white 1px,transparent 1px);background-size:32px 32px;}
+.waitlist-glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:800px;height:800px;border-radius:50%;background:radial-gradient(circle,rgba(0,174,239,.1),transparent 65%);}
+.waitlist-inner{max-width:720px;margin:0 auto;position:relative;z-index:2;}
+.waitlist-title{font-family:'Syne',sans-serif;font-size:52px;font-weight:800;color:white;text-align:center;letter-spacing:-1.5px;margin-bottom:16px;line-height:1.05;}
+.waitlist-sub{font-size:17px;color:rgba(255,255,255,.5);text-align:center;margin-bottom:56px;line-height:1.7;}
+.form-box{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:24px;padding:40px;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+.form-group{display:flex;flex-direction:column;gap:8px;}
+.form-group.full{grid-column:1/-1;}
+.form-label{font-size:12px;font-weight:600;color:rgba(255,255,255,.5);letter-spacing:.5px;text-transform:uppercase;}
+.form-input,.form-select,.form-textarea{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px 16px;font-size:14px;color:white;font-family:'Instrument Sans',sans-serif;transition:border-color .2s;width:100%;}
+.form-input::placeholder{color:rgba(255,255,255,.25);}
+.form-input:focus,.form-select:focus,.form-textarea:focus{outline:none;border-color:var(--cyan);background:rgba(0,174,239,.05);}
+.form-select{color:rgba(255,255,255,.7);cursor:pointer;}
+.form-select option{background:#0d4a2c;color:white;}
+.form-textarea{resize:vertical;min-height:90px;}
+.qualify-section{margin:20px 0;padding:20px;background:rgba(255,255,255,.03);border-radius:12px;border:1px solid rgba(255,255,255,.06);}
+.qualify-title{font-size:12px;font-weight:600;color:rgba(255,255,255,.4);letter-spacing:.5px;text-transform:uppercase;margin-bottom:14px;}
+.qualify-options{display:flex;flex-wrap:wrap;gap:8px;}
+.qualify-opt{display:flex;align-items:center;gap:8px;cursor:pointer;}
+.qualify-opt input{accent-color:var(--cyan);}
+.qualify-opt span{font-size:13px;color:rgba(255,255,255,.6);}
+.submit-btn{width:100%;background:var(--cyan);color:var(--green-deep);font-size:15px;font-weight:700;padding:16px;border-radius:12px;border:none;cursor:pointer;font-family:'Syne',sans-serif;letter-spacing:.3px;transition:all .25s;margin-top:8px;}
+.submit-btn:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,174,239,.3);}
+.submit-btn:disabled{opacity:.5;cursor:not-allowed;transform:none;}
+.form-privacy{font-size:11px;color:rgba(255,255,255,.25);text-align:center;margin-top:16px;line-height:1.6;}
+.success-msg{display:none;text-align:center;padding:40px 20px;}
+.success-icon{font-size:56px;margin-bottom:16px;}
+.success-title{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:white;margin-bottom:12px;}
+.success-sub{font-size:15px;color:rgba(255,255,255,.5);line-height:1.7;}
+
+/* ── FOOTER ── */
+footer{background:var(--text);padding:60px 5% 32px;}
+.footer-inner{max-width:1200px;margin:0 auto;}
+.footer-top{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:48px;margin-bottom:48px;}
+.footer-logo-text{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:white;margin-bottom:12px;}
+.footer-logo-text span{color:var(--cyan);}
+.footer-desc{font-size:13px;color:rgba(255,255,255,.35);line-height:1.7;max-width:260px;}
+.footer-col-title{font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:rgba(255,255,255,.3);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:16px;}
+.footer-links{list-style:none;display:flex;flex-direction:column;gap:10px;}
+.footer-links a{font-size:13px;color:rgba(255,255,255,.4);text-decoration:none;transition:color .2s;}
+.footer-links a:hover{color:white;}
+.footer-bottom{border-top:1px solid rgba(255,255,255,.06);padding-top:24px;display:flex;align-items:center;justify-content:space-between;}
+.footer-copy{font-size:12px;color:rgba(255,255,255,.2);}
+.footer-tagline{font-family:'Syne',sans-serif;font-size:12px;color:rgba(255,255,255,.2);}
+.footer-tagline span{color:var(--cyan);}
+
+/* ── ANIMATIONS ── */
+.fade-up{opacity:0;transform:translateY(30px);transition:opacity .7s ease,transform .7s ease;}
+.fade-up.visible{opacity:1;transform:translateY(0);}
+.fade-up-delay-1{transition-delay:.1s;}
+.fade-up-delay-2{transition-delay:.2s;}
+.fade-up-delay-3{transition-delay:.3s;}
+.fade-up-delay-4{transition-delay:.4s;}
+
+/* ── RESPONSIVE ── */
+@media(max-width:900px){
+  .hero-inner{grid-template-columns:1fr;}
+  .hero-right{display:none;}
+  .hero-title{font-size:44px;}
+  .features-grid{grid-template-columns:1fr;}
+  .how-grid{grid-template-columns:1fr;}
+  .stake-grid{grid-template-columns:1fr;}
+  .stats-inner{grid-template-columns:repeat(2,1fr);}
+  .footer-top{grid-template-columns:1fr 1fr;}
+  .form-grid{grid-template-columns:1fr;}
+  .problem-grid{grid-template-columns:1fr;}
+  nav .nav-links{display:none;}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="navbar">
+  <a href="#" class="nav-logo">
+    <svg class="nav-logo-icon" viewBox="0 0 38 38" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1" y="1" width="28" height="24" rx="6" ry="6" fill="none" stroke="#0a0a0a" stroke-width="2.2"/>
+      <path d="M8 25 L5 35 L16 25 Z" fill="#0a0a0a"/>
+      <rect x="9" y="7" width="2.5" height="12" rx="1.2" fill="#0a0a0a"/>
+      <path d="M11.5 7 Q20 7 20 13 Q20 19 11.5 19" fill="none" stroke="#0a0a0a" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+    <div class="nav-logo-text">Edu<span>Ping</span></div>
+  </a>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#how">How it works</a>
+    <a href="#stakeholders">Who benefits</a>
+    <a href="#waitlist">Get started</a>
+  </div>
+  <a href="#waitlist" class="nav-cta">Join Waitlist →</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-glow"></div>
+  <div class="hero-glow2"></div>
+  <div class="hero-inner">
+    <div class="hero-left">
+      <div class="hero-badge">
+        <span class="hero-badge-dot"></span>
+        Now onboarding Nigerian schools
+      </div>
+      <h1 class="hero-title">
+        Smarter Schools<br>
+        <span class="accent">Start with</span><br>
+        <span class="line2">Better Communication</span>
+      </h1>
+      <p class="hero-sub">EduPing connects teachers, parents and administrators through WhatsApp — powered by AI that works 24 hours a day so your school never misses a moment.</p>
+      <div class="hero-actions">
+        <a href="#waitlist" class="btn-primary">Join the Waitlist ↗</a>
+        <a href="#how" class="btn-ghost">See how it works →</a>
+      </div>
+      <div class="hero-stats">
+        <div>
+          <div class="hero-stat-val">0</div>
+          <div class="hero-stat-label">Apps to download</div>
+        </div>
+        <div>
+          <div class="hero-stat-val">24h</div>
+          <div class="hero-stat-label">AI always on</div>
+        </div>
+        <div>
+          <div class="hero-stat-val">90%</div>
+          <div class="hero-stat-label">WhatsApp open rate</div>
+        </div>
+      </div>
+    </div>
+    <div class="hero-right">
+      <div class="phone-wrap">
+        <div class="floating-card top-right">
+          <div class="fc-icon">✅</div>
+          <div class="fc-label">Tobiloba — Present</div>
+          <div class="fc-sub">Marked by Mrs Amaka · 8:03am</div>
+        </div>
+        <div class="phone-frame">
+          <div class="phone-notch"></div>
+          <div class="phone-screen">
+            <div class="wa-header">
+              <div class="wa-avatar">EP</div>
+              <div>
+                <div class="wa-name">EduPing Assistant</div>
+                <div class="wa-status">online</div>
+              </div>
+            </div>
+            <div class="wa-body">
+              <div class="wa-msg received">
+                📚 <strong>Homework Alert</strong><br>
+                Mrs Amaka has assigned new Mathematics homework to JSS2A.<br><br>
+                "Solve page 45, Q1–10"<br>
+                📅 Due: Friday
+                <div class="wa-msg-time">8:14 AM ✓✓</div>
+              </div>
+              <div class="wa-msg sent">
+                How did my son do in last week's test?
+                <div class="wa-msg-time">8:16 AM ✓✓</div>
+              </div>
+              <div class="wa-msg received">
+                Tobiloba scored <strong>78/100</strong> in Mathematics last week — above class average of 64.<br><br>
+                📈 Performance trend: Improving
+                <div class="wa-msg-time">8:16 AM ✓✓</div>
+              </div>
+              <div class="wa-typing">
+                <div class="wa-dot"></div>
+                <div class="wa-dot"></div>
+                <div class="wa-dot"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="floating-card bottom-left">
+          <div class="fc-icon">💰</div>
+          <div class="fc-label">₦45,000 collected today</div>
+          <div class="fc-sub">12 payments recorded</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SOCIAL PROOF -->
+<div class="proof">
+  <div class="proof-inner">
+    <div class="proof-label">TRUSTED BY SCHOOLS IN ABUJA</div>
+    <div class="proof-schools">
+      <div class="proof-school">VICTORY KIDS INTERNATIONAL</div>
+      <div class="proof-school">GREATER TOMORROW ACADEMY</div>
+      <div class="proof-school">THE CRADLE</div>
+      <div class="proof-school">CREDENCE HEIGHTS</div>
+      <div class="proof-school">PHELIM</div>
+    </div>
+  </div>
+</div>
+
+<!-- PROBLEM -->
+<section class="section problem" id="problem">
+  <div class="section-inner">
+    <div class="fade-up">
+      <div class="section-eyebrow">The Problem</div>
+      <h2 class="section-title">Nigerian schools are running<br>on manual processes</h2>
+      <p class="section-sub">Every day, communication gaps slow down administrators, frustrate parents and overwhelm teachers. The tools available were built for different markets.</p>
+    </div>
+    <div class="problem-grid fade-up fade-up-delay-1">
+      <div class="problem-card">
+        <div class="p-card-num">01</div>
+        <div class="p-card-title">Parents are out of the loop</div>
+        <div class="p-card-body">Parents only hear about homework, attendance or performance issues when it's too late. Phone calls are missed, notes get lost, and broadcast lists are impersonal and one-sided.</div>
+      </div>
+      <div class="problem-card">
+        <div class="p-card-num">02</div>
+        <div class="p-card-title">Attendance is unreliable</div>
+        <div class="p-card-body">Paper registers are slow, easy to falsify and impossible to analyse. Admin has no real-time view of which students or teachers are present on any given day.</div>
+      </div>
+      <div class="problem-card">
+        <div class="p-card-num">03</div>
+        <div class="p-card-title">Fee collection is chaotic</div>
+        <div class="p-card-body">Tracking who has paid and who owes is entirely manual. Money slips through the cracks and records are inconsistent across terms and classes.</div>
+      </div>
+      <div class="problem-card">
+        <div class="p-card-num">04</div>
+        <div class="p-card-title">No data-driven decisions</div>
+        <div class="p-card-body">Schools cannot identify at-risk students early, track teacher performance objectively, or generate meaningful reports without spending hours collating data.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="features" id="features">
+  <div class="features-inner">
+    <div class="fade-up">
+      <div class="section-eyebrow" style="color:var(--cyan);">The Solution</div>
+      <h2 class="section-title" style="color:white;">Everything your school needs.<br>All through WhatsApp.</h2>
+      <p class="section-sub" style="color:rgba(255,255,255,.5);">No app to download. No new system to learn. EduPing works where your parents already are.</p>
+    </div>
+    <div class="features-grid fade-up fade-up-delay-1">
+      <div class="feat-card">
+        <span class="feat-icon">📲</span>
+        <div class="feat-title">WhatsApp-First</div>
+        <div class="feat-desc">Teachers send updates via WhatsApp. Parents receive instant alerts. The AI handles everything in between — routing, translating, responding.</div>
+        <span class="feat-tag">Zero friction</span>
+      </div>
+      <div class="feat-card">
+        <span class="feat-icon">🤖</span>
+        <div class="feat-title">AI Parent Assistant</div>
+        <div class="feat-desc">Parents ask anything — attendance, scores, homework — and get instant accurate answers 24/7. No calls, no waiting, no admin burden.</div>
+        <span class="feat-tag">Available 24/7</span>
+      </div>
+      <div class="feat-card">
+        <span class="feat-icon">📊</span>
+        <div class="feat-title">Admin Dashboard</div>
+        <div class="feat-desc">Live view of everything — attendance, sign-ins, student risk scores, fee status, class summaries. Export any data as CSV with one click.</div>
+        <span class="feat-tag">Real-time data</span>
+      </div>
+      <div class="feat-card">
+        <span class="feat-icon">✅</span>
+        <div class="feat-title">Teacher Accountability</div>
+        <div class="feat-desc">Photo-verified sign-ins, digital attendance, homework assignment — all via WhatsApp. Admin sees everything in real time with a full audit trail.</div>
+        <span class="feat-tag">Photo verified</span>
+      </div>
+      <div class="feat-card">
+        <span class="feat-icon">💰</span>
+        <div class="feat-title">Fee Tracking</div>
+        <div class="feat-desc">Track every student's fee status — amount due, paid, balance — from the dashboard. Record payments and follow up with parents directly via WhatsApp.</div>
+        <span class="feat-tag">Per-student records</span>
+      </div>
+      <div class="feat-card">
+        <span class="feat-icon">🎉</span>
+        <div class="feat-title">Events Hub</div>
+        <div class="feat-desc">Event countdowns, live feeds during Sports Day or Prize Giving, photo galleries with shareable parent links — all in one place.</div>
+        <span class="feat-tag">Premium feature</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="section how" id="how">
+  <div class="section-inner">
+    <div class="fade-up">
+      <div class="section-eyebrow">How It Works</div>
+      <h2 class="section-title">Up and running in days,<br>not months</h2>
+    </div>
+    <div class="how-grid">
+      <div class="how-steps fade-up fade-up-delay-1">
+        <div class="how-step active" onclick="setStep(0,this)">
+          <div class="step-num">1</div>
+          <div>
+            <div class="step-title">Onboarding session</div>
+            <div class="step-desc">We collect your staff list, student register and class structure. One meeting — we handle the rest.</div>
+          </div>
+        </div>
+        <div class="how-step" onclick="setStep(1,this)">
+          <div class="step-num">2</div>
+          <div>
+            <div class="step-title">School setup</div>
+            <div class="step-desc">EduPing is configured specifically for your school — classes, subjects, terms, fee structure and staff roles.</div>
+          </div>
+        </div>
+        <div class="how-step" onclick="setStep(2,this)">
+          <div class="step-num">3</div>
+          <div>
+            <div class="step-title">Parents & teachers onboard</div>
+            <div class="step-desc">Teachers receive WhatsApp instructions. Parents receive an invite. No apps to download, no accounts to create.</div>
+          </div>
+        </div>
+        <div class="how-step" onclick="setStep(3,this)">
+          <div class="step-num">4</div>
+          <div>
+            <div class="step-title">You go live</div>
+            <div class="step-desc">The AI starts working immediately. Admin monitors the dashboard. Parents engage. Your school has real data for the first time.</div>
+          </div>
+        </div>
+      </div>
+      <div class="how-visual fade-up fade-up-delay-2" id="how-visual">
+        <div class="how-visual-content">
+          <div class="how-visual-icon" id="how-icon">📋</div>
+          <div class="how-visual-title" id="how-title">Onboarding session</div>
+          <div class="how-visual-desc" id="how-desc">One meeting with our team. We collect your data and configure everything for your school.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STAKEHOLDERS -->
+<section class="section stake" id="stakeholders">
+  <div class="section-inner">
+    <div class="fade-up">
+      <div class="section-eyebrow">Who Benefits</div>
+      <h2 class="section-title">Built for every stakeholder<br>in your school</h2>
+    </div>
+    <div class="stake-grid">
+      <div class="stake-card fade-up fade-up-delay-1">
+        <span class="stake-emoji">👨‍👩‍👧</span>
+        <div class="stake-title">Parents</div>
+        <ul class="stake-list">
+          <li><span class="check">✓</span>Instant homework alerts via WhatsApp</li>
+          <li><span class="check">✓</span>Daily attendance notifications</li>
+          <li><span class="check">✓</span>Score and performance reports</li>
+          <li><span class="check">✓</span>Ask questions about their child 24/7</li>
+          <li><span class="check">✓</span>Fee payment reminders</li>
+          <li><span class="check">✓</span>Event updates and photo galleries</li>
+        </ul>
+      </div>
+      <div class="stake-card fade-up fade-up-delay-2">
+        <span class="stake-emoji">👩‍🏫</span>
+        <div class="stake-title">Teachers</div>
+        <ul class="stake-list">
+          <li><span class="check">✓</span>Sign in via WhatsApp — no paper register</li>
+          <li><span class="check">✓</span>Submit attendance with one message</li>
+          <li><span class="check">✓</span>Assign homework to all parents instantly</li>
+          <li><span class="check">✓</span>Upload scores directly from WhatsApp</li>
+          <li><span class="check">✓</span>Receive class performance summaries</li>
+          <li><span class="check">✓</span>No additional apps to learn</li>
+        </ul>
+      </div>
+      <div class="stake-card fade-up fade-up-delay-3">
+        <span class="stake-emoji">🏫</span>
+        <div class="stake-title">Administrators</div>
+        <ul class="stake-list">
+          <li><span class="check">✓</span>Live dashboard — all data in one place</li>
+          <li><span class="check">✓</span>Teacher sign-in audit and accountability</li>
+          <li><span class="check">✓</span>At-risk student alerts</li>
+          <li><span class="check">✓</span>Fee tracking and payment records</li>
+          <li><span class="check">✓</span>CSV exports for reporting</li>
+          <li><span class="check">✓</span>Broadcast announcements to all parents</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<div class="stats-band">
+  <div class="stats-inner">
+    <div class="stat-item fade-up">
+      <div class="stat-num">90<span class="stat-accent">%</span></div>
+      <div class="stat-label">WhatsApp message open rate vs 20% for email</div>
+    </div>
+    <div class="stat-item fade-up fade-up-delay-1">
+      <div class="stat-num">24<span class="stat-accent">h</span></div>
+      <div class="stat-label">AI parent assistant available round the clock</div>
+    </div>
+    <div class="stat-item fade-up fade-up-delay-2">
+      <div class="stat-num">0<span class="stat-accent"> app</span></div>
+      <div class="stat-label">Downloads required — runs entirely on WhatsApp</div>
+    </div>
+    <div class="stat-item fade-up fade-up-delay-3">
+      <div class="stat-num">48<span class="stat-accent">h</span></div>
+      <div class="stat-label">From onboarding to fully live system</div>
+    </div>
+  </div>
+</div>
+
+<!-- TESTIMONIAL -->
+<section class="testimonial">
+  <div class="testimonial-inner fade-up">
+    <div class="quote-mark">"</div>
+    <p class="quote-text">Before EduPing, parents would only find out their child was absent after school. Now they get a WhatsApp message by 9am. The teachers love it because they don't have to make calls anymore.</p>
+    <div class="quote-author">
+      <div class="quote-av">AO</div>
+      <div>
+        <div class="quote-name">Mrs. A. Okonkwo</div>
+        <div class="quote-role">Head Teacher · Victory Kids International, Abuja</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WAITLIST FORM -->
+<section class="waitlist" id="waitlist">
+  <div class="waitlist-bg"></div>
+  <div class="waitlist-glow"></div>
+  <div class="waitlist-inner">
+    <h2 class="waitlist-title fade-up">Get EduPing<br>for your school</h2>
+    <p class="waitlist-sub fade-up fade-up-delay-1">Join the waitlist and our team will reach out within 24 hours to schedule your onboarding session.</p>
+
+    <div class="form-box fade-up fade-up-delay-2" id="form-box">
+      <form id="waitlist-form" onsubmit="submitForm(event)">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Your Name *</label>
+            <input class="form-input" type="text" placeholder="e.g. Mrs. Amaka Johnson" required id="f-name">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Your Role *</label>
+            <select class="form-select" required id="f-role">
+              <option value="">Select role...</option>
+              <option>School Proprietor</option>
+              <option>Principal / Head Teacher</option>
+              <option>Administrator</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">School Name *</label>
+            <input class="form-input" type="text" placeholder="e.g. Victory Kids International" required id="f-school">
+          </div>
+          <div class="form-group">
+            <label class="form-label">City / State *</label>
+            <input class="form-input" type="text" placeholder="e.g. Abuja, FCT" required id="f-city">
+          </div>
+          <div class="form-group">
+            <label class="form-label">WhatsApp Number *</label>
+            <input class="form-input" type="tel" placeholder="e.g. 08012345678" required id="f-phone">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input class="form-input" type="email" placeholder="school@email.com" id="f-email">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Number of Students *</label>
+            <select class="form-select" required id="f-students">
+              <option value="">Select range...</option>
+              <option>Under 100</option>
+              <option>100 – 250</option>
+              <option>250 – 500</option>
+              <option>500 – 1,000</option>
+              <option>Over 1,000</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">When do you want to start? *</label>
+            <select class="form-select" required id="f-timeline">
+              <option value="">Select timeline...</option>
+              <option>Immediately</option>
+              <option>Within 1 month</option>
+              <option>Next term</option>
+              <option>Just exploring</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="qualify-section">
+          <div class="qualify-title">Which features matter most to you? (Select all that apply)</div>
+          <div class="qualify-options">
+            <label class="qualify-opt"><input type="checkbox" value="attendance"> <span>📋 Attendance tracking</span></label>
+            <label class="qualify-opt"><input type="checkbox" value="homework"> <span>📚 Homework alerts</span></label>
+            <label class="qualify-opt"><input type="checkbox" value="fees"> <span>💰 Fee tracking</span></label>
+            <label class="qualify-opt"><input type="checkbox" value="ai"> <span>🤖 AI parent assistant</span></label>
+            <label class="qualify-opt"><input type="checkbox" value="dashboard"> <span>📊 Admin dashboard</span></label>
+            <label class="qualify-opt"><input type="checkbox" value="events"> <span>🎉 Events & galleries</span></label>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:8px;">
+          <label class="form-label">Anything specific you want to solve?</label>
+          <textarea class="form-textarea" placeholder="Tell us your biggest school communication challenge..." id="f-challenge"></textarea>
+        </div>
+
+        <button class="submit-btn" type="submit" id="submit-btn">Join the Waitlist — Get Started Today →</button>
+        <div class="form-privacy">🔒 Your information is confidential and will never be shared. By submitting you agree to be contacted by the EduPing team via WhatsApp or email.</div>
+      </form>
+
+      <div class="success-msg" id="success-msg">
+        <div class="success-icon">🎉</div>
+        <div class="success-title" style="color:white;">You're on the list!</div>
+        <div class="success-sub">Thank you for your interest in EduPing. Our team will contact you on WhatsApp within 24 hours to schedule your onboarding session.<br><br>In the meantime, feel free to reach us directly at <strong style="color:var(--cyan);">hello@eduping.org</strong> or WhatsApp <strong style="color:var(--cyan);">+234 701 525 5068</strong></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div>
+        <div class="footer-logo-text">Edu<span>Ping</span></div>
+        <p class="footer-desc">The AI-powered school assistant built for Nigerian schools. Communication, accountability and administration — all through WhatsApp.</p>
+      </div>
+      <div>
+        <div class="footer-col-title">Product</div>
+        <ul class="footer-links">
+          <li><a href="#features">Features</a></li>
+          <li><a href="#how">How it works</a></li>
+          <li><a href="#stakeholders">Who benefits</a></li>
+          <li><a href="#waitlist">Get started</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-col-title">Contact</div>
+        <ul class="footer-links">
+          <li><a href="mailto:hello@eduping.org">hello@eduping.org</a></li>
+          <li><a href="https://wa.me/2347015255068">WhatsApp us</a></li>
+          <li><a href="#">Abuja, Nigeria</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-col-title">Legal</div>
+        <ul class="footer-links">
+          <li><a href="#">Privacy Policy</a></li>
+          <li><a href="#">Terms of Service</a></li>
+          <li><a href="#">Data Processing</a></li>
+          <li><a href="#">NDPR Compliance</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div class="footer-copy">© 2025 EduPing. All rights reserved.</div>
+      <div class="footer-tagline">Smarter Communication. <span>Stronger Schools.</span></div>
+    </div>
+  </div>
+</footer>
+
+<script>
+// ── NAV SCROLL ──
+window.addEventListener('scroll', () => {
+  document.getElementById('navbar').classList.toggle('scrolled', window.scrollY > 40);
+});
+
+// ── FADE IN ON SCROLL ──
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if(e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+// ── HOW IT WORKS STEPS ──
+const steps = [
+  { icon: '📋', title: 'Onboarding session', desc: 'One meeting with our team. We collect your staff list, student register and class structure — we handle everything else.' },
+  { icon: '⚙️', title: 'School configured', desc: 'EduPing is set up specifically for your school — classes, subjects, terms, fee structure and staff roles all configured.' },
+  { icon: '📱', title: 'Everyone onboards', desc: 'Teachers receive WhatsApp instructions. Parents get an invite. No apps, no accounts — just WhatsApp they already have.' },
+  { icon: '🚀', title: 'You go live', desc: 'The AI starts working immediately. Admin sees live data. Parents engage. Your school has real-time insight for the first time.' }
+];
+
+function setStep(idx, el) {
+  document.querySelectorAll('.how-step').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('how-icon').textContent = steps[idx].icon;
+  document.getElementById('how-title').textContent = steps[idx].title;
+  document.getElementById('how-desc').textContent = steps[idx].desc;
+}
+
+// Auto-cycle steps
+let currentStep = 0;
+setInterval(() => {
+  currentStep = (currentStep + 1) % 4;
+  const stepEls = document.querySelectorAll('.how-step');
+  setStep(currentStep, stepEls[currentStep]);
+}, 3000);
+
+// ── FORM SUBMIT ──
+async function submitForm(e) {
+  e.preventDefault();
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+
+  // Collect checked features
+  const features = [...document.querySelectorAll('.qualify-options input:checked')].map(i => i.value).join(', ');
+
+  const payload = {
+    name: document.getElementById('f-name').value,
+    role: document.getElementById('f-role').value,
+    school: document.getElementById('f-school').value,
+    city: document.getElementById('f-city').value,
+    phone: document.getElementById('f-phone').value,
+    email: document.getElementById('f-email').value,
+    students: document.getElementById('f-students').value,
+    timeline: document.getElementById('f-timeline').value,
+    features,
+    challenge: document.getElementById('f-challenge').value,
+    submitted_at: new Date().toISOString()
+  };
+
+  try {
+    // Submit to EduPing backend
+    const res = await fetch('/api/waitlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    // Show success regardless (graceful degradation)
+    document.getElementById('waitlist-form').style.display = 'none';
+    document.getElementById('success-msg').style.display = 'block';
+
+    // Also open WhatsApp as backup notification
+    const msg = encodeURIComponent(
+      'Hi EduPing! I just joined the waitlist.\n\n' +
+      'School: ' + payload.school + '\n' +
+      'Name: ' + payload.name + ' (' + payload.role + ')\n' +
+      'Students: ' + payload.students + '\n' +
+      'Timeline: ' + payload.timeline
+    );
+    setTimeout(() => {
+      window.open('https://wa.me/2347015255068?text=' + msg, '_blank');
+    }, 1500);
+
+  } catch(err) {
+    // Even on error show success and open WhatsApp
+    document.getElementById('waitlist-form').style.display = 'none';
+    document.getElementById('success-msg').style.display = 'block';
+    const msg = encodeURIComponent('Hi EduPing! I just joined the waitlist.\n\nSchool: ' + payload.school + '\nName: ' + payload.name + '\nPhone: ' + payload.phone);
+    setTimeout(() => { window.open('https://wa.me/2347015255068?text=' + msg, '_blank'); }, 1500);
+  }
+}
+</script>
+</body>
+</html>
