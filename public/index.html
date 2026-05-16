@@ -272,6 +272,53 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
 .trend-bar:hover::after{content:attr(data-tip);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#333;color:white;font-size:10px;padding:2px 6px;border-radius:4px;white-space:nowrap;}
 .trend-labels{display:flex;gap:3px;margin-top:4px;}
 .trend-label{flex:1;font-size:9px;color:var(--text-muted);text-align:center;}
+
+/* EVENTS HUB */
+.events-locked{background:linear-gradient(135deg,#f0fdf4,#e8f5e9);border:2px dashed var(--green);border-radius:16px;padding:48px;text-align:center;}
+.events-locked-icon{font-size:48px;margin-bottom:16px;}
+.events-locked-title{font-size:20px;font-weight:700;color:var(--green);margin-bottom:8px;}
+.events-locked-sub{font-size:14px;color:var(--text-muted);margin-bottom:24px;max-width:400px;margin-left:auto;margin-right:auto;}
+
+.event-type-academic{border-left:4px solid #e53935;}
+.event-type-social{border-left:4px solid var(--green);}
+.event-type-sports{border-left:4px solid #f59e0b;}
+.event-type-holiday{border-left:4px solid #3b82f6;}
+.event-type-exam{border-left:4px solid #7c3aed;}
+
+.event-card{background:white;border-radius:12px;padding:16px 18px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);display:flex;align-items:center;gap:16px;border-left:4px solid var(--green);}
+.event-countdown{text-align:center;min-width:64px;}
+.event-countdown-days{font-size:28px;font-weight:800;color:var(--green);line-height:1;}
+.event-countdown-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;}
+.event-countdown-today{font-size:13px;font-weight:700;color:white;background:var(--green);border-radius:8px;padding:4px 8px;}
+.event-countdown-past{font-size:11px;color:var(--text-muted);}
+.event-info{flex:1;}
+.event-name{font-weight:700;font-size:15px;margin-bottom:2px;}
+.event-meta{font-size:12px;color:var(--text-muted);display:flex;gap:12px;margin-top:4px;}
+.event-type-pill{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:2px 8px;border-radius:10px;background:var(--green-pale);color:var(--green);}
+.event-actions{display:flex;gap:6px;flex-direction:column;align-items:flex-end;}
+
+.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:12px;}
+.gallery-thumb{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;cursor:pointer;transition:transform .2s;}
+.gallery-thumb:hover{transform:scale(1.04);}
+
+.feed-item{padding:10px 0;border-bottom:1px solid #f5f5f5;font-size:13px;}
+.feed-item:last-child{border-bottom:none;}
+.feed-time{font-size:11px;color:var(--text-muted);margin-top:2px;}
+
+.countdown-mini{display:flex;gap:8px;align-items:center;}
+.countdown-mini-days{font-size:22px;font-weight:800;color:var(--green);}
+.countdown-mini-info{font-size:12px;}
+.countdown-mini-name{font-weight:600;}
+.countdown-mini-date{color:var(--text-muted);}
+
+.upload-zone{border:2px dashed #e9edef;border-radius:12px;padding:32px;text-align:center;cursor:pointer;transition:all .2s;}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--green);background:var(--green-pale);}
+.upload-zone-icon{font-size:32px;margin-bottom:8px;}
+.upload-zone-text{font-size:13px;color:var(--text-muted);}
+
+.event-tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid #f0f2f5;padding-bottom:0;}
+.event-tab{padding:8px 16px;font-size:13px;font-weight:500;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;}
+.event-tab.active{color:var(--green);border-bottom-color:var(--green);font-weight:600;}
 </style>
 </head>
 <body>
@@ -403,6 +450,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         <button class="subnav-btn" onclick="switchSection('chats',this)">💬 Parent Chats</button>
         <button class="subnav-btn" onclick="switchSection('fees',this)">💳 Fees</button>
         <button class="subnav-btn" onclick="switchSection('classsummary',this)">📋 Class View</button>
+        <button class="subnav-btn" onclick="switchSection('events',this)">🎉 Events</button>
       </div>
 
       <!-- OVERVIEW -->
@@ -441,6 +489,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
             <div class="dash-card-action" onclick="loadAbsentees()">Refresh</div>
           </div>
           <div class="dash-card-body" id="absentees-body"><div class="loading">Loading...</div></div>
+        </div>
+
+        <!-- Upcoming Events Widget -->
+        <div class="dash-card full" style="margin-top:18px;" id="upcoming-events-widget">
+          <div class="dash-card-header">
+            <div class="dash-card-title">📅 Upcoming Events</div>
+            <div class="dash-card-action" onclick="switchSection('events', document.querySelector('.subnav-btn:last-child'))">View All</div>
+          </div>
+          <div class="dash-card-body" style="padding:14px 18px;" id="upcoming-events-body">
+            <div class="loading">Loading...</div>
+          </div>
         </div>
 
         <!-- Homework History -->
@@ -888,6 +947,85 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         </div>
       </div>
 
+      <!-- EVENTS HUB -->
+      <div id="section-events" class="dash-section">
+        <!-- LOCKED STATE (shown if events_enabled = false) -->
+        <div id="events-locked-banner" style="display:none;">
+          <div class="events-locked">
+            <div class="events-locked-icon">🎉</div>
+            <div class="events-locked-title">EduPing Events Hub</div>
+            <div class="events-locked-sub">Countdowns, live feeds, photo galleries and shareable parent links — available on the Growth plan and above.</div>
+            <button class="broadcast-btn" onclick="showToast('Contact support to upgrade your plan')">⬆ Upgrade to Unlock</button>
+          </div>
+        </div>
+
+        <!-- ACTIVE STATE -->
+        <div id="events-active">
+          <!-- Top row: Add event + notify parents -->
+          <div style="display:flex;gap:16px;margin-bottom:18px;align-items:flex-start;">
+            <div class="dash-card" style="flex:1;">
+              <div class="dash-card-header"><div class="dash-card-title">➕ Add New Event</div></div>
+              <div class="dash-card-body" style="padding:16px 18px;">
+                <div class="form-group"><label class="form-label">Event Name</label><input class="form-input" id="evt-name" placeholder="e.g. Sports Day 2025"></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                  <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="evt-date" type="date"></div>
+                  <div class="form-group"><label class="form-label">Time</label><input class="form-input" id="evt-time" type="time" value="08:00"></div>
+                </div>
+                <div class="form-group"><label class="form-label">Type</label>
+                  <select class="form-select" id="evt-type">
+                    <option value="social">🎉 Social</option>
+                    <option value="academic">📚 Academic</option>
+                    <option value="sports">⚽ Sports</option>
+                    <option value="exam">📝 Exam</option>
+                    <option value="holiday">🏖 Holiday</option>
+                  </select>
+                </div>
+                <div class="form-group"><label class="form-label">Description</label><textarea class="form-textarea" id="evt-desc" placeholder="What's happening?" style="height:70px;"></textarea></div>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+                  <input type="checkbox" id="evt-notify" checked>
+                  <label for="evt-notify" style="font-size:13px;">Notify all parents via WhatsApp when event starts</label>
+                </div>
+                <button class="broadcast-btn" onclick="addEvent()">📅 Save Event</button>
+              </div>
+            </div>
+
+            <!-- Quick stats -->
+            <div style="display:flex;flex-direction:column;gap:12px;min-width:200px;">
+              <div class="stat-card green"><div class="stat-icon">📅</div><div class="stat-value" id="evt-stat-upcoming">—</div><div class="stat-label">Upcoming Events</div></div>
+              <div class="stat-card blue"><div class="stat-icon">🖼</div><div class="stat-value" id="evt-stat-galleries">—</div><div class="stat-label">Photo Galleries</div></div>
+              <div class="stat-card"><div class="stat-icon">📸</div><div class="stat-value" id="evt-stat-photos">—</div><div class="stat-label">Total Photos</div></div>
+            </div>
+          </div>
+
+          <!-- Events list with tabs -->
+          <div class="dash-card full">
+            <div class="dash-card-header">
+              <div class="dash-card-title">All Events</div>
+              <button class="export-btn" onclick="notifyAllParentsEvents()">📲 Blast All Upcoming to Parents</button>
+            </div>
+            <div class="dash-card-body" style="padding:16px 18px;">
+              <div class="event-tabs">
+                <div class="event-tab active" onclick="filterEvents('upcoming',this)">Upcoming</div>
+                <div class="event-tab" onclick="filterEvents('today',this)">Today</div>
+                <div class="event-tab" onclick="filterEvents('past',this)">Past</div>
+                <div class="event-tab" onclick="filterEvents('all',this)">All</div>
+              </div>
+              <div id="events-list"><div class="loading">Loading...</div></div>
+            </div>
+          </div>
+
+          <!-- Photo Galleries -->
+          <div class="dash-card full" style="margin-top:18px;">
+            <div class="dash-card-header">
+              <div class="dash-card-title">🖼 Photo Galleries</div>
+            </div>
+            <div class="dash-card-body" style="padding:16px 18px;">
+              <div id="galleries-list"><div class="loading">Loading...</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -1018,6 +1156,7 @@ function switchSection(name, btn) {
   if (name === 'chats') loadChats();
   if (name === 'fees') loadFees();
   if (name === 'classsummary') loadClassOptions();
+  if (name === 'events') loadEvents();
 }
 
 // ── Dashboard data ────────────────────────────────────────
@@ -2457,7 +2596,339 @@ async function loadDashboard() {
     loadRiskBanner();
     loadHomeworkHistory();
     window._schoolName = d.school_name || document.querySelector('.topnav-name')?.textContent || 'EduPing School';
+    loadUpcomingEventsWidget();
   } catch(e) { console.log('Dashboard error:', e); }
+}
+
+
+
+// ── EVENTS HUB ────────────────────────────────────────────
+let allEvents = [];
+let allGalleries = [];
+const eventTypeColors = { academic:'#e53935', social:'#1a7a4a', sports:'#f59e0b', holiday:'#3b82f6', exam:'#7c3aed' };
+const eventTypeEmoji = { academic:'📚', social:'🎉', sports:'⚽', holiday:'🏖', exam:'📝' };
+
+async function loadEvents() {
+  // Check if events are enabled for this school
+  try {
+    const school = await api('/api/admin/school');
+    const locked = document.getElementById('events-locked-banner');
+    const active = document.getElementById('events-active');
+    if (!school.events_enabled) {
+      if (locked) locked.style.display = 'block';
+      if (active) active.style.display = 'none';
+      return;
+    }
+    if (locked) locked.style.display = 'none';
+    if (active) active.style.display = 'block';
+  } catch(e) {}
+
+  try {
+    allEvents = await api('/api/admin/events');
+    allGalleries = await api('/api/admin/events/galleries');
+    renderEvents(allEvents.filter(e => new Date(e.date) >= new Date(new Date().toDateString())));
+    renderGalleries(allGalleries);
+    updateEventStats();
+  } catch(e) {
+    const el = document.getElementById('events-list');
+    if (el) el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:12px;">No events yet — add your first event above.</div>';
+  }
+}
+
+function updateEventStats() {
+  const today = new Date().toDateString();
+  const upcoming = allEvents.filter(e => new Date(e.date) >= new Date(today)).length;
+  const galleries = allGalleries.length;
+  const photos = allGalleries.reduce((a, g) => a + (g.photo_count || 0), 0);
+  const u = document.getElementById('evt-stat-upcoming');
+  const g = document.getElementById('evt-stat-galleries');
+  const p = document.getElementById('evt-stat-photos');
+  if (u) u.textContent = upcoming;
+  if (g) g.textContent = galleries;
+  if (p) p.textContent = photos;
+}
+
+function getCountdown(dateStr) {
+  const evtDate = new Date(dateStr);
+  const today = new Date(new Date().toDateString());
+  const diff = Math.round((evtDate - today) / 86400000);
+  if (diff === 0) return { label: 'TODAY', cls: 'today' };
+  if (diff < 0) return { label: Math.abs(diff) + 'd ago', cls: 'past' };
+  return { label: diff, cls: 'upcoming' };
+}
+
+function renderEvents(events) {
+  const el = document.getElementById('events-list');
+  if (!el) return;
+  if (!events.length) {
+    el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;">No events in this category</div>';
+    return;
+  }
+  el.innerHTML = events.sort((a,b) => new Date(a.date) - new Date(b.date)).map(e => {
+    const cd = getCountdown(e.date);
+    const color = eventTypeColors[e.type] || 'var(--green)';
+    const emoji = eventTypeEmoji[e.type] || '📅';
+    const dateStr = new Date(e.date).toLocaleDateString('en-NG', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    let cdHtml = '';
+    if (cd.cls === 'today') cdHtml = '<div class="event-countdown-today">TODAY</div>';
+    else if (cd.cls === 'past') cdHtml = '<div class="event-countdown-past">' + cd.label + '</div>';
+    else cdHtml = '<div class="event-countdown-days">' + cd.label + '</div><div class="event-countdown-label">days away</div>';
+
+    return '<div class="event-card event-type-' + e.type + '" style="border-left-color:' + color + ';">' +
+      '<div class="event-countdown">' + cdHtml + '</div>' +
+      '<div class="event-info">' +
+        '<div class="event-name">' + emoji + ' ' + e.name + '</div>' +
+        '<div class="event-meta">' +
+          '<span>📅 ' + dateStr + (e.time ? ' · ' + formatTime(e.time) : '') + '</span>' +
+        '</div>' +
+        (e.description ? '<div style="font-size:12px;color:var(--text-muted);margin-top:6px;">' + e.description + '</div>' : '') +
+        '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">' +
+          '<span class="event-type-pill" style="background:' + color + '20;color:' + color + ';">' + (e.type||'event') + '</span>' +
+          (e.notify_parents ? '<span class="event-type-pill" style="background:#e8f5e9;color:#1a7a4a;">📲 Parents notified</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="event-actions">' +
+        '<button class="action-btn" onclick="openEventGallery(\'' + e.id + '\',\'' + e.name.replace(/'/g,'') + '\')">📸 Gallery</button>' +
+        '<button class="action-btn" onclick="postLiveFeed(\'' + e.id + '\',\'' + e.name.replace(/'/g,'') + '\')">📡 Live Update</button>' +
+        '<button class="action-btn" onclick="notifyParentsEvent(\'' + e.id + '\')">📲 Notify</button>' +
+        '<button class="action-btn" style="color:var(--danger);border-color:var(--danger);" onclick="deleteEvent(\'' + e.id + '\')">Delete</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function filterEvents(filter, btn) {
+  document.querySelectorAll('.event-tab').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const today = new Date(new Date().toDateString());
+  let filtered;
+  if (filter === 'upcoming') filtered = allEvents.filter(e => new Date(e.date) >= today);
+  else if (filter === 'today') filtered = allEvents.filter(e => new Date(e.date).toDateString() === today.toDateString());
+  else if (filter === 'past') filtered = allEvents.filter(e => new Date(e.date) < today);
+  else filtered = allEvents;
+  renderEvents(filtered);
+}
+
+function formatTime(t) {
+  if (!t) return '';
+  const [h, m] = t.split(':');
+  const hr = parseInt(h);
+  return (hr > 12 ? hr - 12 : hr || 12) + ':' + m + ' ' + (hr >= 12 ? 'PM' : 'AM');
+}
+
+async function addEvent() {
+  const name = document.getElementById('evt-name').value.trim();
+  const date = document.getElementById('evt-date').value;
+  const time = document.getElementById('evt-time').value;
+  const type = document.getElementById('evt-type').value;
+  const description = document.getElementById('evt-desc').value.trim();
+  const notify_parents = document.getElementById('evt-notify').checked;
+  if (!name || !date) { showToast('Event name and date are required ❌'); return; }
+  try {
+    await api('/api/admin/events', { method: 'POST', body: JSON.stringify({ name, date, time, type, description, notify_parents }) });
+    showToast('✅ Event saved!');
+    document.getElementById('evt-name').value = '';
+    document.getElementById('evt-desc').value = '';
+    document.getElementById('evt-date').value = '';
+    loadEvents();
+    loadUpcomingEventsWidget();
+  } catch(e) { showToast('Failed to save event ❌'); }
+}
+
+async function deleteEvent(id) {
+  if (!confirm('Delete this event?')) return;
+  try {
+    await api('/api/admin/events/' + id, { method: 'DELETE' });
+    showToast('Event deleted');
+    loadEvents();
+    loadUpcomingEventsWidget();
+  } catch(e) { showToast('Failed to delete ❌'); }
+}
+
+async function notifyParentsEvent(eventId) {
+  try {
+    await api('/api/admin/events/' + eventId + '/notify', { method: 'POST' });
+    showToast('✅ Parents notified via WhatsApp!');
+  } catch(e) { showToast('Failed to notify ❌'); }
+}
+
+async function notifyAllParentsEvents() {
+  try {
+    await api('/api/admin/events/notify-all', { method: 'POST' });
+    showToast('✅ All upcoming events sent to parents!');
+  } catch(e) { showToast('Failed ❌'); }
+}
+
+// ── Live Feed ─────────────────────────────────────────────
+function postLiveFeed(eventId, eventName) {
+  const msg = prompt('Post a live update for ' + eventName + ':');
+  if (!msg) return;
+  api('/api/admin/events/' + eventId + '/feed', { method: 'POST', body: JSON.stringify({ message: msg }) })
+    .then(() => showToast('✅ Live update posted!'))
+    .catch(() => showToast('Failed to post ❌'));
+}
+
+// ── Photo Gallery ─────────────────────────────────────────
+let _galleryEventId = '';
+let _galleryEventName = '';
+
+function openEventGallery(eventId, eventName) {
+  _galleryEventId = eventId;
+  _galleryEventName = eventName;
+  // Scroll to galleries section and show upload for this event
+  document.getElementById('galleries-list').scrollIntoView({ behavior: 'smooth' });
+  showGalleryUploader(eventId, eventName);
+}
+
+function showGalleryUploader(eventId, eventName) {
+  const el = document.getElementById('galleries-list');
+  const uploaderId = 'uploader-' + eventId;
+  // Check if uploader already shown
+  if (document.getElementById(uploaderId)) return;
+  const uploaderHtml = '<div id="' + uploaderId + '" class="dash-card" style="margin-bottom:16px;">' +
+    '<div class="dash-card-header"><div class="dash-card-title">📸 Upload Photos — ' + eventName + '</div></div>' +
+    '<div class="dash-card-body" style="padding:16px 18px;">' +
+    '<div class="upload-zone" onclick="document.getElementById(\'photo-input-' + eventId + '\').click()" ' +
+    'ondragover="this.classList.add(\'dragover\');event.preventDefault()" ' +
+    'ondragleave="this.classList.remove(\'dragover\')" ' +
+    'ondrop="handlePhotoDrop(event,\'' + eventId + '\')">' +
+    '<div class="upload-zone-icon">📷</div>' +
+    '<div class="upload-zone-text">Click or drag photos here to upload<br><span style="font-size:11px;">JPG, PNG — multiple files supported</span></div>' +
+    '</div>' +
+    '<input type="file" id="photo-input-' + eventId + '" multiple accept="image/*" style="display:none;" onchange="uploadPhotos(this.files,\'' + eventId + '\')">' +
+    '<div id="upload-progress-' + eventId + '" style="margin-top:10px;"></div>' +
+    '</div></div>';
+  el.insertAdjacentHTML('afterbegin', uploaderHtml);
+}
+
+async function uploadPhotos(files, eventId) {
+  const progress = document.getElementById('upload-progress-' + eventId);
+  if (!files.length) return;
+  if (progress) progress.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Uploading ' + files.length + ' photo(s)...</div>';
+  let uploaded = 0;
+  for (const file of files) {
+    try {
+      const base64 = await fileToBase64(file);
+      await api('/api/admin/events/' + eventId + '/photos', {
+        method: 'POST',
+        body: JSON.stringify({ image_data: base64, filename: file.name, mime_type: file.type })
+      });
+      uploaded++;
+      if (progress) progress.innerHTML = '<div style="font-size:13px;color:var(--green);">✅ ' + uploaded + '/' + files.length + ' uploaded...</div>';
+    } catch(e) {
+      if (progress) progress.innerHTML = '<div style="font-size:13px;color:var(--danger);">❌ Failed to upload ' + file.name + '</div>';
+    }
+  }
+  if (progress) progress.innerHTML = '<div style="font-size:13px;color:var(--green);">✅ All ' + uploaded + ' photos uploaded!</div>';
+  showToast('✅ ' + uploaded + ' photos uploaded!');
+  loadEvents();
+  loadGalleries();
+}
+
+function handlePhotoDrop(event, eventId) {
+  event.preventDefault();
+  event.currentTarget.classList.remove('dragover');
+  uploadPhotos(event.dataTransfer.files, eventId);
+}
+
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const reader = new FileReader();
+    reader.onload = () => res(reader.result.split(',')[1]);
+    reader.onerror = rej;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function loadGalleries() {
+  try {
+    allGalleries = await api('/api/admin/events/galleries');
+    renderGalleries(allGalleries);
+  } catch(e) {}
+}
+
+function renderGalleries(galleries) {
+  const el = document.getElementById('galleries-list');
+  if (!el) return;
+  // Keep any uploaders that are showing
+  const uploaders = el.querySelectorAll('[id^="uploader-"]');
+  const uploaderHtml = Array.from(uploaders).map(u => u.outerHTML).join('');
+
+  if (!galleries.length) {
+    el.innerHTML = uploaderHtml + '<div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;">No photo galleries yet — click 📸 Gallery on an event to upload photos</div>';
+    return;
+  }
+
+  const galHtml = galleries.map(g => {
+    const shareUrl = window.location.origin + '/gallery/' + g.share_token;
+    return '<div class="dash-card" style="margin-bottom:16px;">' +
+      '<div class="dash-card-header">' +
+        '<div class="dash-card-title">📸 ' + g.event_name + ' <span style="font-weight:400;font-size:12px;color:var(--text-muted);">(' + (g.photo_count||0) + ' photos)</span></div>' +
+        '<div style="display:flex;gap:6px;">' +
+          '<button class="export-btn" onclick="copyGalleryLink(\'' + shareUrl + '\')">🔗 Copy Link</button>' +
+          '<button class="export-btn" onclick="blastGalleryLink(\'' + g.event_id + '\',\'' + shareUrl + '\')">📲 Send to Parents</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="dash-card-body" style="padding:12px 18px;">' +
+        '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;word-break:break-all;">🔗 ' + shareUrl + '</div>' +
+        '<div class="gallery-grid" id="gallery-' + g.event_id + '">' +
+          (g.photos || []).slice(0,8).map(p => '<img class="gallery-thumb" src="' + p.url + '" alt="' + g.event_name + '" onclick="window.open(\'' + p.url + '\',\'_blank\')">').join('') +
+          (g.photo_count > 8 ? '<div style="display:flex;align-items:center;justify-content:center;background:#f0f2f5;border-radius:8px;font-size:13px;color:var(--text-muted);aspect-ratio:1;">+' + (g.photo_count - 8) + ' more</div>' : '') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  el.innerHTML = uploaderHtml + galHtml;
+}
+
+function copyGalleryLink(url) {
+  navigator.clipboard.writeText(url).then(() => showToast('🔗 Gallery link copied!')).catch(() => {
+    prompt('Copy this link:', url);
+  });
+}
+
+async function blastGalleryLink(eventId, shareUrl) {
+  try {
+    await api('/api/admin/events/' + eventId + '/blast-gallery', { method: 'POST', body: JSON.stringify({ share_url: shareUrl }) });
+    showToast('✅ Gallery link sent to all parents via WhatsApp!');
+  } catch(e) { showToast('Failed to send ❌'); }
+}
+
+// ── Upcoming Events Widget (Overview) ─────────────────────
+async function loadUpcomingEventsWidget() {
+  const el = document.getElementById('upcoming-events-body');
+  if (!el) return;
+  try {
+    const events = await api('/api/admin/events');
+    const today = new Date(new Date().toDateString());
+    const upcoming = events.filter(e => new Date(e.date) >= today).sort((a,b) => new Date(a.date) - new Date(b.date)).slice(0, 3);
+    if (!upcoming.length) {
+      el.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;">No upcoming events. <span style="color:var(--green);cursor:pointer;" onclick="switchSection(\'events\', null)">Add one →</span></div>';
+      return;
+    }
+    el.innerHTML = upcoming.map(e => {
+      const cd = getCountdown(e.date);
+      const color = eventTypeColors[e.type] || 'var(--green)';
+      const emoji = eventTypeEmoji[e.type] || '📅';
+      const dateStr = new Date(e.date).toLocaleDateString('en-NG', { weekday:'short', day:'numeric', month:'short' });
+      return '<div style="display:flex;align-items:center;gap:14px;padding:10px 0;border-bottom:1px solid #f5f5f5;">' +
+        '<div style="min-width:48px;text-align:center;">' +
+          (cd.cls === 'today'
+            ? '<div style="font-size:11px;font-weight:700;color:white;background:var(--green);border-radius:6px;padding:3px 6px;">TODAY</div>'
+            : '<div style="font-size:22px;font-weight:800;color:' + color + ';">' + cd.label + '</div><div style="font-size:9px;color:var(--text-muted);">days</div>') +
+        '</div>' +
+        '<div style="flex:1;">' +
+          '<div style="font-weight:600;font-size:13px;">' + emoji + ' ' + e.name + '</div>' +
+          '<div style="font-size:11px;color:var(--text-muted);">' + dateStr + (e.time ? ' · ' + formatTime(e.time) : '') + '</div>' +
+        '</div>' +
+        '<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:' + color + '20;color:' + color + ';">' + (e.type||'event') + '</span>' +
+      '</div>';
+    }).join('');
+  } catch(e) {
+    const el2 = document.getElementById('upcoming-events-body');
+    if (el2) el2.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Events feature not yet active</div>';
+  }
 }
 
 

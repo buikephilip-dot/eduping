@@ -1412,6 +1412,219 @@ app.get('/api/admin/attendance', requireSchool, async (req, res) => {
   } catch(err) { bad(res, err.message, 500); }
 });
 
+
+// ══════════════════════════════════════════════════════════
+// EVENTS HUB ENDPOINTS
+// ══════════════════════════════════════════════════════════
+
+// GET /api/admin/school — return school info including events_enabled
+app.get('/api/admin/school', requireSchool, async (req, res) => {
+  try {
+    const r = await q('SELECT id, name, city, plan, status, twilio_number, events_enabled, current_term FROM schools WHERE id=$1', [req.school.id]);
+    json(res, r.rows[0] || {});
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// GET /api/admin/events
+app.get('/api/admin/events', requireSchool, async (req, res) => {
+  try {
+    const rows = await q('SELECT * FROM school_events WHERE school_id=$1 ORDER BY date ASC', [req.school.id]);
+    json(res, rows.rows);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// POST /api/admin/events
+app.post('/api/admin/events', requireSchool, async (req, res) => {
+  try {
+    const { name, date, time, type, description, notify_parents } = req.body;
+    if (!name || !date) return bad(res, 'name and date required');
+    const r = await q(
+      'INSERT INTO school_events (school_id,name,date,time,type,description,notify_parents) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+      [req.school.id, name, date, time||null, type||'social', description||null, notify_parents||false]
+    );
+    json(res, r.rows[0]);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// DELETE /api/admin/events/:id
+app.delete('/api/admin/events/:id', requireSchool, async (req, res) => {
+  try {
+    await q('DELETE FROM school_events WHERE id=$1 AND school_id=$2', [req.params.id, req.school.id]);
+    json(res, { ok: true });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// POST /api/admin/events/:id/notify — notify parents about a specific event
+app.post('/api/admin/events/:id/notify', requireSchool, async (req, res) => {
+  try {
+    const school = req.school;
+    const evtRes = await q('SELECT * FROM school_events WHERE id=$1 AND school_id=$2', [req.params.id, school.id]);
+    if (!evtRes.rows.length) return bad(res, 'Event not found', 404);
+    const evt = evtRes.rows[0];
+    const parents = await q('SELECT DISTINCT parent_phone, name FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL AND parent_phone != \'\'', [school.id]);
+    const from = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
+    const dateStr = new Date(evt.date).toLocaleDateString('en-NG', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    const msg = `📅 *Event Reminder — ${school.name}*\n\n*${evt.name}*\n📆 ${dateStr}${evt.time ? ' · ' + evt.time : ''}\n${evt.description ? '\n' + evt.description + '\n' : ''}\n${school.name} 🏫`;
+    let sent = 0;
+    for (const p of parents.rows) {
+      try { await twilioSend(p.parent_phone, from, msg); sent++; } catch(e) { console.warn('Failed to notify:', p.parent_phone); }
+    }
+    json(res, { ok: true, sent });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// POST /api/admin/events/notify-all — blast all upcoming events
+app.post('/api/admin/events/notify-all', requireSchool, async (req, res) => {
+  try {
+    const school = req.school;
+    const events = await q('SELECT * FROM school_events WHERE school_id=$1 AND date >= current_date ORDER BY date ASC LIMIT 5', [school.id]);
+    if (!events.rows.length) return json(res, { ok: true, sent: 0 });
+    const parents = await q('SELECT DISTINCT parent_phone FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL AND parent_phone != \'\'', [school.id]);
+    const from = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
+    const eventList = events.rows.map(e => {
+      const d = new Date(e.date).toLocaleDateString('en-NG', { day:'numeric', month:'short' });
+      return '📅 *' + e.name + '* — ' + d;
+    }).join('\n');
+    const msg = `📅 *Upcoming Events — ${school.name}*\n\n${eventList}\n\nStay updated with EduPing!\n${school.name} 🏫`;
+    let sent = 0;
+    for (const p of parents.rows) {
+      try { await twilioSend(p.parent_phone, from, msg); sent++; } catch(e) {}
+    }
+    json(res, { ok: true, sent });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// POST /api/admin/events/:id/feed — post a live update
+app.post('/api/admin/events/:id/feed', requireSchool, async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message) return bad(res, 'message required');
+    await q('INSERT INTO event_feeds (school_id,event_id,message) VALUES ($1,$2,$3)', [req.school.id, req.params.id, message]);
+    json(res, { ok: true });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// POST /api/admin/events/:id/photos — upload photo to Cloudinary
+app.post('/api/admin/events/:id/photos', requireSchool, async (req, res) => {
+  try {
+    const { image_data, filename, mime_type } = req.body;
+    if (!image_data) return bad(res, 'image_data required');
+
+    // Upload to Cloudinary
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+    if (!cloudName || !apiKey || !apiSecret) return bad(res, 'Cloudinary not configured');
+
+    const timestamp = Math.round(Date.now() / 1000);
+    const folder = 'eduping/' + req.school.id + '/events/' + req.params.id;
+    const crypto = require('crypto');
+    const sig = crypto.createHash('sha1').update('folder=' + folder + '&timestamp=' + timestamp + apiSecret).digest('hex');
+
+    const formData = new URLSearchParams();
+    formData.append('file', 'data:' + (mime_type||'image/jpeg') + ';base64,' + image_data);
+    formData.append('api_key', apiKey);
+    formData.append('timestamp', timestamp);
+    formData.append('folder', folder);
+    formData.append('signature', sig);
+
+    const uploadRes = await fetch('https://api.cloudinary.com/v1_1/' + cloudName + '/image/upload', {
+      method: 'POST',
+      body: formData
+    });
+    const uploadData = await uploadRes.json();
+    if (uploadData.error) return bad(res, uploadData.error.message);
+
+    // Get or create gallery record
+    let gallery = await q('SELECT * FROM event_galleries WHERE event_id=$1 AND school_id=$2', [req.params.id, req.school.id]);
+    if (!gallery.rows.length) {
+      const evtName = (await q('SELECT name FROM school_events WHERE id=$1', [req.params.id])).rows[0]?.name || 'Event';
+      const token = require('crypto').randomBytes(16).toString('hex');
+      gallery = await q('INSERT INTO event_galleries (school_id,event_id,event_name,share_token) VALUES ($1,$2,$3,$4) RETURNING *',
+        [req.school.id, req.params.id, evtName, token]);
+    }
+    const galleryId = gallery.rows[0].id;
+
+    // Save photo record
+    await q('INSERT INTO event_photos (gallery_id,school_id,event_id,url,public_id,filename) VALUES ($1,$2,$3,$4,$5,$6)',
+      [galleryId, req.school.id, req.params.id, uploadData.secure_url, uploadData.public_id, filename||'photo']);
+
+    json(res, { ok: true, url: uploadData.secure_url });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// GET /api/admin/events/galleries — all galleries with photos
+app.get('/api/admin/events/galleries', requireSchool, async (req, res) => {
+  try {
+    const galleries = await q('SELECT * FROM event_galleries WHERE school_id=$1 ORDER BY created_at DESC', [req.school.id]);
+    const result = [];
+    for (const g of galleries.rows) {
+      const photos = await q('SELECT url, public_id FROM event_photos WHERE gallery_id=$1 ORDER BY created_at DESC', [g.id]);
+      result.push({ ...g, photos: photos.rows, photo_count: photos.rows.length });
+    }
+    json(res, result);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// POST /api/admin/events/:id/blast-gallery — send gallery link to all parents
+app.post('/api/admin/events/:id/blast-gallery', requireSchool, async (req, res) => {
+  try {
+    const { share_url } = req.body;
+    const school = req.school;
+    const evtRes = await q('SELECT name FROM school_events WHERE id=$1 AND school_id=$2', [req.params.id, school.id]);
+    const evtName = evtRes.rows[0]?.name || 'Event';
+    const parents = await q('SELECT DISTINCT parent_phone FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL AND parent_phone != \'\'', [school.id]);
+    const from = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
+    const msg = `📸 *${evtName} — Photo Gallery*\n\nDear parent, photos from *${evtName}* are now available!\n\nView and download your child's photos here:\n${share_url}\n\n${school.name} 🏫`;
+    let sent = 0;
+    for (const p of parents.rows) {
+      try { await twilioSend(p.parent_phone, from, msg); sent++; } catch(e) {}
+    }
+    json(res, { ok: true, sent });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// GET /gallery/:token — public gallery page for parents
+app.get('/gallery/:token', async (req, res) => {
+  try {
+    const gallery = await q('SELECT eg.*, s.name as school_name FROM event_galleries eg JOIN schools s ON s.id=eg.school_id WHERE eg.share_token=$1', [req.params.token]);
+    if (!gallery.rows.length) return res.status(404).send('Gallery not found');
+    const g = gallery.rows[0];
+    const photos = await q('SELECT url FROM event_photos WHERE gallery_id=$1 ORDER BY created_at ASC', [g.id]);
+    const html = `<!DOCTYPE html><html><head>
+      <title>${g.event_name} — ${g.school_name}</title>
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:'DM Sans',Arial,sans-serif;background:#f0f2f5;min-height:100vh;}
+        .header{background:#1a7a4a;color:white;padding:20px;text-align:center;}
+        .header h1{font-size:22px;font-weight:700;}
+        .header p{font-size:13px;opacity:.8;margin-top:4px;}
+        .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;padding:20px;}
+        .photo-wrap{position:relative;aspect-ratio:1;overflow:hidden;border-radius:10px;background:#ddd;}
+        .photo-wrap img{width:100%;height:100%;object-fit:cover;display:block;}
+        .download-btn{position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,.6);color:white;border:none;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;text-decoration:none;}
+        .footer{text-align:center;padding:20px;font-size:12px;color:#667781;}
+        .empty{text-align:center;padding:60px;color:#667781;}
+      </style>
+    </head><body>
+      <div class="header">
+        <h1>📸 ${g.event_name}</h1>
+        <p>${g.school_name} · ${photos.rows.length} photos</p>
+      </div>
+      ${photos.rows.length
+        ? '<div class="grid">' + photos.rows.map(p =>
+            '<div class="photo-wrap"><img src="' + p.url + '" loading="lazy"><a class="download-btn" href="' + p.url + '?fl_attachment=1" download>⬇ Save</a></div>'
+          ).join('') + '</div>'
+        : '<div class="empty">No photos uploaded yet</div>'
+      }
+      <div class="footer">Powered by EduPing · eduping.org</div>
+    </body></html>`;
+    res.send(html);
+  } catch(err) { res.status(500).send('Error loading gallery'); }
+});
+
+
 app.use((err, req, res, next) => { console.error(err); res.status(500).json({ error: 'Server error', detail: process.env.NODE_ENV === 'production' ? undefined : err.message }); });
 
 (async () => {
