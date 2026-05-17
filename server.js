@@ -59,6 +59,9 @@ app.use('/api/', apiLimiter);
 const webhookLimiter = rateLimit({ windowMs: 60 * 1000, max: 30 });
 app.use('/webhooks/', webhookLimiter);
 if (process.env.SENTRY_DSN) app.use(Sentry.Handlers.requestHandler());
+// Serve landing page at root — before static middleware
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'landing.html')));
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const pool = new Pool({
@@ -597,7 +600,7 @@ async function requireSchool(req, res, next) {
   next();
 }
 
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+// root route handled above by landing.html
 app.get('/superadmin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'superadmin.html')));
 app.get('/onboarding', (req, res) => res.sendFile(path.join(__dirname, 'public', 'onboarding.html')));
 app.get('/privacy', (req, res) => {
@@ -1703,10 +1706,7 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'landing.html'));
 });
 
-// Serve admin dashboard at /admin
-app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+// /admin route handled above
 
 app.use((err, req, res, next) => { console.error(err); res.status(500).json({ error: 'Server error', detail: process.env.NODE_ENV === 'production' ? undefined : err.message }); });
 
