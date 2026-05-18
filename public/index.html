@@ -369,7 +369,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         </div>
         <div class="form-group">
           <label class="form-label">Admin Password</label>
-          <input class="form-input" type="password" id="login-password" placeholder="Enter password" onkeydown="if(event.key==='Enter')doLogin()">
+          <div style="position:relative;">
+  <input class="form-input" type="password" id="login-password" placeholder="Enter password" onkeydown="if(event.key==='Enter')doLogin()" style="padding-right:44px;">
+  <button type="button" onclick="togglePassword()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text-muted);" id="pass-toggle">👁</button>
+</div>
         </div>
         <div class="modal-err" id="login-err" style="display:none;">Wrong school ID or password. Try again.</div>
         <button class="login-btn" onclick="doLogin()">Login to Dashboard</button>
@@ -451,6 +454,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         <button class="subnav-btn" onclick="switchSection('fees',this)">💳 Fees</button>
         <button class="subnav-btn" onclick="switchSection('classsummary',this)">📋 Class View</button>
         <button class="subnav-btn" onclick="switchSection('events',this)">🎉 Events</button>
+        <button class="subnav-btn" onclick="switchSection('teacherchats',this)">💬 Teacher Chats</button>
+        <button class="subnav-btn" onclick="switchSection('notifications',this)">🔔 Alerts <span id="notif-badge" style="display:none;background:var(--danger);color:white;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></button>
+        <button class="subnav-btn" onclick="switchSection('termcal',this)">📅 Term Calendar</button>
+        <button class="subnav-btn" onclick="switchSection('performance',this)">🏅 Rankings</button>
       </div>
 
       <!-- OVERVIEW -->
@@ -561,24 +568,54 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
           </div>
         </div>
 
+        <!-- Add / Import Staff -->
         <div class="dash-card full" style="margin-top:18px;">
-          <div class="dash-card-header"><div class="dash-card-title">Add New Staff Member</div></div>
-          <div class="dash-card-body">
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:end;">
-              <div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="sf-name" placeholder="Mrs Amaka Johnson"></div>
-              <div class="form-group"><label class="form-label">Role</label>
-                <select class="form-select" id="sf-role">
-                  <option value="teacher">Class Teacher</option>
-                  <option value="subject_teacher">Subject Teacher</option>
-                  <option value="nurse">Nurse</option>
-                  <option value="security">Security</option>
-                </select>
-              </div>
-              <div class="form-group"><label class="form-label">Subject</label><input class="form-input" id="sf-subject" placeholder="Mathematics"></div>
-              <div class="form-group"><label class="form-label">Class</label><input class="form-input" id="sf-class" placeholder="JSS2A"></div>
-              <div class="form-group"><label class="form-label">WhatsApp Number</label><input class="form-input" id="sf-phone" placeholder="+2348011112233"></div>
+          <div class="dash-card-header">
+            <div class="dash-card-title">➕ Add / Import Staff</div>
+            <div style="display:flex;gap:8px;">
+              <button class="date-filter-btn active" onclick="switchStaffTab('manual',this)" id="staff-tab-manual">Manual</button>
+              <button class="date-filter-btn" onclick="switchStaffTab('csv',this)" id="staff-tab-csv">CSV Import</button>
             </div>
-            <button class="broadcast-btn" style="margin-top:14px;max-width:200px" onclick="addStaff()">➕ Add Staff Member</button>
+          </div>
+          <div class="dash-card-body" id="staff-add-body">
+            <!-- Manual tab -->
+            <div id="staff-tab-manual-content">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px;">
+                <div class="form-group"><label class="form-label">Full Name *</label><input class="form-input" id="sf-name" placeholder="Mrs Amaka Johnson"></div>
+                <div class="form-group"><label class="form-label">Role *</label>
+                  <select class="form-select" id="sf-role">
+                    <option value="teacher">Class Teacher</option>
+                    <option value="subject_teacher">Subject Teacher</option>
+                    <option value="head_teacher">Head Teacher</option>
+                    <option value="vice_principal">Vice Principal</option>
+                    <option value="nurse">Nurse</option>
+                    <option value="accountant">Accountant</option>
+                    <option value="security">Security</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div class="form-group"><label class="form-label">WhatsApp Number *</label><input class="form-input" id="sf-phone" placeholder="+2348011112233"></div>
+                <div class="form-group"><label class="form-label">Subject</label><input class="form-input" id="sf-subject" placeholder="Mathematics"></div>
+                <div class="form-group"><label class="form-label">Class Assigned</label><input class="form-input" id="sf-class" placeholder="JSS2A"></div>
+                <div class="form-group"><label class="form-label">Email (optional)</label><input class="form-input" id="sf-email" placeholder="teacher@school.com" type="email"></div>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center;">
+                <button class="broadcast-btn" style="max-width:200px" onclick="addStaff()">➕ Add Staff Member</button>
+                <span style="font-size:12px;color:var(--text-muted);">Staff will receive WhatsApp onboarding message automatically</span>
+              </div>
+            </div>
+            <!-- CSV Import tab -->
+            <div id="staff-tab-csv-content" style="display:none;">
+              <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.6;">Upload a CSV file with columns: <strong>Name, Role, Subject, Class, Phone, Email</strong>. Extra columns are ignored.</div>
+              <div style="border:2px dashed #e9edef;border-radius:10px;padding:28px;text-align:center;cursor:pointer;" onclick="document.getElementById('staff-csv-input').click()">
+                <div style="font-size:32px;margin-bottom:8px;">📋</div>
+                <div style="font-weight:600;font-size:14px;margin-bottom:4px;">Click to upload staff CSV</div>
+                <div style="font-size:12px;color:var(--text-muted);">.csv or .xlsx supported</div>
+                <input type="file" id="staff-csv-input" accept=".csv,.xlsx" style="display:none" onchange="importStaffCSV(event)">
+              </div>
+              <div id="staff-csv-result" style="margin-top:12px;"></div>
+              <button class="qr-btn" style="margin-top:12px;" onclick="downloadStaffTemplate()">⬇ Download Staff Template</button>
+            </div>
           </div>
         </div>
       </div>
@@ -733,26 +770,52 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
 
       <!-- BROADCAST -->
       <div id="section-broadcast" class="dash-section">
-        <div class="dash-grid">
-          <div class="dash-card">
-            <div class="dash-card-header"><div class="dash-card-title">Send Broadcast</div></div>
-            <div class="dash-card-body">
-              <div style="display:flex;flex-direction:column;gap:12px;">
-                <div class="form-group"><label class="form-label">Send to</label>
-                  <select class="form-select" id="broadcast-target">
-                    <option value="all_parents">All parents</option>
-                    <option value="staff">All staff</option>
-                  </select>
-                </div>
-                <div class="form-group"><label class="form-label">Message</label>
-                  <textarea class="form-textarea" id="broadcast-msg" placeholder="Type your WhatsApp message..."></textarea>
-                </div>
-                <button class="broadcast-btn" onclick="sendBroadcast()">📤 Send via WhatsApp</button>
+        <!-- Composer -->
+        <div class="dash-card full" style="margin-bottom:18px;">
+          <div class="dash-card-header">
+            <div class="dash-card-title">📢 Broadcast Composer</div>
+            <div id="broadcast-preview-count" style="font-size:12px;color:var(--text-muted);"></div>
+          </div>
+          <div class="dash-card-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
+              <div class="form-group"><label class="form-label">Send To *</label>
+                <select class="form-select" id="broadcast-target" onchange="updateBroadcastCount()">
+                  <option value="all_parents">All Parents</option>
+                  <option value="staff">All Staff</option>
+                  <option value="class">Specific Class</option>
+                  <option value="fee_defaulters">Fee Defaulters Only</option>
+                  <option value="absent_today">Today's Absent Parents</option>
+                </select>
+              </div>
+              <div class="form-group" id="broadcast-class-group" style="display:none;">
+                <label class="form-label">Select Class</label>
+                <select class="form-select" id="broadcast-class">
+                  <option value="">Loading classes...</option>
+                </select>
+              </div>
+              <div class="form-group"><label class="form-label">Schedule (optional)</label>
+                <input class="form-input" id="broadcast-schedule" type="datetime-local">
               </div>
             </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">Message *</label>
+              <textarea class="form-textarea" id="broadcast-msg" placeholder="Type your WhatsApp message..." style="height:100px;" oninput="updateCharCount()"></textarea>
+              <div style="display:flex;justify-content:space-between;margin-top:4px;">
+                <div style="font-size:11px;color:var(--text-muted);">WhatsApp messages support *bold*, _italic_, and emoji</div>
+                <div id="broadcast-char-count" style="font-size:11px;color:var(--text-muted);">0 chars</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;">
+              <button class="broadcast-btn" onclick="sendBroadcast()" style="max-width:220px;">📤 Send via WhatsApp</button>
+              <button class="action-btn" onclick="previewBroadcast()">👁 Preview</button>
+              <div id="broadcast-sending" style="display:none;font-size:13px;color:var(--green);">Sending...</div>
+            </div>
           </div>
+        </div>
+
+        <div class="dash-grid">
           <div class="dash-card">
-            <div class="dash-card-header"><div class="dash-card-title">Quick Templates</div></div>
+            <div class="dash-card-header"><div class="dash-card-title">⚡ Quick Templates</div></div>
             <div class="dash-card-body">
               <div style="display:flex;flex-direction:column;gap:8px;">
                 <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('fee')">💰 Fee payment reminder</button>
@@ -760,8 +823,43 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
                 <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('exam')">📝 Exam timetable notice</button>
                 <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('award')">🏆 Student of the week</button>
                 <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('pta')">👨‍👩‍👧 PTA meeting reminder</button>
+                <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('result')">📊 Results are ready</button>
+                <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('holiday')">🏖 Holiday notice</button>
+                <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('reopening')">🏫 Resumption reminder</button>
               </div>
             </div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">📊 Broadcast History</div></div>
+            <div class="dash-card-body" style="padding:0;" id="broadcast-history-body">
+              <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No broadcasts yet</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Student Progress Report Generator -->
+        <div class="dash-card full" style="margin-top:18px;">
+          <div class="dash-card-header">
+            <div class="dash-card-title">📄 Student Progress Report</div>
+            <div style="font-size:12px;color:var(--text-muted);">Generate & send PDF report card to parent via WhatsApp</div>
+          </div>
+          <div class="dash-card-body" style="padding:16px 18px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;">
+              <div class="form-group"><label class="form-label">Select Class</label>
+                <select class="form-select" id="report-class" onchange="loadReportStudents()">
+                  <option value="">All classes</option>
+                </select>
+              </div>
+              <div class="form-group"><label class="form-label">Select Student</label>
+                <select class="form-select" id="report-student">
+                  <option value="">All students in class</option>
+                </select>
+              </div>
+              <div>
+                <button class="broadcast-btn" onclick="generateProgressReport()" style="max-width:200px;">📄 Generate Report</button>
+              </div>
+            </div>
+            <div id="report-result" style="margin-top:12px;"></div>
           </div>
         </div>
       </div>
@@ -1026,6 +1124,96 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         </div>
       </div>
 
+      <!-- TEACHER CHATS -->
+      <div id="section-teacherchats" class="dash-section">
+        <div class="dash-card full">
+          <div class="dash-card-header">
+            <div class="dash-card-title">💬 Teacher Conversations</div>
+            <input class="search-box" id="teacher-chat-search" placeholder="Search teacher..." oninput="filterTeacherChats()" style="width:180px;font-size:13px;">
+          </div>
+          <div style="display:flex;height:520px;overflow:hidden;">
+            <div id="teacher-chat-list" style="width:280px;border-right:1px solid #f0f2f5;overflow-y:auto;flex-shrink:0;"><div class="loading" style="padding:20px;">Loading...</div></div>
+            <div id="teacher-chat-messages" style="flex:1;overflow-y:auto;padding:16px;background:var(--gray-bg);">
+              <div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px;">Select a teacher to view their conversation</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- NOTIFICATIONS / ALERTS -->
+      <div id="section-notifications" class="dash-section">
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:18px;">
+          <div class="stat-card red"><div class="stat-icon">⚠️</div><div class="stat-value" id="notif-stat-atrisk">—</div><div class="stat-label">At-risk students</div></div>
+          <div class="stat-card blue"><div class="stat-icon">📋</div><div class="stat-value" id="notif-stat-absent">—</div><div class="stat-label">Absent today</div></div>
+          <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-value" id="notif-stat-fees">—</div><div class="stat-label">Fee defaulters</div></div>
+          <div class="stat-card green"><div class="stat-icon">✅</div><div class="stat-value" id="notif-stat-signin">—</div><div class="stat-label">Staff signed in</div></div>
+        </div>
+        <div class="dash-card full">
+          <div class="dash-card-header"><div class="dash-card-title">🔔 All Alerts</div>
+            <div style="display:flex;gap:6px;">
+              <button class="date-filter-btn active" onclick="filterNotifs('all',this)">All</button>
+              <button class="date-filter-btn" onclick="filterNotifs('risk',this)">At-Risk</button>
+              <button class="date-filter-btn" onclick="filterNotifs('absence',this)">Absences</button>
+              <button class="date-filter-btn" onclick="filterNotifs('fees',this)">Fees</button>
+            </div>
+          </div>
+          <div class="dash-card-body" style="padding:0;" id="notif-list"><div class="loading" style="padding:20px;">Loading...</div></div>
+        </div>
+      </div>
+
+      <!-- TERM CALENDAR -->
+      <div id="section-termcal" class="dash-section">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;">
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">📅 Set Term Dates</div></div>
+            <div class="dash-card-body" style="padding:16px 18px;">
+              <div class="form-group" style="margin-bottom:12px;"><label class="form-label">Current Term Name</label><input class="form-input" id="term-name" placeholder="e.g. Third Term 2024/2025"></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+                <div class="form-group"><label class="form-label">Term Start Date</label><input class="form-input" id="term-start" type="date"></div>
+                <div class="form-group"><label class="form-label">Term End Date</label><input class="form-input" id="term-end" type="date"></div>
+                <div class="form-group"><label class="form-label">Mid-term Break Start</label><input class="form-input" id="midterm-start" type="date"></div>
+                <div class="form-group"><label class="form-label">Mid-term Break End</label><input class="form-input" id="midterm-end" type="date"></div>
+              </div>
+              <div class="form-group" style="margin-bottom:12px;"><label class="form-label">Fee Deadline</label><input class="form-input" id="fee-deadline-date" type="date"></div>
+              <button class="broadcast-btn" onclick="saveTermDates()">💾 Save Term Dates</button>
+            </div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">📊 Term Progress</div></div>
+            <div class="dash-card-body" style="padding:16px 18px;" id="term-progress-body">
+              <div class="loading">Loading term info...</div>
+            </div>
+          </div>
+        </div>
+        <div class="dash-card full">
+          <div class="dash-card-header"><div class="dash-card-title">🗓 Exam Schedule</div>
+            <button class="export-btn" onclick="addExamSlot()">➕ Add Exam</button>
+          </div>
+          <div class="dash-card-body" style="padding:0;" id="exam-schedule-body"><div class="loading" style="padding:20px;">No exams scheduled yet</div></div>
+        </div>
+      </div>
+
+      <!-- PERFORMANCE RANKINGS -->
+      <div id="section-performance" class="dash-section">
+        <div class="dash-card full" style="margin-bottom:18px;">
+          <div class="dash-card-header">
+            <div class="dash-card-title">🏅 Class Performance Rankings</div>
+            <button class="export-btn" onclick="exportPerformance()">⬇ CSV</button>
+          </div>
+          <div class="dash-card-body" style="padding:0;" id="class-rankings-body"><div class="loading" style="padding:20px;">Loading...</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">🏆 Top 10 Students School-wide</div></div>
+            <div class="dash-card-body" style="padding:0;" id="top-students-body"><div class="loading" style="padding:20px;">Loading...</div></div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">⚠️ Students Needing Support</div></div>
+            <div class="dash-card-body" style="padding:0;" id="bottom-students-body"><div class="loading" style="padding:20px;">Loading...</div></div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -1047,6 +1235,26 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
   </div>
   <div class="profile-panel-body" id="profile-body">
     <div class="loading" style="padding:40px;">Loading profile...</div>
+  </div>
+</div>
+
+<!-- STAFF PROFILE MODAL -->
+<div class="payment-modal" id="staff-profile-modal">
+  <div class="payment-modal-box" style="width:480px;">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
+      <div id="staff-modal-avatar" style="width:52px;height:52px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;color:white;font-size:20px;font-weight:700;flex-shrink:0;"></div>
+      <div>
+        <div id="staff-modal-name" style="font-weight:700;font-size:17px;"></div>
+        <div id="staff-modal-role" style="font-size:12px;color:var(--text-muted);"></div>
+      </div>
+      <button class="profile-panel-close" style="background:#f0f2f5;color:var(--text);margin-left:auto;" onclick="closeStaffModal()">✕</button>
+    </div>
+    <div id="staff-modal-body" style="font-size:13px;"></div>
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
+      <button class="broadcast-btn" id="staff-modal-msg-btn">💬 Send WhatsApp</button>
+      <button class="action-btn" id="staff-modal-edit-btn">✏️ Edit Details</button>
+      <button class="action-btn" id="staff-modal-deactivate-btn" style="color:var(--danger);border-color:var(--danger);">🚫 Deactivate</button>
+    </div>
   </div>
 </div>
 
@@ -1154,9 +1362,14 @@ function switchSection(name, btn) {
   if (name === 'appraisal') loadAppraisal();
   if (name === 'usage') loadUsage();
   if (name === 'chats') loadChats();
+  if (name === 'broadcast') loadBroadcast();
   if (name === 'fees') loadFees();
   if (name === 'classsummary') loadClassOptions();
   if (name === 'events') loadEvents();
+  if (name === 'teacherchats') loadTeacherChats();
+  if (name === 'notifications') loadNotifications();
+  if (name === 'termcal') { loadTermCalendar(); loadExamSchedule(); }
+  if (name === 'performance') loadPerformanceRankings();
 }
 
 // ── Dashboard data ────────────────────────────────────────
@@ -1500,7 +1713,7 @@ function renderStaffGrid(rows) {
     const initials = s.name.split(' ').slice(1).map(n => n[0]).join('').slice(0,2) || s.name[0];
     const color = colors[Math.abs(s.name.charCodeAt(0)) % colors.length];
     const notSignedIn = todaySignedIn.size > 0 && !todaySignedIn.has(s.name);
-    return `<div class="staff-card" style="${notSignedIn ? 'border:2px solid var(--danger);' : ''}">
+    return `<div class="staff-card" style="${notSignedIn ? 'border:2px solid var(--danger);' : ''}" onclick="${cardClick}" title="Click to view profile" style="cursor:pointer;">
       <div class="staff-avatar" style="background:${color}">${initials}</div>
       <div class="staff-name">${s.name}${notSignedIn ? '<span class="staff-no-signin">Not signed in</span>' : ''}</div>
       <div class="staff-role">${s.role}${s.subject?' — '+s.subject:''}</div>
@@ -2597,6 +2810,11 @@ async function loadDashboard() {
     loadHomeworkHistory();
     window._schoolName = d.school_name || document.querySelector('.topnav-name')?.textContent || 'EduPing School';
     loadUpcomingEventsWidget();
+    // Update notification badge
+    api('/api/admin/absentees/today').then(rows => {
+      const badge = document.getElementById('notif-badge');
+      if (badge && rows.length > 0) { badge.textContent = rows.length; badge.style.display = 'inline'; }
+    }).catch(() => {});
   } catch(e) { console.log('Dashboard error:', e); }
 }
 
@@ -2732,6 +2950,11 @@ async function addEvent() {
     document.getElementById('evt-date').value = '';
     loadEvents();
     loadUpcomingEventsWidget();
+    // Update notification badge
+    api('/api/admin/absentees/today').then(rows => {
+      const badge = document.getElementById('notif-badge');
+      if (badge && rows.length > 0) { badge.textContent = rows.length; badge.style.display = 'inline'; }
+    }).catch(() => {});
   } catch(e) { showToast('Failed to save event ❌'); }
 }
 
@@ -2742,6 +2965,11 @@ async function deleteEvent(id) {
     showToast('Event deleted');
     loadEvents();
     loadUpcomingEventsWidget();
+    // Update notification badge
+    api('/api/admin/absentees/today').then(rows => {
+      const badge = document.getElementById('notif-badge');
+      if (badge && rows.length > 0) { badge.textContent = rows.length; badge.style.display = 'inline'; }
+    }).catch(() => {});
   } catch(e) { showToast('Failed to delete ❌'); }
 }
 
@@ -2931,6 +3159,533 @@ async function loadUpcomingEventsWidget() {
   }
 }
 
+
+
+// ══════════════════════════════════════════════════════════
+// TEACHER CHATS
+// ══════════════════════════════════════════════════════════
+let allTeacherChats = [];
+let activeTeacherPhone = '';
+
+async function loadTeacherChats() {
+  const listEl = document.getElementById('teacher-chat-list');
+  if (!listEl) return;
+  try {
+    const data = await api('/api/admin/chats?type=staff');
+    allTeacherChats = data || [];
+    renderTeacherChatList(allTeacherChats);
+  } catch(e) {
+    // fallback - try loading from messages with staff filter
+    listEl.innerHTML = '<div style="padding:16px;font-size:13px;color:var(--text-muted);">No teacher conversations yet</div>';
+  }
+}
+
+function renderTeacherChatList(chats) {
+  const listEl = document.getElementById('teacher-chat-list');
+  if (!chats.length) {
+    listEl.innerHTML = '<div style="padding:16px;font-size:13px;color:var(--text-muted);">No teacher conversations yet</div>';
+    return;
+  }
+  listEl.innerHTML = chats.map(c => {
+    const isActive = c.phone === activeTeacherPhone;
+    return '<div onclick="openTeacherChat(\'' + c.phone + '\',\'' + (c.name||'Teacher').replace(/'/g,'') + '\')" style="padding:14px 16px;cursor:pointer;border-bottom:1px solid #f5f5f5;background:' + (isActive ? 'var(--green-pale)' : 'white') + ';transition:background .15s;">' +
+      '<div style="font-weight:600;font-size:13px;margin-bottom:2px;">' + (c.name||c.phone) + '</div>' +
+      '<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (c.last_message||'—') + '</div>' +
+      '<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">' + (c.last_time ? new Date(c.last_time).toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit'}) : '') + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function openTeacherChat(phone, name) {
+  activeTeacherPhone = phone;
+  renderTeacherChatList(allTeacherChats);
+  const msgEl = document.getElementById('teacher-chat-messages');
+  msgEl.innerHTML = '<div class="loading" style="padding:20px;">Loading messages...</div>';
+  try {
+    const messages = await api('/api/admin/chats/' + encodeURIComponent(phone) + '/messages');
+    if (!messages.length) {
+      msgEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px;">No messages yet</div>';
+      return;
+    }
+    msgEl.innerHTML = messages.map(m => {
+      const isOutgoing = m.direction === 'outbound' || m.role === 'assistant';
+      return '<div style="display:flex;justify-content:' + (isOutgoing ? 'flex-end' : 'flex-start') + ';margin-bottom:8px;">' +
+        '<div style="max-width:75%;background:' + (isOutgoing ? 'var(--green-bubble)' : 'white') + ';border-radius:' + (isOutgoing ? '12px 0 12px 12px' : '0 12px 12px 12px') + ';padding:8px 12px;font-size:13px;box-shadow:0 1px 2px rgba(0,0,0,.08);">' +
+          '<div style="line-height:1.5;">' + (m.body||m.message||'') + '</div>' +
+          '<div style="font-size:10px;color:var(--text-muted);text-align:right;margin-top:3px;">' + (m.created_at ? new Date(m.created_at).toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit'}) : '') + '</div>' +
+        '</div></div>';
+    }).join('');
+    msgEl.scrollTop = msgEl.scrollHeight;
+  } catch(e) {
+    msgEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px;">Could not load messages</div>';
+  }
+}
+
+function filterTeacherChats() {
+  const q = (document.getElementById('teacher-chat-search')?.value || '').toLowerCase();
+  renderTeacherChatList(allTeacherChats.filter(c => (c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q)));
+}
+
+// ══════════════════════════════════════════════════════════
+// NOTIFICATIONS / ALERTS
+// ══════════════════════════════════════════════════════════
+let allNotifications = [];
+
+async function loadNotifications() {
+  try {
+    const [students, absentees, feesData, signinData] = await Promise.all([
+      api('/api/admin/students/list').catch(() => []),
+      api('/api/admin/absentees/today').catch(() => []),
+      api('/api/admin/fees/summary').catch(() => ({ students: [], totals: {} })),
+      api('/api/admin/signin-log?period=today').catch(() => [])
+    ]);
+
+    const atRisk = students.filter(s => s.weekly_performance_score > 0 && s.weekly_performance_score < 40);
+    const feeDefaulters = (feesData.students || []).filter(s => s.fee_status === 'unpaid' && s.amount_due > 0);
+
+    const u = document.getElementById('notif-stat-atrisk');
+    const a = document.getElementById('notif-stat-absent');
+    const f = document.getElementById('notif-stat-fees');
+    const si = document.getElementById('notif-stat-signin');
+    if (u) u.textContent = atRisk.length;
+    if (a) a.textContent = absentees.length;
+    if (f) f.textContent = feeDefaulters.length;
+    if (si) si.textContent = signinData.length;
+
+    // Build notification list
+    allNotifications = [];
+    atRisk.forEach(s => allNotifications.push({ type:'risk', icon:'⚠️', title: s.name + ' — At Risk', body: 'Performance score: ' + s.weekly_performance_score + '% · ' + (s.class_name||'—'), id: s.id, color:'#fee2e2' }));
+    absentees.forEach(s => allNotifications.push({ type:'absence', icon:'🔴', title: s.name + ' — Absent Today', body: 'Class: ' + (s.class_name||'—') + ' · Parent: ' + (s.parent_phone||'—'), color:'#fef3c7' }));
+    feeDefaulters.slice(0,20).forEach(s => allNotifications.push({ type:'fees', icon:'💰', title: s.name + ' — Fee Outstanding', body: 'Balance: ₦' + Number(s.balance||0).toLocaleString() + ' · Class: ' + (s.class_name||'—'), id: s.id, color:'#f0f9ff' }));
+
+    renderNotifications(allNotifications);
+  } catch(e) {
+    const el = document.getElementById('notif-list');
+    if (el) el.innerHTML = '<div style="padding:20px;color:var(--text-muted);font-size:13px;">Could not load alerts</div>';
+  }
+}
+
+function renderNotifications(notifs) {
+  const el = document.getElementById('notif-list');
+  if (!el) return;
+  if (!notifs.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--green);font-size:13px;">✅ No alerts right now — everything looks good!</div>';
+    return;
+  }
+  el.innerHTML = '<table class="data-table"><thead><tr><th>Alert</th><th>Details</th><th>Action</th></tr></thead><tbody>' +
+    notifs.map(n => '<tr style="background:' + n.color + '20;">' +
+      '<td><span style="font-size:16px;">' + n.icon + '</span> <strong>' + n.title + '</strong></td>' +
+      '<td style="font-size:12px;color:var(--text-muted);">' + n.body + '</td>' +
+      '<td>' + (n.id ? '<button class="action-btn" onclick="openProfile(\'' + n.id + '\')">View</button>' : '') + '</td>' +
+    '</tr>').join('') + '</tbody></table>';
+}
+
+function filterNotifs(type, btn) {
+  document.querySelectorAll('.date-filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const filtered = type === 'all' ? allNotifications : allNotifications.filter(n => n.type === type);
+  renderNotifications(filtered);
+}
+
+// ══════════════════════════════════════════════════════════
+// TERM CALENDAR
+// ══════════════════════════════════════════════════════════
+async function loadTermCalendar() {
+  try {
+    const school = await api('/api/admin/school');
+    if (school.current_term) {
+      const tn = document.getElementById('term-name');
+      if (tn) tn.value = school.current_term;
+    }
+    renderTermProgress(school);
+  } catch(e) {}
+}
+
+function renderTermProgress(school) {
+  const el = document.getElementById('term-progress-body');
+  if (!el) return;
+  const now = new Date();
+  const start = school.term_start ? new Date(school.term_start) : null;
+  const end = school.term_end ? new Date(school.term_end) : null;
+  let progressHtml = '';
+  if (start && end) {
+    const total = end - start;
+    const elapsed = now - start;
+    const pct = Math.max(0, Math.min(100, Math.round((elapsed/total)*100)));
+    const daysLeft = Math.max(0, Math.round((end - now) / 86400000));
+    progressHtml = '<div style="margin-bottom:16px;">' +
+      '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:6px;"><span>Term Progress</span><span>' + pct + '%</span></div>' +
+      '<div style="background:#e9edef;border-radius:20px;height:8px;overflow:hidden;"><div style="width:' + pct + '%;height:100%;background:var(--green);border-radius:20px;transition:width .6s;"></div></div>' +
+      '<div style="font-size:12px;color:var(--text-muted);margin-top:6px;">' + daysLeft + ' days remaining</div></div>';
+  }
+  el.innerHTML = progressHtml +
+    '<div style="font-size:13px;display:flex;flex-direction:column;gap:8px;">' +
+    '<div><strong>Current Term:</strong> ' + (school.current_term||'Not set') + '</div>' +
+    '<div><strong>Fee Deadline:</strong> ' + (school.fee_deadline||'Not set') + '</div>' +
+    '</div>';
+}
+
+async function saveTermDates() {
+  const termName = document.getElementById('term-name')?.value;
+  const termStart = document.getElementById('term-start')?.value;
+  const termEnd = document.getElementById('term-end')?.value;
+  const feeDeadline = document.getElementById('fee-deadline-date')?.value;
+  try {
+    await api('/api/admin/school/term', { method: 'POST', body: JSON.stringify({ current_term: termName, term_start: termStart, term_end: termEnd, fee_deadline: feeDeadline }) });
+    showToast('✅ Term dates saved!');
+    loadTermCalendar();
+  } catch(e) { showToast('Failed to save ❌'); }
+}
+
+function addExamSlot() {
+  const subject = prompt('Subject / Exam name:');
+  if (!subject) return;
+  const date = prompt('Date (YYYY-MM-DD):');
+  if (!date) return;
+  const time = prompt('Time (e.g. 09:00 AM):');
+  api('/api/admin/events', { method: 'POST', body: JSON.stringify({ name: subject + ' Exam', date, time, type: 'exam', description: subject + ' examination', notify_parents: true }) })
+    .then(() => { showToast('✅ Exam added!'); loadExamSchedule(); })
+    .catch(() => showToast('Failed ❌'));
+}
+
+async function loadExamSchedule() {
+  try {
+    const events = await api('/api/admin/events');
+    const exams = events.filter(e => e.type === 'exam').sort((a,b) => new Date(a.date)-new Date(b.date));
+    const el = document.getElementById('exam-schedule-body');
+    if (!el) return;
+    if (!exams.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No exams scheduled — click ➕ Add Exam to begin</div>'; return; }
+    el.innerHTML = '<table class="data-table"><thead><tr><th>Exam</th><th>Date</th><th>Time</th><th>Days Away</th></tr></thead><tbody>' +
+      exams.map(e => {
+        const diff = Math.round((new Date(e.date) - new Date(new Date().toDateString())) / 86400000);
+        const badge = diff === 0 ? '<span style="color:var(--green);font-weight:700;">TODAY</span>' : diff < 0 ? '<span style="color:var(--text-muted);">Done</span>' : diff + ' days';
+        return '<tr><td><strong>' + e.name + '</strong></td><td>' + new Date(e.date).toLocaleDateString('en-NG',{weekday:'short',day:'numeric',month:'short'}) + '</td><td>' + (e.time||'—') + '</td><td>' + badge + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  } catch(e) {}
+}
+
+// ══════════════════════════════════════════════════════════
+// PERFORMANCE RANKINGS
+// ══════════════════════════════════════════════════════════
+let performanceData = [];
+
+async function loadPerformanceRankings() {
+  try {
+    const students = await api('/api/admin/students/list');
+    performanceData = students;
+
+    // Class rankings
+    const byClass = {};
+    students.forEach(s => {
+      if (!s.class_name) return;
+      if (!byClass[s.class_name]) byClass[s.class_name] = { class_name: s.class_name, students: [], total: 0, count: 0 };
+      byClass[s.class_name].students.push(s);
+      if (s.weekly_performance_score > 0) { byClass[s.class_name].total += s.weekly_performance_score; byClass[s.class_name].count++; }
+    });
+    const classes = Object.values(byClass).map(c => ({ ...c, avg: c.count ? Math.round(c.total/c.count) : 0 })).sort((a,b) => b.avg - a.avg);
+
+    const rankEl = document.getElementById('class-rankings-body');
+    if (rankEl) {
+      rankEl.innerHTML = '<table class="data-table"><thead><tr><th>Rank</th><th>Class</th><th>Students</th><th>Avg Score</th><th>Performance</th></tr></thead><tbody>' +
+        classes.map((c, i) => {
+          const color = c.avg >= 70 ? 'var(--green)' : c.avg >= 50 ? 'var(--gold)' : 'var(--danger)';
+          const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1);
+          return '<tr><td style="font-size:18px;">' + medal + '</td><td><strong>' + c.class_name + '</strong></td><td>' + c.students.length + '</td>' +
+            '<td style="font-weight:700;color:' + color + ';">' + (c.avg||'—') + '%</td>' +
+            '<td style="width:160px;"><div style="background:#e9edef;border-radius:20px;height:8px;overflow:hidden;"><div style="width:' + (c.avg||0) + '%;height:100%;background:' + color + ';border-radius:20px;"></div></div></td></tr>';
+        }).join('') + '</tbody></table>';
+    }
+
+    // Top 10
+    const topEl = document.getElementById('top-students-body');
+    if (topEl) {
+      const top = students.filter(s => s.weekly_performance_score > 0).sort((a,b) => b.weekly_performance_score - a.weekly_performance_score).slice(0,10);
+      topEl.innerHTML = top.length ? '<table class="data-table"><thead><tr><th>#</th><th>Student</th><th>Class</th><th>Score</th></tr></thead><tbody>' +
+        top.map((s,i) => '<tr><td style="font-weight:700;color:var(--green);">' + (i+1) + '</td><td style="cursor:pointer;color:var(--green);" onclick="openProfile(\'' + s.id + '\')">' + s.name + '</td><td>' + (s.class_name||'—') + '</td><td><strong>' + s.weekly_performance_score + '%</strong></td></tr>').join('') +
+        '</tbody></table>' : '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No score data yet</div>';
+    }
+
+    // Bottom students
+    const botEl = document.getElementById('bottom-students-body');
+    if (botEl) {
+      const bottom = students.filter(s => s.weekly_performance_score > 0 && s.weekly_performance_score < 50).sort((a,b) => a.weekly_performance_score - b.weekly_performance_score).slice(0,10);
+      botEl.innerHTML = bottom.length ? '<table class="data-table"><thead><tr><th>Student</th><th>Class</th><th>Score</th><th>Action</th></tr></thead><tbody>' +
+        bottom.map(s => '<tr><td style="cursor:pointer;color:var(--green);" onclick="openProfile(\'' + s.id + '\')">' + s.name + '</td><td>' + (s.class_name||'—') + '</td><td style="color:var(--danger);font-weight:700;">' + s.weekly_performance_score + '%</td><td><button class="action-btn" onclick="openProfile(\'' + s.id + '\')">View</button></td></tr>').join('') +
+        '</tbody></table>' : '<div style="padding:20px;text-align:center;color:var(--green);font-size:13px;">✅ All students performing above 50%</div>';
+    }
+  } catch(e) { console.log('Rankings error:', e); }
+}
+
+function exportPerformance() {
+  if (!performanceData.length) { showToast('No data to export'); return; }
+  const csv = 'Student,Class,Performance Score\n' + performanceData.map(s => [s.name, s.class_name||'', s.weekly_performance_score||0].map(v => '"'+v+'"').join(',')).join('\n');
+  downloadCSV(csv, 'performance_rankings.csv');
+}
+
+// ══════════════════════════════════════════════════════════
+// STAFF MANAGEMENT — CSV IMPORT, PROFILE, DEACTIVATE
+// ══════════════════════════════════════════════════════════
+function switchStaffTab(tab, btn) {
+  document.querySelectorAll('#staff-add-body .date-filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('staff-tab-manual-content').style.display = tab === 'manual' ? 'block' : 'none';
+  document.getElementById('staff-tab-csv-content').style.display = tab === 'csv' ? 'block' : 'none';
+}
+
+function downloadStaffTemplate() {
+  const csv = 'Name,Role,Subject,Class,Phone,Email\nMrs Amaka Johnson,teacher,Mathematics,JSS2A,+2348011112233,amaka@school.com\nMr Peter Obi,subject_teacher,English,JSS1B,+2348022223333,';
+  downloadCSV(csv, 'staff_template.csv');
+  showToast('📥 Staff template downloaded!');
+}
+
+async function importStaffCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const resultEl = document.getElementById('staff-csv-result');
+  resultEl.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Reading file...</div>';
+  try {
+    const text = await file.text();
+    const lines = text.trim().split('\n');
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/[^a-z]/g,''));
+    const rows = lines.slice(1).filter(l => l.trim());
+    let added = 0, failed = 0;
+    for (const row of rows) {
+      const vals = row.split(',').map(v => v.trim().replace(/^"|"$/g,''));
+      const obj = {};
+      headers.forEach((h, i) => obj[h] = vals[i] || '');
+      if (!obj.name && !obj.fullname) { failed++; continue; }
+      try {
+        await api('/api/admin/staff', { method: 'POST', body: JSON.stringify({
+          name: obj.name || obj.fullname,
+          role: obj.role || 'teacher',
+          subject: obj.subject || '',
+          class: obj.class || obj.classname || '',
+          phone: obj.phone || obj.whatsapp || '',
+          email: obj.email || ''
+        })});
+        added++;
+      } catch(e) { failed++; }
+    }
+    resultEl.innerHTML = '<div style="background:var(--green-pale);border-radius:8px;padding:12px;font-size:13px;color:var(--green);">✅ ' + added + ' staff imported' + (failed ? ', ' + failed + ' failed' : '') + '</div>';
+    loadStaff();
+  } catch(e) { resultEl.innerHTML = '<div style="color:var(--danger);font-size:13px;">Failed to read file: ' + e.message + '</div>'; }
+}
+
+async function openStaffProfile(staffId) {
+  const modal = document.getElementById('staff-profile-modal');
+  if (!modal) return;
+  modal.classList.add('show');
+  document.getElementById('staff-modal-name').textContent = 'Loading...';
+  document.getElementById('staff-modal-role').textContent = '';
+  document.getElementById('staff-modal-body').innerHTML = '<div class="loading">Loading...</div>';
+  try {
+    const staff = (window._lastStaffRows || []).find(s => s.id === staffId);
+    if (!staff) { modal.classList.remove('show'); return; }
+    const initials = staff.name.split(' ').slice(-1)[0]?.[0] + (staff.name.split(' ')[0]?.[0] || '');
+    document.getElementById('staff-modal-avatar').textContent = initials.toUpperCase();
+    document.getElementById('staff-modal-name').textContent = staff.name;
+    document.getElementById('staff-modal-role').textContent = (staff.role||'Staff') + (staff.class ? ' · ' + staff.class : '') + (staff.subject ? ' · ' + staff.subject : '');
+    document.getElementById('staff-modal-body').innerHTML =
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;margin-bottom:16px;">' +
+      '<div><strong>Phone:</strong> ' + (staff.phone||'—') + '</div>' +
+      '<div><strong>Class:</strong> ' + (staff.class||'—') + '</div>' +
+      '<div><strong>Subject:</strong> ' + (staff.subject||'—') + '</div>' +
+      '<div><strong>Status:</strong> <span class="pill ' + (staff.status==='active'?'pill-green':'pill-red') + '">' + (staff.status||'active') + '</span></div>' +
+      '<div><strong>Attendance submissions:</strong> ' + (staff.attendance_submissions||0) + '</div>' +
+      '<div><strong>Homeworks assigned:</strong> ' + (staff.homework_assigned||0) + '</div>' +
+      '<div><strong>Scores uploaded:</strong> ' + (staff.scores_uploaded||0) + '</div>' +
+      '<div><strong>Staff of Week:</strong> ' + (staff.staff_of_week_count||0) + 'x</div>' +
+      '</div>';
+    document.getElementById('staff-modal-msg-btn').onclick = () => {
+      if (staff.phone) window.open('https://wa.me/' + staff.phone.replace(/\D/g,''), '_blank');
+      else showToast('No phone number on record');
+    };
+    document.getElementById('staff-modal-edit-btn').onclick = () => editStaffDetails(staff);
+    document.getElementById('staff-modal-deactivate-btn').onclick = () => deactivateStaff(staffId, staff.name);
+  } catch(e) { document.getElementById('staff-modal-body').innerHTML = '<div style="color:var(--danger);">Could not load profile</div>'; }
+}
+
+function closeStaffModal() {
+  document.getElementById('staff-profile-modal')?.classList.remove('show');
+}
+
+async function editStaffDetails(staff) {
+  const phone = prompt('Update WhatsApp number:', staff.phone || '');
+  if (phone === null) return;
+  const cls = prompt('Update class:', staff.class || '');
+  if (cls === null) return;
+  try {
+    await api('/api/admin/staff/' + staff.id, { method: 'PATCH', body: JSON.stringify({ phone, class: cls }) });
+    showToast('✅ Staff details updated');
+    closeStaffModal();
+    loadStaff();
+  } catch(e) { showToast('Failed to update ❌'); }
+}
+
+async function deactivateStaff(staffId, name) {
+  if (!confirm('Deactivate ' + name + '? They will lose WhatsApp access but records will be kept.')) return;
+  try {
+    await api('/api/admin/staff/' + staffId, { method: 'PATCH', body: JSON.stringify({ status: 'inactive' }) });
+    showToast('✅ ' + name + ' deactivated');
+    closeStaffModal();
+    loadStaff();
+  } catch(e) { showToast('Failed ❌'); }
+}
+
+
+
+// ══════════════════════════════════════════════════════════
+// BROADCAST COMPOSER UPGRADES
+// ══════════════════════════════════════════════════════════
+
+// Extended templates
+const broadcastTemplates = {
+  fee: '💰 *Fee Payment Reminder*\n\nDear Parent,\n\nThis is a reminder that school fees for the current term are due. Kindly ensure payment is made as soon as possible to avoid disruption to your child\'s education.\n\nThank you for your continued support.\n\n🏫 {school_name}',
+  event: '📅 *Upcoming School Event*\n\nDear Parent,\n\nWe would like to remind you of an upcoming school event. Please make arrangements to attend or ensure your child is prepared.\n\nThank you.\n\n🏫 {school_name}',
+  exam: '📝 *Examination Notice*\n\nDear Parent,\n\nExaminations are approaching. Please ensure your child is revising adequately and has all required materials.\n\nWe wish all our students success.\n\n🏫 {school_name}',
+  award: '🏆 *Student of the Week*\n\nWe are proud to celebrate outstanding performance this week. Congratulations to our exceptional students!\n\nKeep up the excellent work!\n\n🏫 {school_name}',
+  pta: '👨‍👩‍👧 *PTA Meeting Reminder*\n\nDear Parent,\n\nThis is a reminder that our Parent-Teacher Association meeting is coming up soon. Your presence is important and greatly valued.\n\nPlease make every effort to attend.\n\n🏫 {school_name}',
+  result: '📊 *Results Available*\n\nDear Parent,\n\nYour child\'s results are now available. You can ask EduPing for a detailed breakdown by sending a message to this number.\n\nThank you for your partnership.\n\n🏫 {school_name}',
+  holiday: '🏖 *Holiday Notice*\n\nDear Parent,\n\nPlease be informed that school will be on holiday. We wish all our students and families a restful break.\n\nSee you when we return!\n\n🏫 {school_name}',
+  reopening: '🏫 *Resumption Reminder*\n\nDear Parent,\n\nSchool resumes soon. Please ensure your child is prepared with all required books, uniforms and materials.\n\nWe look forward to welcoming everyone back!\n\n🏫 {school_name}',
+};
+
+function useTemplate(type) {
+  const schoolName = window._schoolName || 'EduPing School';
+  const msg = (broadcastTemplates[type] || '').replace('{school_name}', schoolName);
+  const el = document.getElementById('broadcast-msg');
+  if (el) { el.value = msg; updateCharCount(); }
+}
+
+function updateCharCount() {
+  const el = document.getElementById('broadcast-msg');
+  const cc = document.getElementById('broadcast-char-count');
+  if (el && cc) cc.textContent = el.value.length + ' chars';
+}
+
+async function updateBroadcastCount() {
+  const target = document.getElementById('broadcast-target')?.value;
+  const countEl = document.getElementById('broadcast-preview-count');
+  const classGroup = document.getElementById('broadcast-class-group');
+  if (classGroup) classGroup.style.display = target === 'class' ? 'block' : 'none';
+
+  // Load classes into select if needed
+  if (target === 'class') {
+    try {
+      const classes = await api('/api/admin/classes');
+      const sel = document.getElementById('broadcast-class');
+      if (sel) sel.innerHTML = classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
+    } catch(e) {}
+  }
+
+  try {
+    let count = 0;
+    if (target === 'all_parents') {
+      const s = await api('/api/admin/students/list');
+      count = new Set(s.filter(x => x.parent_phone).map(x => x.parent_phone)).size;
+    } else if (target === 'staff') {
+      const s = await api('/api/admin/staff');
+      count = s.filter(x => x.phone).length;
+    } else if (target === 'fee_defaulters') {
+      const f = await api('/api/admin/fees/summary');
+      count = (f.students||[]).filter(s => s.fee_status === 'unpaid').length;
+    } else if (target === 'absent_today') {
+      const a = await api('/api/admin/absentees/today');
+      count = a.length;
+    }
+    if (countEl && count > 0) countEl.textContent = count + ' recipients';
+  } catch(e) {}
+}
+
+function previewBroadcast() {
+  const msg = document.getElementById('broadcast-msg')?.value;
+  const target = document.getElementById('broadcast-target')?.value;
+  if (!msg) { showToast('Type a message first'); return; }
+  alert('Preview:\n\nTo: ' + target + '\n\n' + msg);
+}
+
+// Override sendBroadcast to support new targets
+const _origSendBroadcast = typeof sendBroadcast === 'function' ? sendBroadcast : null;
+async function sendBroadcast() {
+  const msg = document.getElementById('broadcast-msg')?.value?.trim();
+  const target = document.getElementById('broadcast-target')?.value;
+  const cls = document.getElementById('broadcast-class')?.value;
+  if (!msg) { showToast('Type a message first ❌'); return; }
+  const sending = document.getElementById('broadcast-sending');
+  if (sending) sending.style.display = 'block';
+  try {
+    let endpoint = '/api/admin/broadcast';
+    const body = { message: msg, target, class_name: cls || undefined };
+    await api(endpoint, { method: 'POST', body: JSON.stringify(body) });
+    showToast('✅ Broadcast sent!');
+    document.getElementById('broadcast-msg').value = '';
+    updateCharCount();
+  } catch(e) { showToast('Failed to send broadcast ❌'); }
+  if (sending) sending.style.display = 'none';
+}
+
+// ── Progress Report Generator ──────────────────────────
+async function loadReportStudents() {
+  const cls = document.getElementById('report-class')?.value;
+  const sel = document.getElementById('report-student');
+  if (!sel) return;
+  try {
+    const students = await api('/api/admin/students/list' + (cls ? '?class_name=' + encodeURIComponent(cls) : ''));
+    sel.innerHTML = '<option value="">All students in class</option>' + students.map(s => '<option value="' + s.id + '">' + s.name + ' (' + (s.class_name||'—') + ')</option>').join('');
+  } catch(e) {}
+}
+
+async function generateProgressReport() {
+  const cls = document.getElementById('report-class')?.value;
+  const studentId = document.getElementById('report-student')?.value;
+  const resultEl = document.getElementById('report-result');
+  if (!resultEl) return;
+
+  if (studentId) {
+    // Single student report
+    resultEl.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Generating report...</div>';
+    try {
+      await openProfile(studentId);
+      setTimeout(() => {
+        printReportCard();
+        resultEl.innerHTML = '<div style="background:var(--green-pale);border-radius:8px;padding:12px;font-size:13px;color:var(--green);">✅ Report card opened for printing. You can also send it via WhatsApp from the student profile.</div>';
+      }, 1000);
+    } catch(e) { resultEl.innerHTML = '<div style="color:var(--danger);font-size:13px;">Could not generate report</div>'; }
+  } else {
+    // All students in class - send reports via WhatsApp
+    if (!cls) { showToast('Select a class first'); return; }
+    resultEl.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Sending progress reports to all parents in ' + cls + '...</div>';
+    try {
+      const res = await api('/api/admin/broadcast/progress-reports', { method: 'POST', body: JSON.stringify({ class_name: cls }) });
+      resultEl.innerHTML = '<div style="background:var(--green-pale);border-radius:8px;padding:12px;font-size:13px;color:var(--green);">✅ Progress reports sent to ' + (res.sent||0) + ' parents via WhatsApp!</div>';
+    } catch(e) { resultEl.innerHTML = '<div style="color:var(--danger);font-size:13px;">Failed to send reports: ' + e.message + '</div>'; }
+  }
+}
+
+// Load class options for report generator and broadcast when broadcast section opens
+const _origLoadBroadcast = typeof loadBroadcast === 'function' ? loadBroadcast : async () => {};
+async function loadBroadcast() {
+  try {
+    const classes = await api('/api/admin/classes');
+    const reportClass = document.getElementById('report-class');
+    if (reportClass) reportClass.innerHTML = '<option value="">All classes</option>' + classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
+  } catch(e) {}
+  updateBroadcastCount();
+}
+
+
+// ── Password Toggle ───────────────────────────────────────
+function togglePassword() {
+  const input = document.getElementById('login-password');
+  const btn = document.getElementById('pass-toggle');
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.textContent = '🙈';
+  } else {
+    input.type = 'password';
+    btn.textContent = '👁';
+  }
+}
 
 // ── Toast ─────────────────────────────────────────────────
 function showToast(msg) {

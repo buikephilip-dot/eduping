@@ -1708,6 +1708,160 @@ app.get('/', (req, res) => {
 
 // /admin route handled above
 
+
+// ══════════════════════════════════════════════════════════
+// NEW ADMIN ENDPOINTS
+// ══════════════════════════════════════════════════════════
+
+// GET /api/admin/chats?type=staff — teacher conversations
+app.get('/api/admin/chats', requireSchool, async (req, res) => {
+  try {
+    const sid = req.school.id;
+    const type = req.query.type || 'parent';
+    let sql, rows;
+    if (type === 'staff') {
+      // Get staff phones then their messages
+      const staff = await q('SELECT phone, name FROM staff WHERE school_id=$1 AND phone IS NOT NULL AND phone != ''', [sid]);
+      const result = [];
+      for (const s of staff.rows) {
+        const last = await q('SELECT body, created_at, direction FROM messages WHERE school_id=$1 AND from_number LIKE $2 OR (school_id=$1 AND to_number LIKE $2) ORDER BY created_at DESC LIMIT 1',
+          [sid, '%' + s.phone.replace('+','').slice(-9) + '%']);
+        result.push({ phone: s.phone, name: s.name, last_message: last.rows[0]?.body?.slice(0,60) || '—', last_time: last.rows[0]?.created_at });
+      }
+      return json(res, result);
+    }
+    // Parent chats (existing)
+    rows = await q(`SELECT DISTINCT ON (from_number) from_number as phone, body as last_message, created_at as last_time
+      FROM messages WHERE school_id=$1 AND direction='inbound' ORDER BY from_number, created_at DESC`, [sid]);
+    json(res, rows.rows);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// GET /api/admin/chats/:phone/messages
+app.get('/api/admin/chats/:phone/messages', requireSchool, async (req, res) => {
+  try {
+    const phone = decodeURIComponent(req.params.phone).replace(/\D/g,'').slice(-10);
+    const rows = await q(`SELECT body, direction, created_at, role FROM messages 
+      WHERE school_id=$1 AND (from_number LIKE $2 OR to_number LIKE $2) 
+      ORDER BY created_at ASC LIMIT 100`, [req.school.id, '%' + phone + '%']);
+    json(res, rows.rows);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// POST /api/admin/school/term — save term dates
+app.post('/api/admin/school/term', requireSchool, async (req, res) => {
+  try {
+    const { current_term, term_start, term_end, fee_deadline } = req.body;
+    await q('UPDATE schools SET current_term=$1, term_start=$2, term_end=$3, fee_deadline=$4 WHERE id=$5',
+      [current_term||null, term_start||null, term_end||null, fee_deadline||null, req.school.id]);
+    json(res, { ok: true });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// PATCH /api/admin/staff/:id — update staff details
+app.patch('/api/admin/staff/:id', requireSchool, async (req, res) => {
+  try {
+    const allowed = ['phone', 'class', 'subject', 'status', 'email'];
+    const updates = []; const params = [];
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) {
+        params.push(req.body[key]);
+        updates.push(key + '=$' + params.length);
+      }
+    }
+    if (!updates.length) return bad(res, 'Nothing to update');
+    params.push(req.params.id, req.school.id);
+    await q('UPDATE staff SET ' + updates.join(',') + ' WHERE id=$' + (params.length-1) + ' AND school_id=$' + params.length, params);
+    json(res, { ok: true });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// POST /api/admin/staff — add staff (extended)
+// (already exists but ensure email field is supported)
+
+
+// ── Broadcast with extended targets ──────────────────────
+app.post('/api/admin/broadcast', requireSchool, async (req, res) => {
+  try {
+    const { message, target, class_name } = req.body;
+    if (!message) return bad(res, 'message required');
+    const school = req.school;
+    const from = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
+    if (!from) return bad(res, 'Twilio not configured');
+    let phones = [];
+
+    if (target === 'all_parents') {
+      const rows = await q('SELECT DISTINCT parent_phone FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL AND parent_phone != ''', [school.id]);
+      phones = rows.rows.map(r => r.parent_phone);
+    } else if (target === 'staff') {
+      const rows = await q('SELECT phone FROM staff WHERE school_id=$1 AND phone IS NOT NULL AND phone != '' AND status != 'inactive'', [school.id]);
+      phones = rows.rows.map(r => r.phone);
+    } else if (target === 'class' && class_name) {
+      const rows = await q('SELECT DISTINCT parent_phone FROM students WHERE school_id=$1 AND class_name=$2 AND parent_phone IS NOT NULL AND parent_phone != ''', [school.id, class_name]);
+      phones = rows.rows.map(r => r.parent_phone);
+    } else if (target === 'fee_defaulters') {
+      const rows = await q('SELECT s.parent_phone FROM students s JOIN fees f ON f.student_id=s.id WHERE s.school_id=$1 AND f.status='unpaid' AND s.parent_phone IS NOT NULL AND s.parent_phone != ''', [school.id]);
+      phones = rows.rows.map(r => r.parent_phone);
+    } else if (target === 'absent_today') {
+      const rows = await q('SELECT s.parent_phone FROM attendance a JOIN students s ON s.id=a.student_id WHERE a.school_id=$1 AND a.date=current_date AND a.status='absent' AND s.parent_phone IS NOT NULL', [school.id]);
+      phones = rows.rows.map(r => r.parent_phone);
+    }
+
+    let sent = 0;
+    for (const phone of phones) {
+      try { await twilioSend(phone, from, message); sent++; } catch(e) { console.warn('Broadcast failed to:', phone); }
+    }
+    json(res, { ok: true, sent, total: phones.length });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// ── Progress reports via WhatsApp ─────────────────────────
+app.post('/api/admin/broadcast/progress-reports', requireSchool, async (req, res) => {
+  try {
+    const { class_name } = req.body;
+    if (!class_name) return bad(res, 'class_name required');
+    const school = req.school;
+    const from = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
+    const students = await q('SELECT * FROM students WHERE school_id=$1 AND class_name=$2 AND parent_phone IS NOT NULL', [school.id, class_name]);
+    let sent = 0;
+    for (const s of students.rows) {
+      try {
+        // Get latest scores
+        const scores = await q('SELECT subject, score FROM scores WHERE student_id=$1 AND school_id=$2 ORDER BY uploaded_at DESC LIMIT 10', [s.id, school.id]);
+        const attRes = await q('SELECT status FROM attendance WHERE student_id=$1 AND school_id=$2 AND date >= current_date - 30', [s.id, school.id]);
+        const present = attRes.rows.filter(a => a.status === 'present').length;
+        const attPct = attRes.rows.length ? Math.round((present/attRes.rows.length)*100) : null;
+        let scoreText = '';
+        if (scores.rows.length) {
+          scoreText = '
+
+*📊 Recent Scores:*
+' + scores.rows.map(sc => sc.subject + ': ' + sc.score + '%').join('
+');
+        }
+        const msg = '📄 *Progress Report — ' + school.name + '*
+
+' +
+          'Dear Parent of *' + s.name + '* (' + class_name + '),
+
+' +
+          (attPct !== null ? '✅ Attendance (last 30 days): *' + attPct + '%*
+' : '') +
+          scoreText + '
+
+' +
+          'For a full report or to ask questions, reply to this message.
+
+' +
+          school.name + ' 🏫';
+        await twilioSend(s.parent_phone, from, msg);
+        sent++;
+      } catch(e) { console.warn('Report failed for', s.name); }
+    }
+    json(res, { ok: true, sent });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
 app.use((err, req, res, next) => { console.error(err); res.status(500).json({ error: 'Server error', detail: process.env.NODE_ENV === 'production' ? undefined : err.message }); });
 
 (async () => {
