@@ -1724,7 +1724,7 @@ app.get('/api/admin/chats', requireSchool, async (req, res) => {
       const staff = await q('SELECT phone, name FROM staff WHERE school_id=$1 AND phone IS NOT NULL AND phone != ''', [sid]);
       const result = [];
       for (const s of staff.rows) {
-        const last = await q('SELECT body, created_at, direction FROM messages WHERE school_id=$1 AND from_number LIKE $2 OR (school_id=$1 AND to_number LIKE $2) ORDER BY created_at DESC LIMIT 1',
+        const last = await q('SELECT body, created_at, direction FROM messages WHERE school_id=$1 AND (from_number LIKE $2 OR to_number LIKE $2) ORDER BY created_at DESC LIMIT 1',
           [sid, '%' + s.phone.replace('+','').slice(-9) + '%']);
         result.push({ phone: s.phone, name: s.name, last_message: last.rows[0]?.body?.slice(0,60) || '—', last_time: last.rows[0]?.created_at });
       }
