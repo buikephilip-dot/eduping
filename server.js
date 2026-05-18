@@ -1721,10 +1721,10 @@ app.get('/api/admin/chats', requireSchool, async (req, res) => {
     let sql, rows;
     if (type === 'staff') {
       // Get staff phones then their messages
-      const staff = await q('SELECT phone, name FROM staff WHERE school_id=$1 AND phone IS NOT NULL AND phone != ''', [sid]);
+      const staff = await q(`SELECT phone, name FROM staff WHERE school_id=$1 AND phone IS NOT NULL AND phone != ''`, [sid]);
       const result = [];
       for (const s of staff.rows) {
-        const last = await q('SELECT body, created_at, direction FROM messages WHERE school_id=$1 AND (from_number LIKE $2 OR to_number LIKE $2) ORDER BY created_at DESC LIMIT 1',
+        const last = await q('SELECT body, created_at, direction FROM messages WHERE school_id=$1 AND from_number LIKE $2 OR (school_id=$1 AND to_number LIKE $2) ORDER BY created_at DESC LIMIT 1',
           [sid, '%' + s.phone.replace('+','').slice(-9) + '%']);
         result.push({ phone: s.phone, name: s.name, last_message: last.rows[0]?.body?.slice(0,60) || '—', last_time: last.rows[0]?.created_at });
       }
@@ -1791,16 +1791,16 @@ app.post('/api/admin/broadcast', requireSchool, async (req, res) => {
     let phones = [];
 
     if (target === 'all_parents') {
-      const rows = await q('SELECT DISTINCT parent_phone FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL AND parent_phone != ''', [school.id]);
+      const rows = await q(`SELECT DISTINCT parent_phone FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL AND parent_phone != ''`, [school.id]);
       phones = rows.rows.map(r => r.parent_phone);
     } else if (target === 'staff') {
-      const rows = await q('SELECT phone FROM staff WHERE school_id=$1 AND phone IS NOT NULL AND phone != '' AND status != 'inactive'', [school.id]);
+      const rows = await q(`SELECT phone FROM staff WHERE school_id=$1 AND phone IS NOT NULL AND phone != '' AND status != 'inactive'`, [school.id]);
       phones = rows.rows.map(r => r.phone);
     } else if (target === 'class' && class_name) {
-      const rows = await q('SELECT DISTINCT parent_phone FROM students WHERE school_id=$1 AND class_name=$2 AND parent_phone IS NOT NULL AND parent_phone != ''', [school.id, class_name]);
+      const rows = await q(`SELECT DISTINCT parent_phone FROM students WHERE school_id=$1 AND class_name=$2 AND parent_phone IS NOT NULL AND parent_phone != ''`, [school.id, class_name]);
       phones = rows.rows.map(r => r.parent_phone);
     } else if (target === 'fee_defaulters') {
-      const rows = await q('SELECT s.parent_phone FROM students s JOIN fees f ON f.student_id=s.id WHERE s.school_id=$1 AND f.status='unpaid' AND s.parent_phone IS NOT NULL AND s.parent_phone != ''', [school.id]);
+      const rows = await q(`SELECT s.parent_phone FROM students s JOIN fees f ON f.student_id=s.id WHERE s.school_id=$1 AND f.status='unpaid' AND s.parent_phone IS NOT NULL AND s.parent_phone != ''`, [school.id]);
       phones = rows.rows.map(r => r.parent_phone);
     } else if (target === 'absent_today') {
       const rows = await q('SELECT s.parent_phone FROM attendance a JOIN students s ON s.id=a.student_id WHERE a.school_id=$1 AND a.date=current_date AND a.status='absent' AND s.parent_phone IS NOT NULL', [school.id]);
