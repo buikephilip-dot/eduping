@@ -261,20 +261,20 @@ async function seedIfEmpty() {
     ['Chidi Eze','JSS1C','Dr Ngozi Eze','+2348033333333',91]
   ];
   for (const s of students) {
-    const st = await q('INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', [schoolId, ...s]);
-    await q('INSERT INTO fees (school_id,student_id,term,amount_due,amount_paid,status,due_date) VALUES ($1,$2,$3,$4,$5,$6,current_date + interval \'7 days\')', [schoolId, st.rows[0].id, '2nd Term', 85000, s[0].startsWith('Fatima') ? 42500 : 85000, s[0].startsWith('Fatima') ? 'partial' : 'paid']);
-    await q('INSERT INTO scores (school_id,student_id,subject,score,term) VALUES ($1,$2,$3,$4,$5),($1,$2,$6,$7,$5)', [schoolId, st.rows[0].id, 'Mathematics', s[4], '2nd Term', 'English', s[4] + 4]);
+    const st = await q(`INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`, [schoolId, ...s]);
+    await q(`INSERT INTO fees (school_id,student_id,term,amount_due,amount_paid,status,due_date) VALUES ($1,$2,$3,$4,$5,$6,current_date + interval \'7 days\')`, [schoolId, st.rows[0].id, '2nd Term', 85000, s[0].startsWith('Fatima') ? 42500 : 85000, s[0].startsWith('Fatima') ? 'partial' : 'paid']);
+    await q(`INSERT INTO scores (school_id,student_id,subject,score,term) VALUES ($1,$2,$3,$4,$5),($1,$2,$6,$7,$5)`, [schoolId, st.rows[0].id, 'Mathematics', s[4], '2nd Term', 'English', s[4] + 4]);
   }
-  await q('INSERT INTO staff (school_id,name,role,subject,class,phone,performance_score) VALUES ($1,$2,$3,$4,$5,$6,$7)', [schoolId,'Mr John Musa','teacher','Mathematics','JSS2A','+2348061111111',86]);
-  await q('INSERT INTO school_events (school_id,title,event_date) VALUES ($1,$2,current_date + interval \'14 days\'),($1,$3,current_date + interval \'21 days\')', [schoolId,'Sports Day','PTA Meeting']);
+  await q(`INSERT INTO staff (school_id,name,role,subject,class,phone,performance_score) VALUES ($1,$2,$3,$4,$5,$6,$7)`, [schoolId,'Mr John Musa','teacher','Mathematics','JSS2A','+2348061111111',86]);
+  await q(`INSERT INTO school_events (school_id,title,event_date) VALUES ($1,$2,current_date + interval \'14 days\'),($1,$3,current_date + interval \'21 days\')`, [schoolId,'Sports Day','PTA Meeting']);
 }
 
 async function getSchoolByTwilio(to) {
   const n = normalisePhone(to);
-  const result = await q('SELECT * FROM schools WHERE twilio_number = $1 OR twilio_number = $2 LIMIT 1', [n, `whatsapp:${n}`]);
+  const result = await q(`SELECT * FROM schools WHERE twilio_number = $1 OR twilio_number = $2 LIMIT 1`, [n, `whatsapp:${n}`]);
   return result.rows[0];
 }
-async function getSchool(id) { const r = await q('SELECT * FROM schools WHERE id=$1', [id]); return r.rows[0]; }
+async function getSchool(id) { const r = await q(`SELECT * FROM schools WHERE id=$1`, [id]); return r.rows[0]; }
 
 function getDeepSeekClient() {
   if (!process.env.DEEPSEEK_API_KEY) return null;
@@ -460,13 +460,13 @@ async function handleIncomingWhatsApp(req, res) {
   if (!school || school.status !== 'active') return res.type('text/xml').send(new twilio.twiml.MessagingResponse().message('School account is not active. Please contact EduPing support.').toString());
 
   let reply = '';
-  const staff = await q('SELECT * FROM staff WHERE school_id=$1 AND phone=$2 LIMIT 1', [school.id, from]);
+  const staff = await q(`SELECT * FROM staff WHERE school_id=$1 AND phone=$2 LIMIT 1`, [school.id, from]);
   if (staff.rowCount) reply = await processTeacher(school, staff.rows[0], body, mediaUrl);
   else {
-    const student = await q('SELECT * FROM students WHERE school_id=$1 AND parent_phone=$2 LIMIT 1', [school.id, from]);
+    const student = await q(`SELECT * FROM students WHERE school_id=$1 AND parent_phone=$2 LIMIT 1`, [school.id, from]);
     if (student.rowCount) {
       const lower = body.toLowerCase().trim();
-      const first = (await q('SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1', [school.id, from])).rowCount === 0;
+      const first = (await q(`SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1`, [school.id, from])).rowCount === 0;
 
       // ── First message — send disclaimer directly, no AI needed ──
       if (first) {
@@ -481,7 +481,7 @@ By sending any message, you agree to this.
 
 How can I help you today? You can ask about attendance, results, fees, homework, or school events. ${school.name} 🏫`;
 
-        await q('INSERT INTO messages (school_id,from_number,student_id,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)', [school.id, from, student.rows[0].id, body, reply]);
+        await q(`INSERT INTO messages (school_id,from_number,student_id,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)`, [school.id, from, student.rows[0].id, body, reply]);
         const twiml = new twilio.twiml.MessagingResponse();
         twiml.message(reply);
         return res.type('text/xml').send(twiml.toString());
@@ -489,16 +489,16 @@ How can I help you today? You can ask about attendance, results, fees, homework,
 
       // ── TUTOR keyword — parent wants tutor connection ────
       if (lower === 'tutor' || lower === 'i want a tutor' || lower === 'get tutor') {
-        const riskRow = await q('SELECT weak_subjects FROM student_risk_scores WHERE student_id=$1', [student.rows[0].id]);
+        const riskRow = await q(`SELECT weak_subjects FROM student_risk_scores WHERE student_id=$1`, [student.rows[0].id]);
         const enriched = { ...student.rows[0], weak_subjects: riskRow.rows[0]?.weak_subjects || [] };
         reply = await handleTutorRequest(school, enriched, from);
-        await q('UPDATE intervention_plans SET tutor_requested=true WHERE student_id=$1 AND tutor_requested=false', [student.rows[0].id]);
+        await q(`UPDATE intervention_plans SET tutor_requested=true WHERE student_id=$1 AND tutor_requested=false`, [student.rows[0].id]);
       }
       // ── YES to intervention plan ─────────────────────────
       else if (lower === 'yes' || lower === 'ok' || lower === 'okay' || lower === 'sure') {
         const pending = await q(`SELECT ip.*, s.name student_name FROM intervention_plans ip JOIN students s ON s.id=ip.student_id WHERE ip.student_id=$1 AND ip.parent_acknowledged=false ORDER BY ip.created_at DESC LIMIT 1`, [student.rows[0].id]);
         if (pending.rowCount) {
-          await q('UPDATE intervention_plans SET parent_acknowledged=true WHERE id=$1', [pending.rows[0].id]);
+          await q(`UPDATE intervention_plans SET parent_acknowledged=true WHERE id=$1`, [pending.rows[0].id]);
           reply = `✅ Great! We've noted that you're on board with ${pending.rows[0].student_name}'s study plan.\n\nReply *TUTOR* anytime if you'd like us to connect you with a private tutor.\n\n${school.name} 🏫`;
         } else {
           const ctx = await buildStudentContext(school, student.rows[0]);
@@ -511,7 +511,7 @@ How can I help you today? You can ask about attendance, results, fees, homework,
         reply = await callAI(parentPrompt(ctx, first), body || 'Hello', null);
       }
 
-      await q('INSERT INTO messages (school_id,from_number,student_id,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)', [school.id, from, student.rows[0].id, body, reply]);
+      await q(`INSERT INTO messages (school_id,from_number,student_id,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)`, [school.id, from, student.rows[0].id, body, reply]);
 
       // ── Escalation detection — notify admin if AI couldn't answer ──
       const escalationPhrases = ['pass your question', 'contact the school directly', 'reach out directly', 'speak to the school', 'please contact'];
@@ -535,11 +535,11 @@ ${school.name} 🏫`
         } catch(e) { console.warn('Admin escalation notify failed:', e.message); }
       }
     } else {
-      const first = (await q('SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1', [school.id, from])).rowCount === 0;
+      const first = (await q(`SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1`, [school.id, from])).rowCount === 0;
       const system = `You are EduPing for ${school.name}. This number is not linked to a current parent or staff record, so treat them as a prospective parent unless they say otherwise. Capture parent name, phone, child name, class applying, and next action. Keep it short. ${first ? 'Start with the first message privacy disclaimer.' : ''}`;
       reply = await callAI(system, body || 'Admission inquiry', null);
-      await q('INSERT INTO admission_inquiries (school_id,phone,status) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [school.id, from, 'new']);
-      await q('INSERT INTO messages (school_id,from_number,user_message,assistant_reply) VALUES ($1,$2,$3,$4)', [school.id, from, body, reply]);
+      await q(`INSERT INTO admission_inquiries (school_id,phone,status) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, [school.id, from, 'new']);
+      await q(`INSERT INTO messages (school_id,from_number,user_message,assistant_reply) VALUES ($1,$2,$3,$4)`, [school.id, from, body, reply]);
     }
   }
   const twiml = new twilio.twiml.MessagingResponse();
@@ -551,12 +551,12 @@ async function processTeacher(school, staff, body, mediaUrl) {
   const lower = String(body || '').toLowerCase();
   const today = new Date().toISOString().slice(0,10);
   if (lower.includes('sign in') || lower.includes('good morning') || mediaUrl) {
-    await q('INSERT INTO signin_log (school_id,staff_id,date,time,status,photo_verified) VALUES ($1,$2,current_date,to_char(now(),\'HH24:MI\'),$3,$4)', [school.id, staff.id, 'submitted', Boolean(mediaUrl)]);
+    await q(`INSERT INTO signin_log (school_id,staff_id,date,time,status,photo_verified) VALUES ($1,$2,current_date,to_char(now(),\'HH24:MI\'),$3,$4)`, [school.id, staff.id, 'submitted', Boolean(mediaUrl)]);
     return `✅ ${staff.name}, your sign in has been recorded. ${school.name} 🏫`;
   }
   if (lower.includes('homework') || lower.includes('assignment')) {
-    await q('INSERT INTO homeworks (school_id,assigned_by,class_name,subject,description,due_date) VALUES ($1,$2,$3,$4,$5,current_date + interval \'3 days\')', [school.id, staff.id, staff.class, staff.subject, body]);
-    await q('UPDATE staff SET homework_assigned=homework_assigned+1 WHERE id=$1 AND school_id=$2', [staff.id, school.id]);
+    await q(`INSERT INTO homeworks (school_id,assigned_by,class_name,subject,description,due_date) VALUES ($1,$2,$3,$4,$5,current_date + interval \'3 days\')`, [school.id, staff.id, staff.class, staff.subject, body]);
+    await q(`UPDATE staff SET homework_assigned=homework_assigned+1 WHERE id=$1 AND school_id=$2`, [staff.id, school.id]);
 
     // Notify parents of students in this class
     if (staff.class) {
@@ -685,7 +685,7 @@ Website: <a href='https://eduping.org'>eduping.org</a></p>
 // ── Generate onboarding link ────────────────────────────────
 app.post('/api/super/schools/:id/onboarding-link', requireSuper, async (req, res) => {
   try {
-    const school = await q('SELECT id, name, whatsapp_number FROM schools WHERE id=$1', [req.params.id]);
+    const school = await q(`SELECT id, name, whatsapp_number FROM schools WHERE id=$1`, [req.params.id]);
     if (!school.rows.length) return json(res, { error: 'School not found' }, 404);
     const baseUrl = process.env.BASE_URL || `https://${req.headers.host}`;
     const link = `${baseUrl}/onboarding?school_id=${req.params.id}`;
@@ -698,7 +698,7 @@ app.post('/api/onboarding', async (req, res) => {
   try {
     const d = req.body;
     if (!d.school_id) return json(res, { error: 'school_id required' }, 400);
-    const school = await q('SELECT id, whatsapp_number FROM schools WHERE id=$1', [d.school_id]);
+    const school = await q(`SELECT id, whatsapp_number FROM schools WHERE id=$1`, [d.school_id]);
     if (!school.rows.length) return json(res, { error: 'School not found' }, 404);
 
     const config = JSON.stringify({
@@ -732,10 +732,10 @@ app.post('/api/onboarding', async (req, res) => {
     }
 
     if (d.events && d.events.length) {
-      await q('DELETE FROM school_events WHERE school_id=$1', [d.school_id]);
+      await q(`DELETE FROM school_events WHERE school_id=$1`, [d.school_id]);
       for (const ev of d.events) {
         if (ev.title && ev.date) {
-          await q('INSERT INTO school_events (school_id, title, event_date) VALUES ($1,$2,$3)',
+          await q(`INSERT INTO school_events (school_id, title, event_date) VALUES ($1,$2,$3)`,
             [d.school_id, ev.title, ev.date]);
         }
       }
@@ -766,28 +766,28 @@ app.post('/api/chat', async (req, res) => {
     const fromNumber = normalisePhone(req.body.from_number || req.body.parent_phone || 'web-demo');
     let student = null;
     if (req.body.student_id) {
-      const byId = await q('SELECT * FROM students WHERE school_id=$1 AND id=$2 LIMIT 1', [school.id, req.body.student_id]);
+      const byId = await q(`SELECT * FROM students WHERE school_id=$1 AND id=$2 LIMIT 1`, [school.id, req.body.student_id]);
       student = byId.rows[0];
     }
     if (!student && req.body.parent_phone) {
-      const byPhone = await q('SELECT * FROM students WHERE school_id=$1 AND parent_phone=$2 LIMIT 1', [school.id, normalisePhone(req.body.parent_phone)]);
+      const byPhone = await q(`SELECT * FROM students WHERE school_id=$1 AND parent_phone=$2 LIMIT 1`, [school.id, normalisePhone(req.body.parent_phone)]);
       student = byPhone.rows[0];
     }
     if (!student) {
-      const firstStudent = await q('SELECT * FROM students WHERE school_id=$1 ORDER BY created_at ASC LIMIT 1', [school.id]);
+      const firstStudent = await q(`SELECT * FROM students WHERE school_id=$1 ORDER BY created_at ASC LIMIT 1`, [school.id]);
       student = firstStudent.rows[0];
     }
 
     let reply;
     if (student) {
-      const first = (await q('SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1', [school.id, fromNumber])).rowCount === 0;
+      const first = (await q(`SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1`, [school.id, fromNumber])).rowCount === 0;
       const ctx = await buildStudentContext(school, student);
       reply = await callAI(parentPrompt(ctx, first), message, null);
-      await q('INSERT INTO messages (school_id,from_number,student_id,channel,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5,$6)', [school.id, fromNumber, student.id, 'web', message, reply]);
+      await q(`INSERT INTO messages (school_id,from_number,student_id,channel,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5,$6)`, [school.id, fromNumber, student.id, 'web', message, reply]);
     } else {
       const system = `You are EduPing for ${school.name}. No student has been imported yet for this school. Answer as a school AI demo assistant. If asked about a specific child, explain that the school must import students first. Keep it short and Nigerian friendly. End formal replies with ${school.name} 🏫.`;
       reply = await callAI(system, message, null);
-      await q('INSERT INTO messages (school_id,from_number,channel,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)', [school.id, fromNumber, 'web', message, reply]);
+      await q(`INSERT INTO messages (school_id,from_number,channel,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)`, [school.id, fromNumber, 'web', message, reply]);
     }
 
     json(res, { ok: true, reply, school_id: school.id, provider: process.env.DEEPSEEK_API_KEY ? 'deepseek' : 'demo' });
@@ -825,10 +825,10 @@ app.patch('/api/super/schools/:id', requireSuper, async (req, res) => {
   const r = await q(`UPDATE schools SET ${sets} WHERE id=$${keys.length+1} RETURNING *`, [...keys.map(k => req.body[k]), req.params.id]);
   json(res, r.rows[0]);
 });
-app.delete('/api/super/schools/:id', requireSuper, async (req, res) => { await q('DELETE FROM schools WHERE id=$1', [req.params.id]); json(res, { ok: true }); });
+app.delete('/api/super/schools/:id', requireSuper, async (req, res) => { await q(`DELETE FROM schools WHERE id=$1`, [req.params.id]); json(res, { ok: true }); });
 
 app.post('/api/admin/login', async (req, res) => {
-  const r = await q('SELECT id,name,city,status FROM schools WHERE id=$1 AND admin_password=$2', [req.body.school_id, req.body.password]);
+  const r = await q(`SELECT id,name,city,status FROM schools WHERE id=$1 AND admin_password=$2`, [req.body.school_id, req.body.password]);
   json(res, { ok: r.rowCount === 1, school: r.rows[0] || null });
 });
 app.get('/api/admin/dashboard', requireSchool, async (req, res) => {
@@ -847,7 +847,7 @@ const crud = [
 // Messages route — not in crud because it needs custom ordering
 app.get('/api/admin/messages', requireSchool, async (req, res) => {
   try {
-    const rows = await q('SELECT * FROM messages WHERE school_id=$1 ORDER BY created_at DESC LIMIT 100', [req.school.id]);
+    const rows = await q(`SELECT * FROM messages WHERE school_id=$1 ORDER BY created_at DESC LIMIT 100`, [req.school.id]);
     json(res, rows.rows);
   } catch(err) { json(res, { error: err.message }, 500); }
 });
@@ -873,9 +873,9 @@ app.post('/api/admin/students/import-bulk', requireSchool, async (req, res) => {
     for (const s of students) {
       if (!s.name || !s.parent_phone) { skipped++; continue; }
       const phone = s.parent_phone.startsWith('+') ? s.parent_phone : '+234' + s.parent_phone.replace(/^0/, '');
-      const existing = await q('SELECT id FROM students WHERE school_id=$1 AND parent_phone=$2 AND name=$3 LIMIT 1', [sid, phone, s.name]);
+      const existing = await q(`SELECT id FROM students WHERE school_id=$1 AND parent_phone=$2 AND name=$3 LIMIT 1`, [sid, phone, s.name]);
       if (existing.rows.length) { skipped++; continue; }
-      await q('INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6)', [sid, s.name, s.class_name||'', s.parent_name||'', phone, 0]);
+      await q(`INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6)`, [sid, s.name, s.class_name||'', s.parent_name||'', phone, 0]);
       imported++;
     }
     res.json({ imported, skipped });
@@ -914,7 +914,7 @@ app.post('/api/admin/students/import-photo', requireSchool, async (req, res) => 
     for (const s of students) {
       if (!s.name || s.name.length < 2) { skipped++; continue; }
       try {
-        await q('INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING', [sid, s.name, s.class_name||'', s.parent_name||'', s.parent_phone||'', 0]);
+        await q(`INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`, [sid, s.name, s.class_name||'', s.parent_name||'', s.parent_phone||'', 0]);
         imported++;
         if (s.class_name) classes[s.class_name] = (classes[s.class_name]||0) + 1;
       } catch(e) { skipped++; }
@@ -947,7 +947,7 @@ app.post('/api/admin/students/import-pdf', requireSchool, async (req, res) => {
         let phone = s.parent_phone ? String(s.parent_phone).trim() : '';
         if (phone.startsWith('0')) phone = '+234' + phone.slice(1);
         else if (phone.startsWith('234')) phone = '+' + phone;
-        await q('INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING',
+        await q(`INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
           [sid, s.name.trim(), s.class_name||'', s.parent_name||'', phone, 0]);
         imported++;
       } catch(e) { skipped++; }
@@ -969,7 +969,7 @@ app.post('/api/admin/students/add-manual', requireSchool, async (req, res) => {
       else if (phone.startsWith('234')) phone = '+' + phone;
       else if (!phone.startsWith('+')) phone = '+234' + phone;
     }
-    const existing = await q('SELECT id FROM students WHERE school_id=$1 AND name=$2 AND class_name=$3 LIMIT 1', [sid, name.trim(), class_name||'']);
+    const existing = await q(`SELECT id FROM students WHERE school_id=$1 AND name=$2 AND class_name=$3 LIMIT 1`, [sid, name.trim(), class_name||'']);
     if (existing.rows.length) return res.status(409).json({ error: 'A student with this name and class already exists' });
     const result = await q(
       'INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id,name,class_name,parent_name,parent_phone',
@@ -997,9 +997,9 @@ app.post('/api/admin/students/import-text', requireSchool, async (req, res) => {
         if (parent_phone.startsWith('0')) parent_phone = '+234' + parent_phone.slice(1);
         else if (parent_phone.startsWith('234')) parent_phone = '+' + parent_phone;
         else if (parent_phone && !parent_phone.startsWith('+')) parent_phone = '+234' + parent_phone;
-        const existing = await q('SELECT id FROM students WHERE school_id=$1 AND name=$2 LIMIT 1', [sid, name]);
+        const existing = await q(`SELECT id FROM students WHERE school_id=$1 AND name=$2 LIMIT 1`, [sid, name]);
         if (existing.rows.length) { skipped++; continue; }
-        await q('INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6)',
+        await q(`INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6)`,
           [sid, name, class_name||'', parent_name, parent_phone, 0]);
         imported++;
       } catch(e) { errors.push(line); skipped++; }
@@ -1022,7 +1022,7 @@ app.post('/api/admin/send-message', requireSchool, async (req, res) => {
 
 — ${school.name} Admin 🏫`
     });
-    await q('INSERT INTO messages (school_id,from_number,user_message,assistant_reply) VALUES ($1,$2,$3,$4)',
+    await q(`INSERT INTO messages (school_id,from_number,user_message,assistant_reply) VALUES ($1,$2,$3,$4)`,
       [school.id, to, '[Admin reply]', message]);
     res.json({ ok: true });
   } catch(err) { res.status(500).json({ error: err.message }); }
@@ -1031,7 +1031,7 @@ app.post('/api/admin/send-message', requireSchool, async (req, res) => {
 // ── Delete student ────────────────────────────────────────
 app.delete('/api/admin/students/:id', requireSchool, async (req, res) => {
   try {
-    await q('DELETE FROM students WHERE id=$1 AND school_id=$2', [req.params.id, req.school.id]);
+    await q(`DELETE FROM students WHERE id=$1 AND school_id=$2`, [req.params.id, req.school.id]);
     res.json({ ok: true });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
@@ -1041,9 +1041,9 @@ app.post('/api/admin/broadcast', requireSchool, async (req, res) => {
   const message = req.body.message;
   if (!message) return bad(res, 'Message is required');
   let rows = [];
-  if (target === 'staff') rows = (await q('SELECT phone FROM staff WHERE school_id=$1 AND phone IS NOT NULL', [req.school.id])).rows;
-  else if (req.body.class_name) rows = (await q('SELECT parent_phone phone FROM students WHERE school_id=$1 AND class_name=$2 AND parent_phone IS NOT NULL', [req.school.id, req.body.class_name])).rows;
-  else rows = (await q('SELECT parent_phone phone FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL', [req.school.id])).rows;
+  if (target === 'staff') rows = (await q(`SELECT phone FROM staff WHERE school_id=$1 AND phone IS NOT NULL`, [req.school.id])).rows;
+  else if (req.body.class_name) rows = (await q(`SELECT parent_phone phone FROM students WHERE school_id=$1 AND class_name=$2 AND parent_phone IS NOT NULL`, [req.school.id, req.body.class_name])).rows;
+  else rows = (await q(`SELECT parent_phone phone FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL`, [req.school.id])).rows;
   const sent = [];
   for (const r of rows) sent.push(await twilioSend(r.phone, req.school.twilio_number || process.env.TWILIO_DEFAULT_FROM, message));
   json(res, { queued: rows.length, twilio_enabled: hasTwilio() });
@@ -1174,7 +1174,7 @@ function buildFallbackPlan(student, school, risk) {
 }
 
 async function runRiskAssessmentForSchool(school) {
-  const students = (await q('SELECT * FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL', [school.id])).rows;
+  const students = (await q(`SELECT * FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL`, [school.id])).rows;
   let flagged = 0;
 
   for (const student of students) {
@@ -1210,7 +1210,7 @@ async function runRiskAssessmentForSchool(school) {
         // Send to parent via WhatsApp
         if (hasTwilio() && student.parent_phone) {
           await twilioSend(student.parent_phone, school.twilio_number || process.env.TWILIO_DEFAULT_FROM, planText);
-          await q('UPDATE intervention_plans SET sent_to_parent=true WHERE id=$1', [plan.rows[0].id]);
+          await q(`UPDATE intervention_plans SET sent_to_parent=true WHERE id=$1`, [plan.rows[0].id]);
           flagged++;
         }
 
@@ -1325,7 +1325,7 @@ app.post('/api/tutors/register', async (req, res) => {
 
 // ── API: Super admin — verify tutors ─────────────────────
 app.patch('/api/super/tutors/:id/verify', requireSuper, async (req, res) => {
-  await q('UPDATE tutors SET verified=true WHERE id=$1', [req.params.id]);
+  await q(`UPDATE tutors SET verified=true WHERE id=$1`, [req.params.id]);
   json(res, { ok: true });
 });
 app.get('/api/super/tutors', requireSuper, async (req, res) => {
@@ -1333,9 +1333,9 @@ app.get('/api/super/tutors', requireSuper, async (req, res) => {
 });
 
 async function weeklyReports() {
-  const schools = (await q('SELECT * FROM schools WHERE status=$1', ['active'])).rows;
+  const schools = (await q(`SELECT * FROM schools WHERE status=$1`, ['active'])).rows;
   for (const school of schools) {
-    const students = (await q('SELECT * FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL', [school.id])).rows;
+    const students = (await q(`SELECT * FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL`, [school.id])).rows;
     for (const st of students) await twilioSend(st.parent_phone, school.twilio_number || process.env.TWILIO_DEFAULT_FROM, `Weekly report for ${st.name}: performance score ${st.weekly_performance_score || 0}%. For details, reply with your question. ${school.name} 🏫`);
   }
 }
@@ -1423,7 +1423,7 @@ app.get('/api/admin/attendance', requireSchool, async (req, res) => {
 // GET /api/admin/school — return school info including events_enabled
 app.get('/api/admin/school', requireSchool, async (req, res) => {
   try {
-    const r = await q('SELECT id, name, city, plan, status, twilio_number, events_enabled, current_term FROM schools WHERE id=$1', [req.school.id]);
+    const r = await q(`SELECT id, name, city, plan, status, twilio_number, events_enabled, current_term FROM schools WHERE id=$1`, [req.school.id]);
     json(res, r.rows[0] || {});
   } catch(err) { bad(res, err.message, 500); }
 });
@@ -1431,7 +1431,7 @@ app.get('/api/admin/school', requireSchool, async (req, res) => {
 // GET /api/admin/events
 app.get('/api/admin/events', requireSchool, async (req, res) => {
   try {
-    const rows = await q('SELECT * FROM school_events WHERE school_id=$1 ORDER BY date ASC', [req.school.id]);
+    const rows = await q(`SELECT * FROM school_events WHERE school_id=$1 ORDER BY date ASC`, [req.school.id]);
     json(res, rows.rows);
   } catch(err) { bad(res, err.message, 500); }
 });
@@ -1452,7 +1452,7 @@ app.post('/api/admin/events', requireSchool, async (req, res) => {
 // DELETE /api/admin/events/:id
 app.delete('/api/admin/events/:id', requireSchool, async (req, res) => {
   try {
-    await q('DELETE FROM school_events WHERE id=$1 AND school_id=$2', [req.params.id, req.school.id]);
+    await q(`DELETE FROM school_events WHERE id=$1 AND school_id=$2`, [req.params.id, req.school.id]);
     json(res, { ok: true });
   } catch(err) { bad(res, err.message, 500); }
 });
@@ -1461,10 +1461,10 @@ app.delete('/api/admin/events/:id', requireSchool, async (req, res) => {
 app.post('/api/admin/events/:id/notify', requireSchool, async (req, res) => {
   try {
     const school = req.school;
-    const evtRes = await q('SELECT * FROM school_events WHERE id=$1 AND school_id=$2', [req.params.id, school.id]);
+    const evtRes = await q(`SELECT * FROM school_events WHERE id=$1 AND school_id=$2`, [req.params.id, school.id]);
     if (!evtRes.rows.length) return bad(res, 'Event not found', 404);
     const evt = evtRes.rows[0];
-    const parents = await q('SELECT DISTINCT parent_phone, name FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL AND parent_phone != \'\'', [school.id]);
+    const parents = await q(`SELECT DISTINCT parent_phone, name FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL AND parent_phone != \'\'`, [school.id]);
     const from = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
     const dateStr = new Date(evt.date).toLocaleDateString('en-NG', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
     const msg = `📅 *Event Reminder — ${school.name}*\n\n*${evt.name}*\n📆 ${dateStr}${evt.time ? ' · ' + evt.time : ''}\n${evt.description ? '\n' + evt.description + '\n' : ''}\n${school.name} 🏫`;
@@ -1480,9 +1480,9 @@ app.post('/api/admin/events/:id/notify', requireSchool, async (req, res) => {
 app.post('/api/admin/events/notify-all', requireSchool, async (req, res) => {
   try {
     const school = req.school;
-    const events = await q('SELECT * FROM school_events WHERE school_id=$1 AND date >= current_date ORDER BY date ASC LIMIT 5', [school.id]);
+    const events = await q(`SELECT * FROM school_events WHERE school_id=$1 AND date >= current_date ORDER BY date ASC LIMIT 5`, [school.id]);
     if (!events.rows.length) return json(res, { ok: true, sent: 0 });
-    const parents = await q('SELECT DISTINCT parent_phone FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL AND parent_phone != \'\'', [school.id]);
+    const parents = await q(`SELECT DISTINCT parent_phone FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL AND parent_phone != \'\'`, [school.id]);
     const from = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
     const eventList = events.rows.map(e => {
       const d = new Date(e.date).toLocaleDateString('en-NG', { day:'numeric', month:'short' });
@@ -1502,7 +1502,7 @@ app.post('/api/admin/events/:id/feed', requireSchool, async (req, res) => {
   try {
     const { message } = req.body;
     if (!message) return bad(res, 'message required');
-    await q('INSERT INTO event_feeds (school_id,event_id,message) VALUES ($1,$2,$3)', [req.school.id, req.params.id, message]);
+    await q(`INSERT INTO event_feeds (school_id,event_id,message) VALUES ($1,$2,$3)`, [req.school.id, req.params.id, message]);
     json(res, { ok: true });
   } catch(err) { bad(res, err.message, 500); }
 });
@@ -1539,17 +1539,17 @@ app.post('/api/admin/events/:id/photos', requireSchool, async (req, res) => {
     if (uploadData.error) return bad(res, uploadData.error.message);
 
     // Get or create gallery record
-    let gallery = await q('SELECT * FROM event_galleries WHERE event_id=$1 AND school_id=$2', [req.params.id, req.school.id]);
+    let gallery = await q(`SELECT * FROM event_galleries WHERE event_id=$1 AND school_id=$2`, [req.params.id, req.school.id]);
     if (!gallery.rows.length) {
-      const evtName = (await q('SELECT name FROM school_events WHERE id=$1', [req.params.id])).rows[0]?.name || 'Event';
+      const evtName = (await q(`SELECT name FROM school_events WHERE id=$1`, [req.params.id])).rows[0]?.name || 'Event';
       const token = require('crypto').randomBytes(16).toString('hex');
-      gallery = await q('INSERT INTO event_galleries (school_id,event_id,event_name,share_token) VALUES ($1,$2,$3,$4) RETURNING *',
+      gallery = await q(`INSERT INTO event_galleries (school_id,event_id,event_name,share_token) VALUES ($1,$2,$3,$4) RETURNING *`,
         [req.school.id, req.params.id, evtName, token]);
     }
     const galleryId = gallery.rows[0].id;
 
     // Save photo record
-    await q('INSERT INTO event_photos (gallery_id,school_id,event_id,url,public_id,filename) VALUES ($1,$2,$3,$4,$5,$6)',
+    await q(`INSERT INTO event_photos (gallery_id,school_id,event_id,url,public_id,filename) VALUES ($1,$2,$3,$4,$5,$6)`,
       [galleryId, req.school.id, req.params.id, uploadData.secure_url, uploadData.public_id, filename||'photo']);
 
     json(res, { ok: true, url: uploadData.secure_url });
@@ -1559,10 +1559,10 @@ app.post('/api/admin/events/:id/photos', requireSchool, async (req, res) => {
 // GET /api/admin/events/galleries — all galleries with photos
 app.get('/api/admin/events/galleries', requireSchool, async (req, res) => {
   try {
-    const galleries = await q('SELECT * FROM event_galleries WHERE school_id=$1 ORDER BY created_at DESC', [req.school.id]);
+    const galleries = await q(`SELECT * FROM event_galleries WHERE school_id=$1 ORDER BY created_at DESC`, [req.school.id]);
     const result = [];
     for (const g of galleries.rows) {
-      const photos = await q('SELECT url, public_id FROM event_photos WHERE gallery_id=$1 ORDER BY created_at DESC', [g.id]);
+      const photos = await q(`SELECT url, public_id FROM event_photos WHERE gallery_id=$1 ORDER BY created_at DESC`, [g.id]);
       result.push({ ...g, photos: photos.rows, photo_count: photos.rows.length });
     }
     json(res, result);
@@ -1574,9 +1574,9 @@ app.post('/api/admin/events/:id/blast-gallery', requireSchool, async (req, res) 
   try {
     const { share_url } = req.body;
     const school = req.school;
-    const evtRes = await q('SELECT name FROM school_events WHERE id=$1 AND school_id=$2', [req.params.id, school.id]);
+    const evtRes = await q(`SELECT name FROM school_events WHERE id=$1 AND school_id=$2`, [req.params.id, school.id]);
     const evtName = evtRes.rows[0]?.name || 'Event';
-    const parents = await q('SELECT DISTINCT parent_phone FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL AND parent_phone != \'\'', [school.id]);
+    const parents = await q(`SELECT DISTINCT parent_phone FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL AND parent_phone != \'\'`, [school.id]);
     const from = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
     const msg = `📸 *${evtName} — Photo Gallery*\n\nDear parent, photos from *${evtName}* are now available!\n\nView and download your child's photos here:\n${share_url}\n\n${school.name} 🏫`;
     let sent = 0;
@@ -1590,10 +1590,10 @@ app.post('/api/admin/events/:id/blast-gallery', requireSchool, async (req, res) 
 // GET /gallery/:token — public gallery page for parents
 app.get('/gallery/:token', async (req, res) => {
   try {
-    const gallery = await q('SELECT eg.*, s.name as school_name FROM event_galleries eg JOIN schools s ON s.id=eg.school_id WHERE eg.share_token=$1', [req.params.token]);
+    const gallery = await q(`SELECT eg.*, s.name as school_name FROM event_galleries eg JOIN schools s ON s.id=eg.school_id WHERE eg.share_token=$1`, [req.params.token]);
     if (!gallery.rows.length) return res.status(404).send('Gallery not found');
     const g = gallery.rows[0];
-    const photos = await q('SELECT url FROM event_photos WHERE gallery_id=$1 ORDER BY created_at ASC', [g.id]);
+    const photos = await q(`SELECT url FROM event_photos WHERE gallery_id=$1 ORDER BY created_at ASC`, [g.id]);
     const html = `<!DOCTYPE html><html><head>
       <title>${g.event_name} — ${g.school_name}</title>
       <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1688,7 +1688,7 @@ app.post('/api/waitlist', async (req, res) => {
 // GET /api/admin/waitlist — view all leads in dashboard
 app.get('/api/admin/waitlist', requireSchool, async (req, res) => {
   try {
-    const rows = await q('SELECT * FROM waitlist ORDER BY created_at DESC', []);
+    const rows = await q(`SELECT * FROM waitlist ORDER BY created_at DESC`, []);
     json(res, rows.rows);
   } catch(err) { bad(res, err.message, 500); }
 });
@@ -1696,7 +1696,7 @@ app.get('/api/admin/waitlist', requireSchool, async (req, res) => {
 // PATCH /api/admin/waitlist/:id/contacted — mark lead as contacted
 app.patch('/api/admin/waitlist/:id/contacted', requireSchool, async (req, res) => {
   try {
-    await q('UPDATE waitlist SET contacted=true WHERE id=$1', [req.params.id]);
+    await q(`UPDATE waitlist SET contacted=true WHERE id=$1`, [req.params.id]);
     json(res, { ok: true });
   } catch(err) { bad(res, err.message, 500); }
 });
@@ -1724,7 +1724,7 @@ app.get('/api/admin/chats', requireSchool, async (req, res) => {
       const staff = await q(`SELECT phone, name FROM staff WHERE school_id=$1 AND phone IS NOT NULL AND phone != ''`, [sid]);
       const result = [];
       for (const s of staff.rows) {
-        const last = await q('SELECT body, created_at, direction FROM messages WHERE school_id=$1 AND from_number LIKE $2 OR (school_id=$1 AND to_number LIKE $2) ORDER BY created_at DESC LIMIT 1',
+        const last = await q(`SELECT body, created_at, direction FROM messages WHERE school_id=$1 AND from_number LIKE $2 OR (school_id=$1 AND to_number LIKE $2) ORDER BY created_at DESC LIMIT 1`,
           [sid, '%' + s.phone.replace('+','').slice(-9) + '%']);
         result.push({ phone: s.phone, name: s.name, last_message: last.rows[0]?.body?.slice(0,60) || '—', last_time: last.rows[0]?.created_at });
       }
@@ -1752,7 +1752,7 @@ app.get('/api/admin/chats/:phone/messages', requireSchool, async (req, res) => {
 app.post('/api/admin/school/term', requireSchool, async (req, res) => {
   try {
     const { current_term, term_start, term_end, fee_deadline } = req.body;
-    await q('UPDATE schools SET current_term=$1, term_start=$2, term_end=$3, fee_deadline=$4 WHERE id=$5',
+    await q(`UPDATE schools SET current_term=$1, term_start=$2, term_end=$3, fee_deadline=$4 WHERE id=$5`,
       [current_term||null, term_start||null, term_end||null, fee_deadline||null, req.school.id]);
     json(res, { ok: true });
   } catch(err) { bad(res, err.message, 500); }
@@ -1803,7 +1803,7 @@ app.post('/api/admin/broadcast', requireSchool, async (req, res) => {
       const rows = await q(`SELECT s.parent_phone FROM students s JOIN fees f ON f.student_id=s.id WHERE s.school_id=$1 AND f.status='unpaid' AND s.parent_phone IS NOT NULL AND s.parent_phone != ''`, [school.id]);
       phones = rows.rows.map(r => r.parent_phone);
     } else if (target === 'absent_today') {
-      const rows = await q('SELECT s.parent_phone FROM attendance a JOIN students s ON s.id=a.student_id WHERE a.school_id=$1 AND a.date=current_date AND a.status='absent' AND s.parent_phone IS NOT NULL', [school.id]);
+      const rows = await q(`SELECT s.parent_phone FROM attendance a JOIN students s ON s.id=a.student_id WHERE a.school_id=$1 AND a.date=current_date AND a.status='absent' AND s.parent_phone IS NOT NULL`, [school.id]);
       phones = rows.rows.map(r => r.parent_phone);
     }
 
@@ -1822,38 +1822,21 @@ app.post('/api/admin/broadcast/progress-reports', requireSchool, async (req, res
     if (!class_name) return bad(res, 'class_name required');
     const school = req.school;
     const from = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
-    const students = await q('SELECT * FROM students WHERE school_id=$1 AND class_name=$2 AND parent_phone IS NOT NULL', [school.id, class_name]);
+    const students = await q(`SELECT * FROM students WHERE school_id=$1 AND class_name=$2 AND parent_phone IS NOT NULL`, [school.id, class_name]);
     let sent = 0;
     for (const s of students.rows) {
       try {
         // Get latest scores
-        const scores = await q('SELECT subject, score FROM scores WHERE student_id=$1 AND school_id=$2 ORDER BY uploaded_at DESC LIMIT 10', [s.id, school.id]);
-        const attRes = await q('SELECT status FROM attendance WHERE student_id=$1 AND school_id=$2 AND date >= current_date - 30', [s.id, school.id]);
+        const scores = await q(`SELECT subject, score FROM scores WHERE student_id=$1 AND school_id=$2 ORDER BY uploaded_at DESC LIMIT 10`, [s.id, school.id]);
+        const attRes = await q(`SELECT status FROM attendance WHERE student_id=$1 AND school_id=$2 AND date >= current_date - 30`, [s.id, school.id]);
         const present = attRes.rows.filter(a => a.status === 'present').length;
         const attPct = attRes.rows.length ? Math.round((present/attRes.rows.length)*100) : null;
         let scoreText = '';
         if (scores.rows.length) {
-          scoreText = '
-
-*📊 Recent Scores:*
-' + scores.rows.map(sc => sc.subject + ': ' + sc.score + '%').join('
-');
+          scoreText = '\n\n*📊 Recent Scores:*\n' + scores.rows.map(sc => sc.subject + ': ' + sc.score + '%').join('\n');
         }
-        const msg = '📄 *Progress Report — ' + school.name + '*
-
-' +
-          'Dear Parent of *' + s.name + '* (' + class_name + '),
-
-' +
-          (attPct !== null ? '✅ Attendance (last 30 days): *' + attPct + '%*
-' : '') +
-          scoreText + '
-
-' +
-          'For a full report or to ask questions, reply to this message.
-
-' +
-          school.name + ' 🏫';
+        const attLine = attPct !== null ? '\n✅ Attendance (last 30 days): *' + attPct + '%*' : '';
+        const msg = '📄 *Progress Report — ' + school.name + '*\n\nDear Parent of *' + s.name + '* (' + class_name + '),' + attLine + scoreText + '\n\nFor a full report or to ask questions, reply to this message.\n\n' + school.name + ' 🏫';
         await twilioSend(s.parent_phone, from, msg);
         sent++;
       } catch(e) { console.warn('Report failed for', s.name); }
