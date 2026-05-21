@@ -1845,6 +1845,321 @@ app.post('/api/admin/broadcast/progress-reports', requireSchool, async (req, res
   } catch(err) { bad(res, err.message, 500); }
 });
 
+
+// ══════════════════════════════════════════════════════════
+// RESULTS PORTAL ENDPOINTS
+// ══════════════════════════════════════════════════════════
+
+// Helper: generate unique PIN
+function generatePIN() {
+  const seg = () => Math.floor(1000 + Math.random() * 9000);
+  return `EPG-${seg()}-${seg()}`;
+}
+
+// POST /api/admin/results — save student result
+app.post('/api/admin/results', requireSchool, async (req, res) => {
+  try {
+    const { student_id, class_name, term, subjects, position, remark } = req.body;
+    if (!student_id) return bad(res, 'student_id required');
+    // Upsert result record
+    const existing = await q('SELECT id FROM student_results WHERE student_id=$1 AND school_id=$2 AND term=$3', [student_id, req.school.id, term]);
+    if (existing.rows.length) {
+      await q('UPDATE student_results SET subjects=$1, position=$2, remark=$3, class_name=$4, updated_at=NOW() WHERE id=$5',
+        [JSON.stringify(subjects||{}), position||null, remark||null, class_name, existing.rows[0].id]);
+    } else {
+      await q('INSERT INTO student_results (school_id,student_id,class_name,term,subjects,position,remark) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [req.school.id, student_id, class_name, term, JSON.stringify(subjects||{}), position||null, remark||null]);
+    }
+    json(res, { ok: true });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// GET /api/admin/results/stats
+app.get('/api/admin/results/stats', requireSchool, async (req, res) => {
+  try {
+    const sid = req.school.id;
+    const [uploaded, pins, accessed, pending] = await Promise.all([
+      q('SELECT COUNT(*)::int c FROM student_results WHERE school_id=$1', [sid]),
+      q('SELECT COUNT(*)::int c FROM result_pins WHERE school_id=$1', [sid]),
+      q('SELECT COUNT(*)::int c FROM result_pins WHERE school_id=$1 AND accessed=true', [sid]),
+      q(`SELECT COUNT(*)::int c FROM students s 
+         LEFT JOIN fees f ON f.student_id=s.id AND f.school_id=s.school_id
+         WHERE s.school_id=$1 AND COALESCE(f.status,'unpaid') != 'paid'`, [sid])
+    ]);
+    json(res, { uploaded: uploaded.rows[0].c, pins: pins.rows[0].c, accessed: accessed.rows[0].c, fee_pending: pending.rows[0].c });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// POST /api/admin/results/release — generate PINs and notify parents
+app.post('/api/admin/results/release', requireSchool, async (req, res) => {
+  try {
+    const { model, term, class_name, print_limit, expiry_days } = req.body;
+    const school = req.school;
+    const from = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
+    const expiresAt = new Date(Date.now() + (expiry_days || 30) * 86400000);
+    const baseUrl = process.env.BASE_URL || 'https://eduping.org';
+
+    // Get students with results
+    let sql = `SELECT sr.*, s.name as student_name, s.parent_phone, s.class_name,
+               COALESCE(f.status,'unpaid') as fee_status
+               FROM student_results sr
+               JOIN students s ON s.id=sr.student_id
+               LEFT JOIN fees f ON f.student_id=s.id AND f.school_id=s.school_id
+               WHERE sr.school_id=$1 AND sr.term=$2`;
+    const params = [school.id, term];
+    if (class_name) { params.push(class_name); sql += ` AND sr.class_name=$${params.length}`; }
+
+    const results = await q(sql, params);
+    let sent = 0, pending = 0;
+
+    for (const r of results.rows) {
+      if (!r.parent_phone) continue;
+      const hasPaidFees = r.fee_status === 'paid';
+      const canAccess = model === 'free' || (model === 'bundled' && hasPaidFees) || model === 'paid';
+
+      if (canAccess) {
+        // Check if PIN already exists
+        let pinRecord = await q('SELECT * FROM result_pins WHERE student_id=$1 AND school_id=$2 AND term=$3', [r.student_id, school.id, term]);
+        let pin;
+        if (pinRecord.rows.length) {
+          pin = pinRecord.rows[0].pin;
+        } else {
+          pin = generatePIN();
+          await q(`INSERT INTO result_pins (school_id,student_id,student_name,class_name,term,pin,print_limit,expires_at,sent_at)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())`,
+            [school.id, r.student_id, r.student_name, r.class_name, term, pin, print_limit||3, expiresAt]);
+        }
+        const msg = `📄 *Result Ready — ${school.name}*
+
+Dear Parent, *${r.student_name}*'s ${term} result is now available.
+
+🔑 Your result PIN: *${pin}*
+
+📱 View result here:
+${baseUrl}/results
+
+Enter your child's Student ID and PIN to view and print.
+
+⏳ PIN valid for ${expiry_days||30} days · ${print_limit||3} prints allowed
+${school.name} 🏫`;
+        try { await twilioSend(r.parent_phone, from, msg); sent++; } catch(e) { console.warn('Failed to send PIN to', r.parent_phone); }
+      } else {
+        // Fee outstanding — send reminder
+        const msg = `⏳ *Result Pending — ${school.name}*
+
+Dear Parent, *${r.student_name}*'s ${term} result is ready.
+
+However, there are outstanding school fees on your child's account.
+
+Kindly visit the school bursar to clear the balance and receive your result PIN.
+
+${school.name} 🏫`;
+        try { await twilioSend(r.parent_phone, from, msg); pending++; } catch(e) {}
+      }
+    }
+    json(res, { ok: true, sent, pending, total: results.rows.length });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// GET /api/admin/results/pins — PIN log for admin
+app.get('/api/admin/results/pins', requireSchool, async (req, res) => {
+  try {
+    const rows = await q('SELECT * FROM result_pins WHERE school_id=$1 ORDER BY sent_at DESC LIMIT 500', [req.school.id]);
+    json(res, rows.rows);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// ── PUBLIC RESULT PORTAL ──────────────────────────────────
+// GET /results — serve the result viewing page
+app.get('/results', (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EduPing — View Result</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:#f0f2f5;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:40px 16px;}
+.card{background:white;border-radius:16px;padding:32px;width:100%;max-width:440px;box-shadow:0 4px 24px rgba(0,0,0,.08);}
+.logo{font-size:22px;font-weight:700;color:#0f1a14;text-align:center;margin-bottom:8px;}
+.logo span{color:#0055CC;}
+.subtitle{font-size:14px;color:#667781;text-align:center;margin-bottom:28px;}
+.form-group{margin-bottom:16px;}
+label{font-size:12px;font-weight:600;color:#667781;letter-spacing:.5px;text-transform:uppercase;display:block;margin-bottom:6px;}
+input{width:100%;padding:12px 14px;border:1.5px solid #e9edef;border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s;}
+input:focus{border-color:#1a7a4a;}
+.btn{width:100%;background:#1a7a4a;color:white;border:none;padding:14px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:4px;}
+.btn:hover{background:#0d4a2c;}
+.error{background:#fee2e2;color:#991b1b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none;}
+.footer{font-size:12px;color:#aab;text-align:center;margin-top:16px;}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">Edu<span>Ping</span></div>
+  <div class="subtitle">Enter your details to view your child's result</div>
+  <div class="error" id="error-msg"></div>
+  <div class="form-group">
+    <label>Student ID or Full Name</label>
+    <input type="text" id="student-id" placeholder="e.g. Amara Okafor or STU-001">
+  </div>
+  <div class="form-group">
+    <label>Result PIN</label>
+    <input type="text" id="result-pin" placeholder="EPG-XXXX-XXXX" style="letter-spacing:2px;font-weight:600;">
+  </div>
+  <button class="btn" onclick="viewResult()">View Result →</button>
+  <div class="footer">Powered by EduPing · eduping.org</div>
+</div>
+<script>
+async function viewResult() {
+  const studentId = document.getElementById('student-id').value.trim();
+  const pin = document.getElementById('result-pin').value.trim().toUpperCase();
+  const errEl = document.getElementById('error-msg');
+  errEl.style.display = 'none';
+  if (!studentId || !pin) { errEl.textContent = 'Please enter both your child\'s name and the PIN.'; errEl.style.display = 'block'; return; }
+  try {
+    const res = await fetch('/api/results/verify', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ student_id: studentId, pin }) });
+    const data = await res.json();
+    if (!data.ok) { errEl.textContent = data.error || 'Invalid PIN or student details. Please check and try again.'; errEl.style.display = 'block'; return; }
+    // Redirect to result page with token
+    window.location.href = '/results/' + data.token;
+  } catch(e) { errEl.textContent = 'Something went wrong. Please try again.'; errEl.style.display = 'block'; }
+}
+document.getElementById('result-pin').addEventListener('keydown', e => { if(e.key==='Enter') viewResult(); });
+</script>
+</body>
+</html>`);
+});
+
+// POST /api/results/verify — verify PIN and return access token
+app.post('/api/results/verify', async (req, res) => {
+  try {
+    const { student_id, pin } = req.body;
+    if (!student_id || !pin) return bad(res, 'student_id and pin required');
+    // Find PIN record — match by PIN code and student name or ID
+    const pinRecord = await q(`SELECT rp.*, sr.subjects, sr.position, sr.remark, sr.term, sr.class_name,
+                                s.name as student_name, s.id as sid, sch.name as school_name
+                                FROM result_pins rp
+                                JOIN student_results sr ON sr.student_id=rp.student_id AND sr.term=rp.term
+                                JOIN students s ON s.id=rp.student_id
+                                JOIN schools sch ON sch.id=rp.school_id
+                                WHERE rp.pin=$1 AND (s.name ILIKE $2 OR s.id::text=$3)`,
+      [pin.toUpperCase(), `%${student_id}%`, student_id]);
+    if (!pinRecord.rows.length) return json(res, { ok: false, error: 'Invalid PIN or student name. Please check and try again.' });
+    const record = pinRecord.rows[0];
+    if (record.expires_at && new Date(record.expires_at) < new Date()) return json(res, { ok: false, error: 'This PIN has expired. Please contact your school.' });
+    if (record.print_limit > 0 && record.print_count >= record.print_limit) return json(res, { ok: false, error: 'This PIN has reached its print limit. Please contact your school.' });
+    // Generate short-lived access token
+    const crypto = require('crypto');
+    const token = crypto.randomBytes(20).toString('hex');
+    await q('UPDATE result_pins SET access_token=$1, accessed=true, print_count=print_count+1 WHERE id=$2', [token, record.id]);
+    json(res, { ok: true, token });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// GET /results/:token — display the actual result card
+app.get('/results/:token', async (req, res) => {
+  try {
+    const record = await q(`SELECT rp.*, sr.subjects, sr.position, sr.remark, sr.term, sr.class_name,
+                             s.name as student_name, sch.name as school_name, sch.city
+                             FROM result_pins rp
+                             JOIN student_results sr ON sr.student_id=rp.student_id AND sr.term=rp.term
+                             JOIN students s ON s.id=rp.student_id
+                             JOIN schools sch ON sch.id=rp.school_id
+                             WHERE rp.access_token=$1`, [req.params.token]);
+    if (!record.rows.length) return res.status(404).send('Result not found or link has expired.');
+    const r = record.rows[0];
+    const subjects = typeof r.subjects === 'string' ? JSON.parse(r.subjects) : r.subjects || {};
+    const subjectRows = Object.entries(subjects).map(([subj, score]) => {
+      const s = Number(score);
+      const grade = s>=70?'A':s>=60?'B':s>=50?'C':s>=40?'D':'F';
+      const gc = s>=70?'#1a7a4a':s>=60?'#0055cc':s>=50?'#f59e0b':s>=40?'#f97316':'#e53935';
+      const remark = s>=70?'Excellent':s>=60?'Very Good':s>=50?'Good':s>=40?'Average':'Needs Improvement';
+      return `<tr><td>${subj}</td><td style="text-align:center;">${score}</td><td style="text-align:center;font-weight:700;color:${gc};">${grade}</td><td>${remark}</td></tr>`;
+    }).join('');
+    const avg = Object.values(subjects).length ? Math.round(Object.values(subjects).reduce((a,b)=>a+Number(b),0)/Object.values(subjects).length) : 0;
+
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${r.student_name} — ${r.term} Result</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:#f0f2f5;padding:24px 16px;}
+.result-card{background:white;max-width:700px;margin:0 auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08);}
+.result-header{background:#0d4a2c;color:white;padding:28px 32px;text-align:center;}
+.school-name{font-size:22px;font-weight:700;margin-bottom:4px;}
+.result-title{font-size:13px;opacity:.7;letter-spacing:1px;text-transform:uppercase;}
+.student-info{display:grid;grid-template-columns:repeat(3,1fr);gap:0;background:#f7f9f7;border-bottom:1px solid #e9edef;}
+.info-item{padding:16px 20px;border-right:1px solid #e9edef;}
+.info-item:last-child{border-right:none;}
+.info-label{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#667781;margin-bottom:4px;}
+.info-value{font-size:15px;font-weight:600;color:#0f1a14;}
+.scores{padding:24px 28px;}
+table{width:100%;border-collapse:collapse;font-size:14px;}
+th{font-size:11px;font-weight:600;color:#667781;text-align:left;padding:10px 12px;border-bottom:2px solid #e9edef;text-transform:uppercase;letter-spacing:.5px;}
+td{padding:12px 12px;border-bottom:1px solid #f0f2f5;color:#0f1a14;}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:0 28px 24px;}
+.sum-box{background:#f7f9f7;border-radius:8px;padding:14px;text-align:center;}
+.sum-val{font-size:24px;font-weight:700;color:#1a7a4a;}
+.sum-label{font-size:11px;color:#667781;margin-top:3px;}
+.remarks-section{padding:0 28px 24px;}
+.remarks-title{font-size:12px;font-weight:600;color:#667781;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;}
+.remarks-box{background:#f7f9f7;border-radius:8px;padding:14px;font-size:14px;color:#374151;line-height:1.6;}
+.result-footer{background:#f7f9f7;padding:16px 28px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #e9edef;}
+.footer-brand{font-size:13px;color:#aab;}
+.footer-brand strong{color:#1a7a4a;}
+.print-btn{background:#1a7a4a;color:white;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+@media print{
+  body{background:white;padding:0;}
+  .print-btn{display:none;}
+  .result-card{box-shadow:none;border-radius:0;}
+}
+</style>
+</head>
+<body>
+<div class="result-card">
+  <div class="result-header">
+    <div class="school-name">${r.school_name}</div>
+    <div class="result-title">${r.term} — Academic Result</div>
+  </div>
+  <div class="student-info">
+    <div class="info-item"><div class="info-label">Student Name</div><div class="info-value">${r.student_name}</div></div>
+    <div class="info-item"><div class="info-label">Class</div><div class="info-value">${r.class_name||'—'}</div></div>
+    <div class="info-item"><div class="info-label">Position</div><div class="info-value">${r.position ? r.position + getOrdinal(r.position) : '—'}</div></div>
+  </div>
+  <div class="scores">
+    <table>
+      <thead><tr><th>Subject</th><th style="text-align:center;">Score</th><th style="text-align:center;">Grade</th><th>Remark</th></tr></thead>
+      <tbody>${subjectRows}</tbody>
+    </table>
+  </div>
+  <div class="summary">
+    <div class="sum-box"><div class="sum-val">${avg}%</div><div class="sum-label">Average Score</div></div>
+    <div class="sum-box"><div class="sum-val">${r.position||'—'}</div><div class="sum-label">Class Position</div></div>
+    <div class="sum-box"><div class="sum-val">${Object.keys(subjects).length}</div><div class="sum-label">Subjects</div></div>
+  </div>
+  ${r.remark ? `<div class="remarks-section"><div class="remarks-title">Class Teacher's Remark</div><div class="remarks-box">${r.remark}</div></div>` : ''}
+  <div class="result-footer">
+    <div class="footer-brand">Powered by <strong>EduPing</strong> · eduping.org</div>
+    <button class="print-btn" onclick="window.print()">🖨 Print Result</button>
+  </div>
+</div>
+</body>
+</html>`);
+  } catch(err) { res.status(500).send('Error loading result: ' + err.message); }
+});
+
+function getOrdinal(n) {
+  const s = ['th','st','nd','rd'], v = n%100;
+  return s[(v-20)%10]||s[v]||s[0];
+}
+
 app.use((err, req, res, next) => { console.error(err); res.status(500).json({ error: 'Server error', detail: process.env.NODE_ENV === 'production' ? undefined : err.message }); });
 
 (async () => {
