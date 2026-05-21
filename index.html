@@ -192,13 +192,156 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
 .loading{color:var(--text-muted);font-size:13px;padding:20px;text-align:center;}
 ::-webkit-scrollbar{width:4px;}
 ::-webkit-scrollbar-thumb{background:#ccc;border-radius:4px;}
+/* STUDENT PROFILE PANEL */
+.profile-panel{position:fixed;top:56px;right:0;bottom:0;width:520px;background:white;z-index:500;box-shadow:-4px 0 24px rgba(0,0,0,.14);transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;overflow:hidden;}
+.profile-panel.open{transform:translateX(0);}
+.profile-panel-header{padding:18px 20px;border-bottom:1px solid #f0f2f5;display:flex;align-items:center;gap:12px;flex-shrink:0;background:var(--green);color:white;}
+.profile-panel-title{font-weight:600;font-size:16px;flex:1;}
+.profile-panel-close{background:rgba(255,255,255,.2);border:none;color:white;width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.profile-panel-body{flex:1;overflow-y:auto;padding:0;}
+.profile-section{padding:16px 20px;border-bottom:1px solid #f0f2f5;}
+.profile-section-title{font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--text-muted);margin-bottom:12px;}
+.profile-stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;}
+.profile-stat{background:var(--gray-bg);border-radius:8px;padding:10px;text-align:center;}
+.profile-stat-val{font-size:20px;font-weight:700;color:var(--green);}
+.profile-stat-label{font-size:10px;color:var(--text-muted);margin-top:2px;}
+.attend-mini{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px;}
+.attend-dot{width:20px;height:20px;border-radius:4px;font-size:9px;display:flex;align-items:center;justify-content:center;color:white;font-weight:600;}
+.attend-dot.present{background:var(--green);}
+.attend-dot.absent{background:var(--danger);}
+.attend-dot.none{background:#e9edef;}
+.overlay-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:499;}
+.overlay-bg.show{display:block;}
+.date-filter-row{display:flex;gap:6px;margin-bottom:12px;}
+.date-filter-btn{background:var(--gray-bg);border:1.5px solid #e9edef;color:var(--text-muted);padding:5px 12px;border-radius:16px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s;font-weight:500;}
+.date-filter-btn.active{background:var(--green);color:white;border-color:var(--green);}
+.absent-class-group{margin-bottom:16px;}
+.absent-class-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);padding:6px 0;border-bottom:2px solid var(--green-pale);margin-bottom:8px;}
+.pill-paid{background:#d1fae5;color:#065f46;}
+.pill-partial{background:#fef3c7;color:#92400e;}
+.pill-unpaid,.pill-owing{background:#fee2e2;color:#991b1b;}
+.pill-norecord{background:#f3f4f6;color:#374151;}
+.class-group-header{background:var(--green-pale);padding:8px 12px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;border-top:2px solid var(--green);margin-top:4px;}
+.class-group-header:first-child{margin-top:0;}
+.class-group-title{font-weight:700;font-size:13px;color:var(--green);}
+.class-group-count{font-size:11px;color:var(--text-muted);}
+.export-btn{background:none;border:1.5px solid #e9edef;color:var(--text-muted);padding:6px 14px;border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s;font-weight:500;}
+.export-btn:hover{border-color:var(--green);color:var(--green);}
+.payment-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;align-items:center;justify-content:center;}
+.payment-modal.show{display:flex;}
+.payment-modal-box{background:white;border-radius:16px;padding:28px;width:400px;box-shadow:0 8px 32px rgba(0,0,0,.2);}
+
+
+/* CHARTS */
+.chart-bar-wrap{display:flex;flex-direction:column;gap:8px;}
+.chart-bar-row{display:flex;align-items:center;gap:10px;font-size:12px;}
+.chart-bar-label{width:100px;color:var(--text-muted);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;}
+.chart-bar-track{flex:1;background:#f0f2f5;border-radius:20px;height:14px;overflow:hidden;}
+.chart-bar-fill{height:100%;border-radius:20px;transition:width .6s ease;background:var(--green);}
+.chart-bar-fill.danger{background:var(--danger);}
+.chart-bar-fill.gold{background:var(--gold);}
+.chart-bar-val{width:36px;font-weight:600;font-size:12px;color:var(--text);}
+
+/* RISK BANNER */
+.risk-banner{background:#fee2e2;border:1.5px solid #fca5a5;border-radius:10px;padding:12px 16px;margin-bottom:16px;display:none;}
+.risk-banner.show{display:block;}
+.risk-banner-title{font-weight:700;font-size:13px;color:#991b1b;margin-bottom:8px;}
+.risk-item{font-size:12px;color:#7f1d1d;padding:3px 0;display:flex;justify-content:space-between;}
+
+/* LEADERBOARD */
+.leaderboard-item{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #f5f5f5;}
+.leaderboard-rank{width:24px;height:24px;border-radius:50%;background:var(--green-pale);color:var(--green);font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.leaderboard-rank.gold{background:#fef3c7;color:#92400e;}
+.leaderboard-rank.silver{background:#f3f4f6;color:#374151;}
+.leaderboard-rank.bronze{background:#fef3c7;color:#b45309;}
+.leaderboard-name{flex:1;font-size:13px;font-weight:500;}
+.leaderboard-class{font-size:11px;color:var(--text-muted);}
+.leaderboard-score{font-weight:700;color:var(--green);font-size:14px;}
+
+/* SEND MESSAGE MODAL */
+.msg-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:700;align-items:center;justify-content:center;}
+.msg-modal.show{display:flex;}
+.msg-modal-box{background:white;border-radius:16px;padding:28px;width:420px;box-shadow:0 8px 32px rgba(0,0,0,.2);}
+
+/* STAFF NOT SIGNED IN */
+.staff-no-signin{background:#fee2e2;color:#991b1b;font-size:11px;padding:2px 7px;border-radius:10px;margin-left:6px;font-weight:600;}
+
+/* ATTENDANCE TREND */
+.trend-chart{display:flex;align-items:flex-end;gap:3px;height:60px;padding:4px 0;}
+.trend-bar{flex:1;background:var(--green);border-radius:3px 3px 0 0;min-height:2px;transition:height .4s ease;position:relative;}
+.trend-bar:hover::after{content:attr(data-tip);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#333;color:white;font-size:10px;padding:2px 6px;border-radius:4px;white-space:nowrap;}
+.trend-labels{display:flex;gap:3px;margin-top:4px;}
+.trend-label{flex:1;font-size:9px;color:var(--text-muted);text-align:center;}
+
+/* EVENTS HUB */
+.events-locked{background:linear-gradient(135deg,#f0fdf4,#e8f5e9);border:2px dashed var(--green);border-radius:16px;padding:48px;text-align:center;}
+.events-locked-icon{font-size:48px;margin-bottom:16px;}
+.events-locked-title{font-size:20px;font-weight:700;color:var(--green);margin-bottom:8px;}
+.events-locked-sub{font-size:14px;color:var(--text-muted);margin-bottom:24px;max-width:400px;margin-left:auto;margin-right:auto;}
+
+.event-type-academic{border-left:4px solid #e53935;}
+.event-type-social{border-left:4px solid var(--green);}
+.event-type-sports{border-left:4px solid #f59e0b;}
+.event-type-holiday{border-left:4px solid #3b82f6;}
+.event-type-exam{border-left:4px solid #7c3aed;}
+
+.event-card{background:white;border-radius:12px;padding:16px 18px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);display:flex;align-items:center;gap:16px;border-left:4px solid var(--green);}
+.event-countdown{text-align:center;min-width:64px;}
+.event-countdown-days{font-size:28px;font-weight:800;color:var(--green);line-height:1;}
+.event-countdown-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;}
+.event-countdown-today{font-size:13px;font-weight:700;color:white;background:var(--green);border-radius:8px;padding:4px 8px;}
+.event-countdown-past{font-size:11px;color:var(--text-muted);}
+.event-info{flex:1;}
+.event-name{font-weight:700;font-size:15px;margin-bottom:2px;}
+.event-meta{font-size:12px;color:var(--text-muted);display:flex;gap:12px;margin-top:4px;}
+.event-type-pill{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:2px 8px;border-radius:10px;background:var(--green-pale);color:var(--green);}
+.event-actions{display:flex;gap:6px;flex-direction:column;align-items:flex-end;}
+
+.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:12px;}
+.gallery-thumb{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;cursor:pointer;transition:transform .2s;}
+.gallery-thumb:hover{transform:scale(1.04);}
+
+.feed-item{padding:10px 0;border-bottom:1px solid #f5f5f5;font-size:13px;}
+.feed-item:last-child{border-bottom:none;}
+.feed-time{font-size:11px;color:var(--text-muted);margin-top:2px;}
+
+.countdown-mini{display:flex;gap:8px;align-items:center;}
+.countdown-mini-days{font-size:22px;font-weight:800;color:var(--green);}
+.countdown-mini-info{font-size:12px;}
+.countdown-mini-name{font-weight:600;}
+.countdown-mini-date{color:var(--text-muted);}
+
+.upload-zone{border:2px dashed #e9edef;border-radius:12px;padding:32px;text-align:center;cursor:pointer;transition:all .2s;}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--green);background:var(--green-pale);}
+.upload-zone-icon{font-size:32px;margin-bottom:8px;}
+.upload-zone-text{font-size:13px;color:var(--text-muted);}
+
+.event-tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid #f0f2f5;padding-bottom:0;}
+.event-tab{padding:8px 16px;font-size:13px;font-weight:500;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;}
+.event-tab.active{color:var(--green);border-bottom-color:var(--green);font-weight:600;}
 </style>
 </head>
 <body>
 
 <div class="topnav">
   <div class="topnav-brand">
-    <div class="topnav-logo">🏫</div>
+    <div class="topnav-logo" style="display:flex;align-items:center;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 36" height="36" width="160">
+  <!-- Speech bubble P icon -->
+  <g transform="translate(0,2)">
+    <!-- Bubble body -->
+    <rect x="1" y="0" width="26" height="22" rx="5" ry="5" fill="none" stroke="white" stroke-width="2.2"/>
+    <!-- Tail of speech bubble -->
+    <path d="M7 22 L4 30 L14 22 Z" fill="white"/>
+    <!-- P letter crossbar top -->
+    <rect x="7" y="5" width="2.2" height="12" rx="1" fill="white"/>
+    <!-- P letter bump -->
+    <path d="M9.2 5 Q17 5 17 10.5 Q17 16 9.2 16" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"/>
+  </g>
+  <!-- Edu text in white -->
+  <text x="34" y="25" font-family="DM Sans, Arial, sans-serif" font-weight="700" font-size="18" fill="white" letter-spacing="-0.3">Edu</text>
+  <!-- Ping text in cyan -->
+  <text x="68" y="25" font-family="DM Sans, Arial, sans-serif" font-weight="700" font-size="18" fill="#00AEEF" letter-spacing="-0.3">Ping</text>
+</svg></div>
     <div>
       <div class="topnav-name">EduPing</div>
       <div class="topnav-school" id="school-name-nav">School Admin</div>
@@ -226,7 +369,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         </div>
         <div class="form-group">
           <label class="form-label">Admin Password</label>
-          <input class="form-input" type="password" id="login-password" placeholder="Enter password" onkeydown="if(event.key==='Enter')doLogin()">
+          <div style="position:relative;">
+  <input class="form-input" type="password" id="login-password" placeholder="Enter password" onkeydown="if(event.key==='Enter')doLogin()" style="padding-right:44px;">
+  <button type="button" onclick="togglePassword()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text-muted);" id="pass-toggle">👁</button>
+</div>
         </div>
         <div class="modal-err" id="login-err" style="display:none;">Wrong school ID or password. Try again.</div>
         <button class="login-btn" onclick="doLogin()">Login to Dashboard</button>
@@ -304,6 +450,15 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         <button class="subnav-btn" onclick="switchSection('documents',this)">📄 AI Training</button>
         <button class="subnav-btn" onclick="switchSection('appraisal',this)">📈 Appraisal</button>
         <button class="subnav-btn" onclick="switchSection('usage',this)">📡 Usage</button>
+        <button class="subnav-btn" onclick="switchSection('chats',this)">💬 Parent Chats</button>
+        <button class="subnav-btn" onclick="switchSection('fees',this)">💳 Fees</button>
+        <button class="subnav-btn" onclick="switchSection('classsummary',this)">📋 Class View</button>
+        <button class="subnav-btn" onclick="switchSection('events',this)">🎉 Events</button>
+        <button class="subnav-btn" onclick="switchSection('teacherchats',this)">💬 Teacher Chats</button>
+        <button class="subnav-btn" onclick="switchSection('notifications',this)">🔔 Alerts <span id="notif-badge" style="display:none;background:var(--danger);color:white;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></button>
+        <button class="subnav-btn" onclick="switchSection('termcal',this)">📅 Term Calendar</button>
+        <button class="subnav-btn" onclick="switchSection('performance',this)">🏅 Rankings</button>
+        <button class="subnav-btn" onclick="switchSection('results',this)">📄 Results</button>
       </div>
 
       <!-- OVERVIEW -->
@@ -313,6 +468,57 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
           <div class="stat-card blue"><div class="stat-icon">👩‍🏫</div><div class="stat-value" id="stat-staff">—</div><div class="stat-label">Staff members</div></div>
           <div class="stat-card gold"><div class="stat-icon">💰</div><div class="stat-value" id="stat-fees">—</div><div class="stat-label">Fees outstanding</div></div>
           <div class="stat-card red"><div class="stat-icon">📋</div><div class="stat-value" id="stat-admissions">—</div><div class="stat-label">New admissions</div></div>
+        </div>
+        <!-- Risk Alert Banner -->
+        <div class="risk-banner" id="risk-banner">
+          <div class="risk-banner-title">⚠️ At-Risk Students Require Attention</div>
+          <div id="risk-banner-list"></div>
+        </div>
+
+        <!-- Attendance Trend + Leaderboard row -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px;">
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">📈 Attendance Trend (30 days)</div></div>
+            <div class="dash-card-body" style="padding:14px 18px;">
+              <div class="trend-chart" id="attend-trend-chart"></div>
+              <div class="trend-labels" id="attend-trend-labels"></div>
+            </div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">🏆 Top Performing Students</div></div>
+            <div class="dash-card-body" style="padding:14px 18px;" id="leaderboard-body"><div class="loading">Loading...</div></div>
+          </div>
+        </div>
+
+        <!-- Today Absentees Card -->
+        <div class="dash-card full" style="margin-top:18px;" id="absentees-card">
+          <div class="dash-card-header">
+            <div class="dash-card-title">🔴 Today's Absentees</div>
+            <div class="dash-card-action" onclick="loadAbsentees()">Refresh</div>
+          </div>
+          <div class="dash-card-body" id="absentees-body"><div class="loading">Loading...</div></div>
+        </div>
+
+        <!-- Upcoming Events Widget -->
+        <div class="dash-card full" style="margin-top:18px;" id="upcoming-events-widget">
+          <div class="dash-card-header">
+            <div class="dash-card-title">📅 Upcoming Events</div>
+            <div class="dash-card-action" onclick="switchSection('events', document.querySelector('.subnav-btn:last-child'))">View All</div>
+          </div>
+          <div class="dash-card-body" style="padding:14px 18px;" id="upcoming-events-body">
+            <div class="loading">Loading...</div>
+          </div>
+        </div>
+
+        <!-- Homework History -->
+        <div class="dash-card full" style="margin-top:18px;">
+          <div class="dash-card-header">
+            <div class="dash-card-title">📚 Recent Homework Assignments</div>
+            <select class="form-select" id="hw-class-filter" onchange="filterHomeworkHistory()" style="width:140px;font-size:12px;padding:5px 10px;">
+              <option value="">All classes</option>
+            </select>
+          </div>
+          <div class="dash-card-body" style="padding:0;" id="homework-history-body"><div class="loading" style="padding:20px;">Loading...</div></div>
         </div>
         <div class="dash-grid">
           <div class="dash-card">
@@ -341,24 +547,76 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
       <!-- STAFF AUDIT -->
       <div id="section-staff" class="dash-section">
         <div class="staff-grid" id="staff-grid"><div class="loading">Loading staff...</div></div>
+        <!-- Sign-in log -->
         <div class="dash-card full" style="margin-top:18px;">
-          <div class="dash-card-header"><div class="dash-card-title">Add New Staff Member</div></div>
-          <div class="dash-card-body">
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:end;">
-              <div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="sf-name" placeholder="Mrs Amaka Johnson"></div>
-              <div class="form-group"><label class="form-label">Role</label>
-                <select class="form-select" id="sf-role">
-                  <option value="teacher">Class Teacher</option>
-                  <option value="subject_teacher">Subject Teacher</option>
-                  <option value="nurse">Nurse</option>
-                  <option value="security">Security</option>
-                </select>
-              </div>
-              <div class="form-group"><label class="form-label">Subject</label><input class="form-input" id="sf-subject" placeholder="Mathematics"></div>
-              <div class="form-group"><label class="form-label">Class</label><input class="form-input" id="sf-class" placeholder="JSS2A"></div>
-              <div class="form-group"><label class="form-label">WhatsApp Number</label><input class="form-input" id="sf-phone" placeholder="+2348011112233"></div>
+          <div class="dash-card-header">
+            <div class="dash-card-title">📋 Teacher Sign-in Log</div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input class="search-box" id="signin-search" placeholder="Search teacher..." oninput="filterSigninLog()" style="width:160px;font-size:12px;">
+              <button class="export-btn" onclick="exportSigninLog()">⬇ CSV</button>
             </div>
-            <button class="broadcast-btn" style="margin-top:14px;max-width:200px" onclick="addStaff()">➕ Add Staff Member</button>
+          </div>
+          <div class="dash-card-body" style="padding:14px 18px;">
+            <div class="date-filter-row">
+              <button class="date-filter-btn active" onclick="setSigninPeriod('today',this)">Today</button>
+              <button class="date-filter-btn" onclick="setSigninPeriod('yesterday',this)">Yesterday</button>
+              <button class="date-filter-btn" onclick="setSigninPeriod('week',this)">This Week</button>
+              <button class="date-filter-btn" onclick="setSigninPeriod('custom',this)">Custom</button>
+              <input type="date" id="signin-custom-date" style="display:none;padding:4px 8px;border:1.5px solid #e9edef;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:12px;" onchange="loadSigninLog()">
+            </div>
+            <div id="signin-absent-warning" style="display:none;background:#fee2e2;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#991b1b;"></div>
+            <div id="signin-log-body"><div class="loading">Loading...</div></div>
+          </div>
+        </div>
+
+        <!-- Add / Import Staff -->
+        <div class="dash-card full" style="margin-top:18px;">
+          <div class="dash-card-header">
+            <div class="dash-card-title">➕ Add / Import Staff</div>
+            <div style="display:flex;gap:8px;">
+              <button class="date-filter-btn active" onclick="switchStaffTab('manual',this)" id="staff-tab-manual">Manual</button>
+              <button class="date-filter-btn" onclick="switchStaffTab('csv',this)" id="staff-tab-csv">CSV Import</button>
+            </div>
+          </div>
+          <div class="dash-card-body" id="staff-add-body">
+            <!-- Manual tab -->
+            <div id="staff-tab-manual-content">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px;">
+                <div class="form-group"><label class="form-label">Full Name *</label><input class="form-input" id="sf-name" placeholder="Mrs Amaka Johnson"></div>
+                <div class="form-group"><label class="form-label">Role *</label>
+                  <select class="form-select" id="sf-role">
+                    <option value="teacher">Class Teacher</option>
+                    <option value="subject_teacher">Subject Teacher</option>
+                    <option value="head_teacher">Head Teacher</option>
+                    <option value="vice_principal">Vice Principal</option>
+                    <option value="nurse">Nurse</option>
+                    <option value="accountant">Accountant</option>
+                    <option value="security">Security</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div class="form-group"><label class="form-label">WhatsApp Number *</label><input class="form-input" id="sf-phone" placeholder="+2348011112233"></div>
+                <div class="form-group"><label class="form-label">Subject</label><input class="form-input" id="sf-subject" placeholder="Mathematics"></div>
+                <div class="form-group"><label class="form-label">Class Assigned</label><input class="form-input" id="sf-class" placeholder="JSS2A"></div>
+                <div class="form-group"><label class="form-label">Email (optional)</label><input class="form-input" id="sf-email" placeholder="teacher@school.com" type="email"></div>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center;">
+                <button class="broadcast-btn" style="max-width:200px" onclick="addStaff()">➕ Add Staff Member</button>
+                <span style="font-size:12px;color:var(--text-muted);">Staff will receive WhatsApp onboarding message automatically</span>
+              </div>
+            </div>
+            <!-- CSV Import tab -->
+            <div id="staff-tab-csv-content" style="display:none;">
+              <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.6;">Upload a CSV file with columns: <strong>Name, Role, Subject, Class, Phone, Email</strong>. Extra columns are ignored.</div>
+              <div style="border:2px dashed #e9edef;border-radius:10px;padding:28px;text-align:center;cursor:pointer;" onclick="document.getElementById('staff-csv-input').click()">
+                <div style="font-size:32px;margin-bottom:8px;">📋</div>
+                <div style="font-weight:600;font-size:14px;margin-bottom:4px;">Click to upload staff CSV</div>
+                <div style="font-size:12px;color:var(--text-muted);">.csv or .xlsx supported</div>
+                <input type="file" id="staff-csv-input" accept=".csv,.xlsx" style="display:none" onchange="importStaffCSV(event)">
+              </div>
+              <div id="staff-csv-result" style="margin-top:12px;"></div>
+              <button class="qr-btn" style="margin-top:12px;" onclick="downloadStaffTemplate()">⬇ Download Staff Template</button>
+            </div>
           </div>
         </div>
       </div>
@@ -513,26 +771,52 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
 
       <!-- BROADCAST -->
       <div id="section-broadcast" class="dash-section">
-        <div class="dash-grid">
-          <div class="dash-card">
-            <div class="dash-card-header"><div class="dash-card-title">Send Broadcast</div></div>
-            <div class="dash-card-body">
-              <div style="display:flex;flex-direction:column;gap:12px;">
-                <div class="form-group"><label class="form-label">Send to</label>
-                  <select class="form-select" id="broadcast-target">
-                    <option value="all_parents">All parents</option>
-                    <option value="staff">All staff</option>
-                  </select>
-                </div>
-                <div class="form-group"><label class="form-label">Message</label>
-                  <textarea class="form-textarea" id="broadcast-msg" placeholder="Type your WhatsApp message..."></textarea>
-                </div>
-                <button class="broadcast-btn" onclick="sendBroadcast()">📤 Send via WhatsApp</button>
+        <!-- Composer -->
+        <div class="dash-card full" style="margin-bottom:18px;">
+          <div class="dash-card-header">
+            <div class="dash-card-title">📢 Broadcast Composer</div>
+            <div id="broadcast-preview-count" style="font-size:12px;color:var(--text-muted);"></div>
+          </div>
+          <div class="dash-card-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
+              <div class="form-group"><label class="form-label">Send To *</label>
+                <select class="form-select" id="broadcast-target" onchange="updateBroadcastCount()">
+                  <option value="all_parents">All Parents</option>
+                  <option value="staff">All Staff</option>
+                  <option value="class">Specific Class</option>
+                  <option value="fee_defaulters">Fee Defaulters Only</option>
+                  <option value="absent_today">Today's Absent Parents</option>
+                </select>
+              </div>
+              <div class="form-group" id="broadcast-class-group" style="display:none;">
+                <label class="form-label">Select Class</label>
+                <select class="form-select" id="broadcast-class">
+                  <option value="">Loading classes...</option>
+                </select>
+              </div>
+              <div class="form-group"><label class="form-label">Schedule (optional)</label>
+                <input class="form-input" id="broadcast-schedule" type="datetime-local">
               </div>
             </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">Message *</label>
+              <textarea class="form-textarea" id="broadcast-msg" placeholder="Type your WhatsApp message..." style="height:100px;" oninput="updateCharCount()"></textarea>
+              <div style="display:flex;justify-content:space-between;margin-top:4px;">
+                <div style="font-size:11px;color:var(--text-muted);">WhatsApp messages support *bold*, _italic_, and emoji</div>
+                <div id="broadcast-char-count" style="font-size:11px;color:var(--text-muted);">0 chars</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;">
+              <button class="broadcast-btn" onclick="sendBroadcast()" style="max-width:220px;">📤 Send via WhatsApp</button>
+              <button class="action-btn" onclick="previewBroadcast()">👁 Preview</button>
+              <div id="broadcast-sending" style="display:none;font-size:13px;color:var(--green);">Sending...</div>
+            </div>
           </div>
+        </div>
+
+        <div class="dash-grid">
           <div class="dash-card">
-            <div class="dash-card-header"><div class="dash-card-title">Quick Templates</div></div>
+            <div class="dash-card-header"><div class="dash-card-title">⚡ Quick Templates</div></div>
             <div class="dash-card-body">
               <div style="display:flex;flex-direction:column;gap:8px;">
                 <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('fee')">💰 Fee payment reminder</button>
@@ -540,8 +824,43 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
                 <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('exam')">📝 Exam timetable notice</button>
                 <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('award')">🏆 Student of the week</button>
                 <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('pta')">👨‍👩‍👧 PTA meeting reminder</button>
+                <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('result')">📊 Results are ready</button>
+                <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('holiday')">🏖 Holiday notice</button>
+                <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('reopening')">🏫 Resumption reminder</button>
               </div>
             </div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">📊 Broadcast History</div></div>
+            <div class="dash-card-body" style="padding:0;" id="broadcast-history-body">
+              <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No broadcasts yet</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Student Progress Report Generator -->
+        <div class="dash-card full" style="margin-top:18px;">
+          <div class="dash-card-header">
+            <div class="dash-card-title">📄 Student Progress Report</div>
+            <div style="font-size:12px;color:var(--text-muted);">Generate & send PDF report card to parent via WhatsApp</div>
+          </div>
+          <div class="dash-card-body" style="padding:16px 18px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;">
+              <div class="form-group"><label class="form-label">Select Class</label>
+                <select class="form-select" id="report-class" onchange="loadReportStudents()">
+                  <option value="">All classes</option>
+                </select>
+              </div>
+              <div class="form-group"><label class="form-label">Select Student</label>
+                <select class="form-select" id="report-student">
+                  <option value="">All students in class</option>
+                </select>
+              </div>
+              <div>
+                <button class="broadcast-btn" onclick="generateProgressReport()" style="max-width:200px;">📄 Generate Report</button>
+              </div>
+            </div>
+            <div id="report-result" style="margin-top:12px;"></div>
           </div>
         </div>
       </div>
@@ -591,6 +910,34 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
             </div>
             <div class="dash-card-body" id="documents-list">
               <div class="loading">Loading documents...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PARENT CHATS -->
+      <div id="section-chats" class="dash-section">
+        <div style="display:grid;grid-template-columns:280px 1fr;gap:16px;height:calc(100vh - 120px);">
+          <div class="dash-card" style="overflow:hidden;display:flex;flex-direction:column;">
+            <div class="dash-card-header">
+              <div class="dash-card-title">💬 Conversations</div>
+              <div id="escalation-badge" style="display:none;background:#ef4444;color:white;border-radius:12px;padding:2px 8px;font-size:11px;font-weight:600;"></div>
+            </div>
+            <div style="padding:10px 12px;border-bottom:1px solid var(--border);">
+              <input class="form-input" id="chat-search" placeholder="Search by name or number..." oninput="filterChats()" style="margin:0;">
+            </div>
+            <div id="chat-list" style="overflow-y:auto;flex:1;"></div>
+          </div>
+          <div class="dash-card" style="overflow:hidden;display:flex;flex-direction:column;">
+            <div class="dash-card-header" id="chat-window-header">
+              <div class="dash-card-title">Select a conversation</div>
+            </div>
+            <div id="chat-window-body" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;">
+              <div style="text-align:center;color:var(--text-muted);font-size:13px;margin-top:40px;">Select a conversation from the left to view messages</div>
+            </div>
+            <div id="chat-reply-bar" style="padding:12px 16px;border-top:1px solid var(--border);display:none;gap:8px;align-items:flex-end;">
+              <input class="form-input" id="admin-reply-input" placeholder="Type a reply to send via WhatsApp..." style="margin:0;flex:1;">
+              <button class="broadcast-btn" style="margin:0;padding:8px 16px;white-space:nowrap;" onclick="sendAdminReply()">Send ↗</button>
             </div>
           </div>
         </div>
@@ -660,9 +1007,388 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         </div>
       </div>
 
+      <!-- FEES -->
+      <div id="section-fees" class="dash-section">
+        <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:18px;">
+          <div class="stat-card green"><div class="stat-icon">💰</div><div class="stat-value" id="fees-total-expected">—</div><div class="stat-label">Total Expected</div></div>
+          <div class="stat-card blue"><div class="stat-icon">✅</div><div class="stat-value" id="fees-total-collected">—</div><div class="stat-label">Total Collected</div></div>
+          <div class="stat-card red"><div class="stat-icon">⚠️</div><div class="stat-value" id="fees-total-outstanding">—</div><div class="stat-label">Outstanding</div></div>
+        </div>
+        <div class="dash-card full">
+          <div class="dash-card-header">
+            <div class="dash-card-title">Fee Records</div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input class="search-box" id="fees-search" placeholder="🔍 Search student..." oninput="filterFees()" style="width:180px;font-size:13px;">
+              <button class="export-btn" onclick="exportFees()">⬇ CSV</button>
+            </div>
+          </div>
+          <div class="dash-card-body" style="padding:0;" id="fees-table-wrap">
+            <div class="loading">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CLASS SUMMARY -->
+      <div id="section-classsummary" class="dash-section">
+        <div class="dash-card full">
+          <div class="dash-card-header">
+            <div class="dash-card-title">Class Summary</div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <select class="form-select" id="class-select" onchange="loadClassSummary()" style="width:160px;font-size:13px;padding:6px 10px;">
+                <option value="">Select class...</option>
+              </select>
+              <button class="export-btn" onclick="exportClassSummary()">⬇ CSV</button>
+            </div>
+          </div>
+          <div class="dash-card-body" style="padding:0;" id="class-summary-body">
+            <div style="padding:40px;text-align:center;color:var(--text-muted);font-size:13px;">Select a class from the dropdown above</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- EVENTS HUB -->
+      <div id="section-events" class="dash-section">
+        <!-- LOCKED STATE (shown if events_enabled = false) -->
+        <div id="events-locked-banner" style="display:none;">
+          <div class="events-locked">
+            <div class="events-locked-icon">🎉</div>
+            <div class="events-locked-title">EduPing Events Hub</div>
+            <div class="events-locked-sub">Countdowns, live feeds, photo galleries and shareable parent links — available on the Growth plan and above.</div>
+            <button class="broadcast-btn" onclick="showToast('Contact support to upgrade your plan')">⬆ Upgrade to Unlock</button>
+          </div>
+        </div>
+
+        <!-- ACTIVE STATE -->
+        <div id="events-active">
+          <!-- Top row: Add event + notify parents -->
+          <div style="display:flex;gap:16px;margin-bottom:18px;align-items:flex-start;">
+            <div class="dash-card" style="flex:1;">
+              <div class="dash-card-header"><div class="dash-card-title">➕ Add New Event</div></div>
+              <div class="dash-card-body" style="padding:16px 18px;">
+                <div class="form-group"><label class="form-label">Event Name</label><input class="form-input" id="evt-name" placeholder="e.g. Sports Day 2025"></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                  <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="evt-date" type="date"></div>
+                  <div class="form-group"><label class="form-label">Time</label><input class="form-input" id="evt-time" type="time" value="08:00"></div>
+                </div>
+                <div class="form-group"><label class="form-label">Type</label>
+                  <select class="form-select" id="evt-type">
+                    <option value="social">🎉 Social</option>
+                    <option value="academic">📚 Academic</option>
+                    <option value="sports">⚽ Sports</option>
+                    <option value="exam">📝 Exam</option>
+                    <option value="holiday">🏖 Holiday</option>
+                  </select>
+                </div>
+                <div class="form-group"><label class="form-label">Description</label><textarea class="form-textarea" id="evt-desc" placeholder="What's happening?" style="height:70px;"></textarea></div>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+                  <input type="checkbox" id="evt-notify" checked>
+                  <label for="evt-notify" style="font-size:13px;">Notify all parents via WhatsApp when event starts</label>
+                </div>
+                <button class="broadcast-btn" onclick="addEvent()">📅 Save Event</button>
+              </div>
+            </div>
+
+            <!-- Quick stats -->
+            <div style="display:flex;flex-direction:column;gap:12px;min-width:200px;">
+              <div class="stat-card green"><div class="stat-icon">📅</div><div class="stat-value" id="evt-stat-upcoming">—</div><div class="stat-label">Upcoming Events</div></div>
+              <div class="stat-card blue"><div class="stat-icon">🖼</div><div class="stat-value" id="evt-stat-galleries">—</div><div class="stat-label">Photo Galleries</div></div>
+              <div class="stat-card"><div class="stat-icon">📸</div><div class="stat-value" id="evt-stat-photos">—</div><div class="stat-label">Total Photos</div></div>
+            </div>
+          </div>
+
+          <!-- Events list with tabs -->
+          <div class="dash-card full">
+            <div class="dash-card-header">
+              <div class="dash-card-title">All Events</div>
+              <button class="export-btn" onclick="notifyAllParentsEvents()">📲 Blast All Upcoming to Parents</button>
+            </div>
+            <div class="dash-card-body" style="padding:16px 18px;">
+              <div class="event-tabs">
+                <div class="event-tab active" onclick="filterEvents('upcoming',this)">Upcoming</div>
+                <div class="event-tab" onclick="filterEvents('today',this)">Today</div>
+                <div class="event-tab" onclick="filterEvents('past',this)">Past</div>
+                <div class="event-tab" onclick="filterEvents('all',this)">All</div>
+              </div>
+              <div id="events-list"><div class="loading">Loading...</div></div>
+            </div>
+          </div>
+
+          <!-- Photo Galleries -->
+          <div class="dash-card full" style="margin-top:18px;">
+            <div class="dash-card-header">
+              <div class="dash-card-title">🖼 Photo Galleries</div>
+            </div>
+            <div class="dash-card-body" style="padding:16px 18px;">
+              <div id="galleries-list"><div class="loading">Loading...</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TEACHER CHATS -->
+      <div id="section-teacherchats" class="dash-section">
+        <div class="dash-card full">
+          <div class="dash-card-header">
+            <div class="dash-card-title">💬 Teacher Conversations</div>
+            <input class="search-box" id="teacher-chat-search" placeholder="Search teacher..." oninput="filterTeacherChats()" style="width:180px;font-size:13px;">
+          </div>
+          <div style="display:flex;height:520px;overflow:hidden;">
+            <div id="teacher-chat-list" style="width:280px;border-right:1px solid #f0f2f5;overflow-y:auto;flex-shrink:0;"><div class="loading" style="padding:20px;">Loading...</div></div>
+            <div id="teacher-chat-messages" style="flex:1;overflow-y:auto;padding:16px;background:var(--gray-bg);">
+              <div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px;">Select a teacher to view their conversation</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- NOTIFICATIONS / ALERTS -->
+      <div id="section-notifications" class="dash-section">
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:18px;">
+          <div class="stat-card red"><div class="stat-icon">⚠️</div><div class="stat-value" id="notif-stat-atrisk">—</div><div class="stat-label">At-risk students</div></div>
+          <div class="stat-card blue"><div class="stat-icon">📋</div><div class="stat-value" id="notif-stat-absent">—</div><div class="stat-label">Absent today</div></div>
+          <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-value" id="notif-stat-fees">—</div><div class="stat-label">Fee defaulters</div></div>
+          <div class="stat-card green"><div class="stat-icon">✅</div><div class="stat-value" id="notif-stat-signin">—</div><div class="stat-label">Staff signed in</div></div>
+        </div>
+        <div class="dash-card full">
+          <div class="dash-card-header"><div class="dash-card-title">🔔 All Alerts</div>
+            <div style="display:flex;gap:6px;">
+              <button class="date-filter-btn active" onclick="filterNotifs('all',this)">All</button>
+              <button class="date-filter-btn" onclick="filterNotifs('risk',this)">At-Risk</button>
+              <button class="date-filter-btn" onclick="filterNotifs('absence',this)">Absences</button>
+              <button class="date-filter-btn" onclick="filterNotifs('fees',this)">Fees</button>
+            </div>
+          </div>
+          <div class="dash-card-body" style="padding:0;" id="notif-list"><div class="loading" style="padding:20px;">Loading...</div></div>
+        </div>
+      </div>
+
+      <!-- TERM CALENDAR -->
+      <div id="section-termcal" class="dash-section">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;">
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">📅 Set Term Dates</div></div>
+            <div class="dash-card-body" style="padding:16px 18px;">
+              <div class="form-group" style="margin-bottom:12px;"><label class="form-label">Current Term Name</label><input class="form-input" id="term-name" placeholder="e.g. Third Term 2024/2025"></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+                <div class="form-group"><label class="form-label">Term Start Date</label><input class="form-input" id="term-start" type="date"></div>
+                <div class="form-group"><label class="form-label">Term End Date</label><input class="form-input" id="term-end" type="date"></div>
+                <div class="form-group"><label class="form-label">Mid-term Break Start</label><input class="form-input" id="midterm-start" type="date"></div>
+                <div class="form-group"><label class="form-label">Mid-term Break End</label><input class="form-input" id="midterm-end" type="date"></div>
+              </div>
+              <div class="form-group" style="margin-bottom:12px;"><label class="form-label">Fee Deadline</label><input class="form-input" id="fee-deadline-date" type="date"></div>
+              <button class="broadcast-btn" onclick="saveTermDates()">💾 Save Term Dates</button>
+            </div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">📊 Term Progress</div></div>
+            <div class="dash-card-body" style="padding:16px 18px;" id="term-progress-body">
+              <div class="loading">Loading term info...</div>
+            </div>
+          </div>
+        </div>
+        <div class="dash-card full">
+          <div class="dash-card-header"><div class="dash-card-title">🗓 Exam Schedule</div>
+            <button class="export-btn" onclick="addExamSlot()">➕ Add Exam</button>
+          </div>
+          <div class="dash-card-body" style="padding:0;" id="exam-schedule-body"><div class="loading" style="padding:20px;">No exams scheduled yet</div></div>
+        </div>
+      </div>
+
+      <!-- PERFORMANCE RANKINGS -->
+      <div id="section-performance" class="dash-section">
+        <div class="dash-card full" style="margin-bottom:18px;">
+          <div class="dash-card-header">
+            <div class="dash-card-title">🏅 Class Performance Rankings</div>
+            <button class="export-btn" onclick="exportPerformance()">⬇ CSV</button>
+          </div>
+          <div class="dash-card-body" style="padding:0;" id="class-rankings-body"><div class="loading" style="padding:20px;">Loading...</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">🏆 Top 10 Students School-wide</div></div>
+            <div class="dash-card-body" style="padding:0;" id="top-students-body"><div class="loading" style="padding:20px;">Loading...</div></div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">⚠️ Students Needing Support</div></div>
+            <div class="dash-card-body" style="padding:0;" id="bottom-students-body"><div class="loading" style="padding:20px;">Loading...</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RESULTS PORTAL -->
+      <div id="section-results" class="dash-section">
+
+        <!-- Summary cards -->
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:18px;">
+          <div class="stat-card green"><div class="stat-icon">📄</div><div class="stat-value" id="res-stat-uploaded">—</div><div class="stat-label">Results uploaded</div></div>
+          <div class="stat-card blue"><div class="stat-icon">🔑</div><div class="stat-value" id="res-stat-pins">—</div><div class="stat-label">PINs generated</div></div>
+          <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-value" id="res-stat-accessed">—</div><div class="stat-label">Parents accessed</div></div>
+          <div class="stat-card red"><div class="stat-icon">⏳</div><div class="stat-value" id="res-stat-pending">—</div><div class="stat-label">Fee outstanding</div></div>
+        </div>
+
+        <!-- Settings card -->
+        <div class="dash-card full" style="margin-bottom:18px;">
+          <div class="dash-card-header">
+            <div class="dash-card-title">⚙️ Result Release Settings</div>
+          </div>
+          <div class="dash-card-body" style="padding:16px 18px;">
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px;">
+              <div class="form-group">
+                <label class="form-label">Term Name</label>
+                <input class="form-input" id="res-term" placeholder="Third Term 2024/2025">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Access Model</label>
+                <select class="form-select" id="res-access-model" onchange="updateResultModel()">
+                  <option value="bundled">Bundled with fees (recommended)</option>
+                  <option value="paid">Pay per result (₦ per student)</option>
+                  <option value="free">Free for all students</option>
+                </select>
+              </div>
+              <div class="form-group" id="res-price-group" style="display:none;">
+                <label class="form-label">Price per result (₦)</label>
+                <input class="form-input" id="res-price" type="number" placeholder="2000">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Print limit per PIN</label>
+                <select class="form-select" id="res-print-limit">
+                  <option value="3">3 prints</option>
+                  <option value="5">5 prints</option>
+                  <option value="10">10 prints</option>
+                  <option value="0">Unlimited</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">PIN expiry</label>
+                <select class="form-select" id="res-expiry">
+                  <option value="30">30 days</option>
+                  <option value="60">60 days</option>
+                  <option value="90">End of next term</option>
+                </select>
+              </div>
+            </div>
+            <!-- Bundled model info -->
+            <div id="res-bundled-info" style="background:var(--green-pale);border-radius:8px;padding:12px 16px;font-size:13px;color:var(--green);margin-bottom:16px;">
+              ✅ <strong>Bundled model:</strong> Parents who have paid complete school fees will automatically receive their child's result PIN when you release results. Parents with outstanding fees will receive a payment reminder instead.
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;">
+              <button class="broadcast-btn" onclick="releaseResults()" style="max-width:240px;">🚀 Release Results to All</button>
+              <button class="action-btn" onclick="releaseResultsClass()">📋 Release for Specific Class</button>
+              <button class="action-btn" onclick="previewResultMessage()">👁 Preview WhatsApp Message</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Upload + student table -->
+        <div class="dash-card full" style="margin-bottom:18px;">
+          <div class="dash-card-header">
+            <div class="dash-card-title">📊 Upload Results</div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <select class="form-select" id="res-class-select" onchange="loadResultStudents()" style="width:140px;font-size:13px;padding:6px 10px;">
+                <option value="">Select class...</option>
+              </select>
+              <button class="export-btn" onclick="downloadResultTemplate()">⬇ Template</button>
+              <button class="export-btn" onclick="document.getElementById('res-csv-input').click()">⬆ Import CSV</button>
+              <input type="file" id="res-csv-input" accept=".csv" style="display:none;" onchange="importResultCSV(event)">
+            </div>
+          </div>
+          <div class="dash-card-body" style="padding:0;" id="res-student-table">
+            <div style="padding:40px;text-align:center;color:var(--text-muted);font-size:13px;">Select a class to begin entering results</div>
+          </div>
+        </div>
+
+        <!-- PIN log -->
+        <div class="dash-card full">
+          <div class="dash-card-header">
+            <div class="dash-card-title">🔑 PIN Access Log</div>
+            <div style="display:flex;gap:8px;">
+              <input class="search-box" id="pin-search" placeholder="Search student..." oninput="filterPINLog()" style="width:160px;font-size:12px;">
+              <button class="export-btn" onclick="exportPINLog()">⬇ CSV</button>
+            </div>
+          </div>
+          <div class="dash-card-body" style="padding:0;" id="pin-log-body">
+            <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No PINs generated yet — release results to generate PINs</div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
+</div>
+
+<!-- STUDENT PROFILE PANEL -->
+<div class="overlay-bg" id="profile-overlay" onclick="closeProfile()"></div>
+<div class="profile-panel" id="profile-panel">
+  <div class="profile-panel-header">
+    <div>
+      <div class="profile-panel-title" id="profile-name">Student Profile</div>
+      <div style="font-size:12px;opacity:.8;" id="profile-class"></div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="export-btn" style="color:white;border-color:rgba(255,255,255,.4);" onclick="openMsgModal()">💬 Message</button>
+      <button class="export-btn" style="color:white;border-color:rgba(255,255,255,.4);" onclick="printReportCard()">🖨️ Report</button>
+      <button class="profile-panel-close" onclick="closeProfile()">✕</button>
+    </div>
+  </div>
+  <div class="profile-panel-body" id="profile-body">
+    <div class="loading" style="padding:40px;">Loading profile...</div>
+  </div>
+</div>
+
+<!-- STAFF PROFILE MODAL -->
+<div class="payment-modal" id="staff-profile-modal">
+  <div class="payment-modal-box" style="width:480px;">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
+      <div id="staff-modal-avatar" style="width:52px;height:52px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;color:white;font-size:20px;font-weight:700;flex-shrink:0;"></div>
+      <div>
+        <div id="staff-modal-name" style="font-weight:700;font-size:17px;"></div>
+        <div id="staff-modal-role" style="font-size:12px;color:var(--text-muted);"></div>
+      </div>
+      <button class="profile-panel-close" style="background:#f0f2f5;color:var(--text);margin-left:auto;" onclick="closeStaffModal()">✕</button>
+    </div>
+    <div id="staff-modal-body" style="font-size:13px;"></div>
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
+      <button class="broadcast-btn" id="staff-modal-msg-btn">💬 Send WhatsApp</button>
+      <button class="action-btn" id="staff-modal-edit-btn">✏️ Edit Details</button>
+      <button class="action-btn" id="staff-modal-deactivate-btn" style="color:var(--danger);border-color:var(--danger);">🚫 Deactivate</button>
+    </div>
+  </div>
+</div>
+
+<!-- PAYMENT MODAL -->
+<div class="payment-modal" id="payment-modal">
+  <div class="payment-modal-box">
+    <div class="modal-title">💳 Record Payment</div>
+    <div class="modal-sub" id="payment-modal-student" style="margin-bottom:16px;"></div>
+    <input type="hidden" id="payment-student-id">
+    <div class="form-group"><label class="form-label">Amount Paid (₦)</label><input class="form-input" id="payment-amount" type="number" placeholder="50000"></div>
+    <div class="form-group"><label class="form-label">Payment Method</label>
+      <select class="form-select" id="payment-method">
+        <option value="cash">Cash</option>
+        <option value="transfer">Bank Transfer</option>
+        <option value="pos">POS</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="payment-date" type="date"></div>
+    <button class="broadcast-btn" onclick="submitPayment()" style="margin-bottom:8px;">✅ Save Payment</button>
+    <button class="modal-btn secondary" onclick="closePaymentModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- SEND MESSAGE MODAL -->
+<div class="msg-modal" id="msg-modal">
+  <div class="msg-modal-box">
+    <div class="modal-title">💬 Send WhatsApp Message</div>
+    <div class="modal-sub" id="msg-modal-recipient" style="margin-bottom:16px;color:var(--text-muted);font-size:13px;"></div>
+    <input type="hidden" id="msg-parent-phone">
+    <div class="form-group">
+      <label class="form-label">Message</label>
+      <textarea class="form-textarea" id="msg-content" placeholder="Type your message to the parent..." style="height:100px;"></textarea>
+    </div>
+    <button class="broadcast-btn" onclick="sendDirectMessage()" style="margin-bottom:8px;">📤 Send via WhatsApp</button>
+    <button class="modal-btn secondary" onclick="closeMsgModal()">Cancel</button>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -726,13 +1452,23 @@ function switchSection(name, btn) {
   document.getElementById('section-' + name).classList.add('active');
   if (btn) btn.classList.add('active');
   if (name === 'students') loadStudents();
-  if (name === 'staff') loadStaff();
+  if (name === 'staff') { loadStaff(); loadSigninLog(); }
   if (name === 'admissions') loadAdmissions();
   if (name === 'sickbay') loadSickbay();
   if (name === 'awards') loadAwards();
   if (name === 'documents') loadDocuments();
   if (name === 'appraisal') loadAppraisal();
   if (name === 'usage') loadUsage();
+  if (name === 'chats') loadChats();
+  if (name === 'broadcast') loadBroadcast();
+  if (name === 'fees') loadFees();
+  if (name === 'classsummary') loadClassOptions();
+  if (name === 'events') loadEvents();
+  if (name === 'teacherchats') loadTeacherChats();
+  if (name === 'notifications') loadNotifications();
+  if (name === 'termcal') { loadTermCalendar(); loadExamSchedule(); }
+  if (name === 'performance') loadPerformanceRankings();
+  if (name === 'results') loadResults();
 }
 
 // ── Dashboard data ────────────────────────────────────────
@@ -746,6 +1482,7 @@ async function loadDashboard() {
     document.getElementById('admit-alert-sub').textContent = d.new_admissions + ' new inquiries pending';
     renderSignins(d.signin);
     loadRecentConvos();
+    loadAbsentees();
   } catch(e) { console.log('Dashboard error:', e); }
 
   // Attendance chart
@@ -775,38 +1512,95 @@ async function loadRecentConvos() {
 
 // ── Students ──────────────────────────────────────────────
 let allStudents = [];
+let collapsedClasses = new Set();
 
 async function loadStudents() {
   try {
-    allStudents = await api('/api/admin/students');
-    renderStudentsTable(allStudents);
+    allStudents = await api('/api/admin/students/list');
+    renderStudentsGrouped(allStudents);
   } catch(e) {
-    document.getElementById('students-tbody').innerHTML = '<tr><td colspan="6" class="loading">Error loading students</td></tr>';
+    try {
+      allStudents = await api('/api/admin/students');
+      renderStudentsGrouped(allStudents);
+    } catch(e2) {
+      document.getElementById('students-grouped-list').innerHTML = '<div class="loading" style="padding:20px;">Error loading students</div>';
+    }
   }
 }
 
-function renderStudentsTable(rows) {
+function renderStudentsGrouped(rows) {
   const count = document.getElementById('student-count');
   if (count) count.textContent = '(' + rows.length + ' students)';
-  document.getElementById('students-tbody').innerHTML = rows.length
-    ? rows.map(r => `<tr>
-        <td><strong>${r.name}</strong></td>
-        <td>${r.class_name||'—'}</td>
-        <td>${r.parent_name||'—'}</td>
-        <td>${r.parent_phone||'—'}</td>
-        <td>${r.weekly_performance_score||0}%</td>
-        <td><button class="action-btn" onclick="removeStudent('${r.id}','${r.name}')">Remove</button></td>
-      </tr>`).join('')
-    : '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">No students yet — import from photo, Excel, or add manually above</td></tr>';
+  const el = document.getElementById('students-grouped-list');
+  if (!rows.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:13px;">No students yet</div>';
+    return;
+  }
+  // Group by class
+  const grouped = {};
+  for (const r of rows) {
+    const cls = r.class_name || 'No Class';
+    if (!grouped[cls]) grouped[cls] = [];
+    grouped[cls].push(r);
+  }
+  const classes = Object.keys(grouped).sort();
+  let html = '<table class="data-table" style="width:100%"><thead><tr><th>Student</th><th>Parent</th><th>Parent Phone</th><th>Fee Status</th><th>Perf.</th><th>Action</th></tr></thead><tbody>';
+  for (const cls of classes) {
+    const students = grouped[cls];
+    const isCollapsed = collapsedClasses.has(cls);
+    html += '<tr class="class-group-header" data-cls="' + cls + '" onclick="toggleClassGroup(this)">' +
+      '<td colspan="6" style="padding:8px 12px;background:var(--green-pale);border-top:2px solid var(--green);">' +
+      '<span class="class-group-title">' + cls + '</span>' +
+      '<span class="class-group-count" style="margin-left:10px;">' + students.length + ' students</span>' +
+      '<span style="float:right;font-size:12px;color:var(--text-muted);">' + (isCollapsed ? '▶' : '▼') + '</span></td></tr>';
+    if (!isCollapsed) {
+      html += students.map(r => {
+        const feeStatus = r.fee_status || 'no record';
+        const feePill = feeStatus === 'paid' ? 'pill-green' : feeStatus === 'partial' ? 'pill-gold' : feeStatus === 'unpaid' ? 'pill-red' : 'pill-gray';
+        return '<tr data-class="' + cls + '">' +
+          '<td><strong style="cursor:pointer;color:var(--green);" onclick=\"openProfile('+r.id+')\">' + r.name + '</strong></td>' +
+          '<td>' + (r.parent_name||'—') + '</td>' +
+          '<td>' + (r.parent_phone||'—') + '</td>' +
+          '<td><span class="pill ' + feePill + '">' + feeStatus + '</span></td>' +
+          '<td>' + (r.weekly_performance_score||0) + '%</td>' +
+          '<td style="display:flex;gap:6px;">' +
+          '<button class="action-btn" onclick=\"openProfile('+r.id+')\">View</button>' +
+          '<button class="action-btn" style="color:var(--danger);border-color:var(--danger);" onclick=\"removeStudent('+r.id+',\'r.name \')">Remove</button>' +
+          '</td></tr>';
+      }).join('');
+    }
+  }
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+function toggleClassGroup(row) {
+  const cls = row.getAttribute('data-cls');
+  if (collapsedClasses.has(cls)) collapsedClasses.delete(cls);
+  else collapsedClasses.add(cls);
+  renderStudentsGrouped(allStudents.filter(s => {
+    const q = document.getElementById('students-search') ? document.getElementById('students-search').value.toLowerCase() : '';
+    if (!q) return true;
+    return s.name.toLowerCase().includes(q) || (s.class_name||'').toLowerCase().includes(q) || (s.parent_name||'').toLowerCase().includes(q) || (s.parent_phone||'').includes(q);
+  }));
 }
 
 function filterStudents(query) {
   const filtered = allStudents.filter(s =>
     s.name.toLowerCase().includes(query.toLowerCase()) ||
     (s.class_name||'').toLowerCase().includes(query.toLowerCase()) ||
-    (s.parent_name||'').toLowerCase().includes(query.toLowerCase())
+    (s.parent_name||'').toLowerCase().includes(query.toLowerCase()) ||
+    (s.parent_phone||'').includes(query)
   );
-  renderStudentsTable(filtered);
+  renderStudentsGrouped(filtered);
+}
+
+function exportStudents() {
+  const rows = allStudents;
+  if (!rows.length) { showToast('No students to export'); return; }
+  const csv = 'Name,Class,Parent Name,Parent Phone,Performance Score\n' +
+    rows.map(r => [r.name, r.class_name||'', r.parent_name||'', r.parent_phone||'', r.weekly_performance_score||0].map(v => '"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  downloadCSV(csv, 'students_export.csv');
 }
 
 function toggleManualForm() {
@@ -999,28 +1793,38 @@ function downloadTemplate() {
 }
 
 // ── Staff ─────────────────────────────────────────────────
+let todaySignedIn = new Set();
+
 async function loadStaff() {
   const grid = document.getElementById('staff-grid');
   try {
     const rows = await api('/api/admin/staff');
+    window._lastStaffRows = rows;
     if (!rows.length) { grid.innerHTML = '<div class="loading">No staff added yet</div>'; return; }
-    grid.innerHTML = rows.map(s => {
-      const initials = s.name.split(' ').slice(1).map(n => n[0]).join('').slice(0,2) || s.name[0];
-      const color = colors[Math.abs(s.name.charCodeAt(0)) % colors.length];
-      return `<div class="staff-card">
-        <div class="staff-avatar" style="background:${color}">${initials}</div>
-        <div class="staff-name">${s.name}</div>
-        <div class="staff-role">${s.role}${s.subject?' — '+s.subject:''}</div>
-        <div class="staff-metrics">
-          <div class="staff-metric"><div class="staff-metric-value">${s.attendance_submissions||0}</div><div class="staff-metric-label">Attendance updates</div></div>
-          <div class="staff-metric"><div class="staff-metric-value">${s.scores_uploaded||0}</div><div class="staff-metric-label">Scores uploaded</div></div>
-          <div class="staff-metric"><div class="staff-metric-value">${s.homework_assigned||0}</div><div class="staff-metric-label">Homeworks set</div></div>
-          <div class="staff-metric"><div class="staff-metric-value">${s.absences||0}</div><div class="staff-metric-label">Absences</div></div>
-        </div>
-        <div style="margin-top:8px;font-size:12px;color:var(--text-muted);">🏆 ${s.staff_of_week_count||0}x Staff of Week</div>
-      </div>`;
-    }).join('');
+    renderStaffGrid(rows);
   } catch(e) { grid.innerHTML = '<div class="loading">Error loading staff</div>'; }
+}
+
+function renderStaffGrid(rows) {
+  const grid = document.getElementById('staff-grid');
+  if (!grid) return;
+  grid.innerHTML = rows.map(s => {
+    const initials = s.name.split(' ').slice(1).map(n => n[0]).join('').slice(0,2) || s.name[0];
+    const color = colors[Math.abs(s.name.charCodeAt(0)) % colors.length];
+    const notSignedIn = todaySignedIn.size > 0 && !todaySignedIn.has(s.name);
+    return `<div class="staff-card" style="${notSignedIn ? 'border:2px solid var(--danger);' : ''}" onclick="${cardClick}" title="Click to view profile" style="cursor:pointer;">
+      <div class="staff-avatar" style="background:${color}">${initials}</div>
+      <div class="staff-name">${s.name}${notSignedIn ? '<span class="staff-no-signin">Not signed in</span>' : ''}</div>
+      <div class="staff-role">${s.role}${s.subject?' — '+s.subject:''}</div>
+      <div class="staff-metrics">
+        <div class="staff-metric"><div class="staff-metric-value">${s.attendance_submissions||0}</div><div class="staff-metric-label">Attendance</div></div>
+        <div class="staff-metric"><div class="staff-metric-value">${s.scores_uploaded||0}</div><div class="staff-metric-label">Scores</div></div>
+        <div class="staff-metric"><div class="staff-metric-value">${s.homework_assigned||0}</div><div class="staff-metric-label">Homeworks</div></div>
+        <div class="staff-metric"><div class="staff-metric-value">${s.absences||0}</div><div class="staff-metric-label">Absences</div></div>
+      </div>
+      <div style="margin-top:8px;font-size:12px;color:var(--text-muted);">🏆 ${s.staff_of_week_count||0}x Staff of Week</div>
+    </div>`;
+  }).join('');
 }
 
 async function addStaff() {
@@ -1364,6 +2168,1873 @@ async function importFromText() {
   btn.textContent = '➕ Import Students';
   btn.disabled = false;
 }
+
+// ── Parent Chats ──────────────────────────────────────────
+let allMessages = [];
+let activePhone = null;
+
+async function loadChats() {
+  try {
+    const msgs = await api('/api/admin/messages');
+    allMessages = msgs;
+    renderChatList(msgs);
+    // Show escalation badge
+    const escalated = msgs.filter(m => m.assistant_reply && (
+      m.assistant_reply.includes('pass your question') ||
+      m.assistant_reply.includes('contact the school') ||
+      m.assistant_reply.includes('reach out directly')
+    ));
+    const badge = document.getElementById('escalation-badge');
+    if (escalated.length) {
+      const uniquePhones = [...new Set(escalated.map(m => m.from_number))];
+      badge.style.display = 'inline-block';
+      badge.textContent = uniquePhones.length + ' need attention';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch(e) { console.error('loadChats error', e); }
+}
+
+function renderChatList(msgs) {
+  // Group by phone number
+  const grouped = {};
+  for (const m of msgs) {
+    const phone = m.from_number;
+    if (!grouped[phone]) grouped[phone] = [];
+    grouped[phone].push(m);
+  }
+  const phones = Object.keys(grouped).sort((a,b) => {
+    const la = grouped[a][grouped[a].length-1].created_at;
+    const lb = grouped[b][grouped[b].length-1].created_at;
+    return new Date(lb) - new Date(la);
+  });
+  const list = document.getElementById('chat-list');
+  if (!phones.length) { list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No conversations yet</div>'; return; }
+  list.innerHTML = phones.map(phone => {
+    const convMsgs = grouped[phone];
+    const last = convMsgs[convMsgs.length-1];
+    const needsAttention = convMsgs.some(m => m.assistant_reply && (
+      m.assistant_reply.includes('pass your question') ||
+      m.assistant_reply.includes('contact the school') ||
+      m.assistant_reply.includes('reach out directly')
+    ));
+    const isActive = phone === activePhone;
+    const time = last.created_at ? new Date(last.created_at).toLocaleTimeString('en-NG', {hour:'2-digit',minute:'2-digit'}) : '';
+    return '<div onclick="openChat(\'phone \')" style="padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--border);background:' + (isActive ? 'var(--green-pale)' : 'white') + ';transition:background .15s;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
+      '<span style="font-size:13px;font-weight:600;color:var(--text);">' + phone + '</span>' +
+      '<span style="font-size:11px;color:var(--text-muted);">' + time + '</span>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+      '<span style="font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;">' + (last.user_message||'').slice(0,50) + '</span>' +
+      (needsAttention ? '<span style="background:#fef2f2;color:#ef4444;font-size:10px;font-weight:600;padding:2px 6px;border-radius:8px;flex-shrink:0;">⚠️ Review</span>' : '') +
+      '</div>' +
+      '</div>';
+  }).join('');
+}
+
+function openChat(phone) {
+  activePhone = phone;
+  const msgs = allMessages.filter(m => m.from_number === phone);
+  const header = document.getElementById('chat-window-header');
+  header.innerHTML = '<div class="dash-card-title">💬 ' + phone + '</div><span style="font-size:12px;color:var(--text-muted);">' + msgs.length + ' messages</span>';
+  const body = document.getElementById('chat-window-body');
+  body.innerHTML = msgs.map(m => {
+    const time = m.created_at ? new Date(m.created_at).toLocaleString('en-NG') : '';
+    const needsReview = m.assistant_reply && (
+      m.assistant_reply.includes('pass your question') ||
+      m.assistant_reply.includes('contact the school') ||
+      m.assistant_reply.includes('reach out directly')
+    );
+    return '<div style="display:flex;flex-direction:column;gap:6px;">' +
+      '<div style="align-self:flex-start;max-width:75%;">' +
+      '<div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">Parent · ' + time + '</div>' +
+      '<div style="background:#f0f2f5;padding:10px 12px;border-radius:0 12px 12px 12px;font-size:13px;line-height:1.5;">' + (m.user_message||'') + '</div>' +
+      '</div>' +
+      '<div style="align-self:flex-end;max-width:75%;">' +
+      '<div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;text-align:right;">EduPing AI</div>' +
+      '<div style="background:' + (needsReview ? '#fef2f2;border:1px solid #fecaca' : 'var(--green);color:white') + ';padding:10px 12px;border-radius:12px 0 12px 12px;font-size:13px;line-height:1.5;">' +
+      (m.assistant_reply||'') +
+      (needsReview ? '<div style="margin-top:6px;font-size:11px;color:#ef4444;font-weight:600;">⚠️ Admin follow-up needed</div>' : '') +
+      '</div>' +
+      '</div>' +
+      '</div>';
+  }).join('');
+  body.scrollTop = body.scrollHeight;
+  // Show reply bar
+  const replyBar = document.getElementById('chat-reply-bar');
+  replyBar.style.display = 'flex';
+  // Highlight active in list
+  renderChatList(allMessages);
+}
+
+function filterChats() {
+  const q = document.getElementById('chat-search').value.toLowerCase();
+  const filtered = allMessages.filter(m => m.from_number.includes(q) || (m.user_message||'').toLowerCase().includes(q));
+  renderChatList(filtered);
+}
+
+async function sendAdminReply() {
+  const msg = document.getElementById('admin-reply-input').value.trim();
+  if (!msg || !activePhone) return;
+  try {
+    await api('/api/admin/send-message', { method:'POST', body: JSON.stringify({ to: activePhone, message: msg }) });
+    document.getElementById('admin-reply-input').value = '';
+    showToast('Message sent via WhatsApp ✅');
+    await loadChats();
+    openChat(activePhone);
+  } catch(e) { showToast('Failed to send: ' + e.message); }
+}
+
+
+// ── CSV Helper ────────────────────────────────────────────
+function downloadCSV(csv, filename) {
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  a.click(); URL.revokeObjectURL(url);
+  showToast('📥 ' + filename + ' downloaded!');
+}
+
+// ── Absentees Today ───────────────────────────────────────
+async function loadAbsentees() {
+  const el = document.getElementById('absentees-body');
+  if (!el) return;
+  try {
+    const rows = await api('/api/admin/absentees/today');
+    if (!rows.length) {
+      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--green);font-size:13px;">✅ No absences recorded today!</div>';
+      return;
+    }
+    // Group by class
+    const grouped = {};
+    for (const r of rows) {
+      const cls = r.class_name || 'Unknown';
+      if (!grouped[cls]) grouped[cls] = [];
+      grouped[cls].push(r);
+    }
+    let html = '';
+    for (const [cls, students] of Object.entries(grouped)) {
+      html += '<div class="absent-class-group">' +
+        '<div class="absent-class-label">' + cls + ' — ' + students.length + ' absent</div>' +
+        '<table class="data-table"><thead><tr><th>Student</th><th>Class</th><th>Parent Phone</th><th>Marked By</th></tr></thead><tbody>' +
+        students.map(s => '<tr><td><strong>' + s.name + '</strong></td><td>' + (s.class_name||'—') + '</td><td>' + (s.parent_phone||'—') + '</td><td>' + (s.marked_by||'System') + '</td></tr>').join('') +
+        '</tbody></table></div>';
+    }
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = '<div class="loading">Could not load absentees</div>'; }
+}
+
+// ── Student Profile Panel ─────────────────────────────────
+async function openProfile(studentId) {
+  document.getElementById('profile-panel').classList.add('open');
+  document.getElementById('profile-overlay').classList.add('show');
+  document.getElementById('profile-name').textContent = 'Loading...';
+  document.getElementById('profile-class').textContent = '';
+  document.getElementById('profile-body').innerHTML = '<div class="loading" style="padding:40px;">Loading profile...</div>';
+  try {
+    const data = await api('/api/admin/students/' + studentId + '/profile');
+    const s = data.student;
+    document.getElementById('profile-name').textContent = s.name;
+    document.getElementById('profile-class').textContent = (s.class_name||'') + ' — ' + (s.parent_name||'');
+    
+    const fee = data.fees && data.fees.length ? data.fees[0] : null;
+    const feeStatus = fee ? fee.status : 'no record';
+    const feePill = feeStatus === 'paid' ? 'pill-green' : feeStatus === 'partial' ? 'pill-gold' : 'pill-red';
+    
+    // Attendance dots (last 10 days)
+    const attDots = (data.attendance || []).slice(0, 10).map(a =>
+      '<div class="attend-dot ' + a.status + '" title="' + a.date + '">' + (a.status === 'present' ? 'P' : 'A') + '</div>'
+    ).join('');
+
+    // Scores by subject
+    const subjects = {};
+    (data.scores || []).forEach(sc => {
+      if (!subjects[sc.subject]) subjects[sc.subject] = [];
+      subjects[sc.subject].push(Number(sc.score));
+    });
+    const scoresHtml = Object.entries(subjects).map(([subj, vals]) => {
+      const avg = Math.round(vals.reduce((a,b) => a+b,0)/vals.length);
+      const color = avg >= 70 ? 'var(--green)' : avg >= 50 ? 'var(--info)' : 'var(--danger)';
+      return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f5f5f5;font-size:13px;">' +
+        '<span>' + subj + '</span><strong style="color:' + color + ';">' + avg + '%</strong></div>';
+    }).join('') || '<div class="loading">No scores recorded</div>';
+
+    const risk = data.risk;
+    const riskHtml = risk ? '<div style="background:' + (risk.risk_level === 'critical' ? '#fee2e2' : risk.risk_level === 'high' ? '#fef3c7' : '#f0fdf4') + ';border-radius:8px;padding:12px;font-size:13px;margin-top:8px;">' +
+      '<strong>Risk Level: ' + risk.risk_level.toUpperCase() + '</strong>' +
+      (risk.plan_text ? '<div style="margin-top:8px;font-size:12px;color:var(--text-muted);white-space:pre-wrap;">' + risk.plan_text.slice(0,300) + '...</div>' : '') +
+      '</div>' : '<div style="color:var(--text-muted);font-size:13px;">No risk assessment yet</div>';
+
+    document.getElementById('profile-body').innerHTML =
+      '<div class="profile-section">' +
+        '<div class="profile-section-title">Overview</div>' +
+        '<div class="profile-stat-row">' +
+          '<div class="profile-stat"><div class="profile-stat-val">' + (data.attendance_pct !== null ? data.attendance_pct + '%' : '—') + '</div><div class="profile-stat-label">Attendance</div></div>' +
+          '<div class="profile-stat"><div class="profile-stat-val">' + (data.hw_completion !== null ? data.hw_completion + '%' : '—') + '</div><div class="profile-stat-label">HW Completion</div></div>' +
+          '<div class="profile-stat"><div class="profile-stat-val"><span class="pill ' + feePill + '">' + feeStatus + '</span></div><div class="profile-stat-label">Fee Status</div></div>' +
+        '</div>' +
+        '<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Last 10 school days attendance:</div>' +
+        '<div class="attend-mini">' + (attDots || '<div class="loading" style="font-size:12px;">No attendance data</div>') + '</div>' +
+      '</div>' +
+      '<div class="profile-section">' +
+        '<div class="profile-section-title">Contact Info</div>' +
+        '<div style="font-size:13px;display:flex;flex-direction:column;gap:8px;">' +
+          '<div><strong>Parent:</strong> ' + (s.parent_name||'—') + '</div>' +
+          '<div style="display:flex;align-items:center;gap:8px;"><strong>Phone:</strong> <span id="profile-phone">' + (s.parent_phone||'—') + '</span>' +
+          '<button class="action-btn" onclick="editParentPhone(\'s.id \')">Edit</button></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="profile-section">' +
+        '<div class="profile-section-title">Score History</div>' +
+        scoresHtml +
+      '</div>' +
+      '<div class="profile-section">' +
+        '<div class="profile-section-title">Fees</div>' +
+        (fee ? '<div style="font-size:13px;display:flex;flex-direction:column;gap:6px;">' +
+          '<div><strong>Amount Due:</strong> ₦' + Number(fee.amount_due).toLocaleString() + '</div>' +
+          '<div><strong>Amount Paid:</strong> ₦' + Number(fee.amount_paid).toLocaleString() + '</div>' +
+          '<div><strong>Balance:</strong> ₦' + (Number(fee.amount_due) - Number(fee.amount_paid)).toLocaleString() + '</div>' +
+          '<button class="broadcast-btn" style="margin-top:8px;" onclick="openPaymentModal(\'s.id \',\'s.name \')">💳 Record Payment</button>' +
+          '</div>' : '<div style="font-size:13px;color:var(--text-muted);">No fee record. <button class="action-btn" onclick="openPaymentModal(\'s.id \',\'s.name \')">Add payment</button></div>') +
+      '</div>' +
+      '<div class="profile-section">' +
+        '<div class="profile-section-title">Risk & Intervention</div>' +
+        riskHtml +
+      '</div>';
+  } catch(e) {
+    document.getElementById('profile-body').innerHTML = '<div class="loading" style="padding:40px;">Could not load profile: ' + e.message + '</div>';
+  }
+}
+
+function closeProfile() {
+  document.getElementById('profile-panel').classList.remove('open');
+  document.getElementById('profile-overlay').classList.remove('show');
+}
+
+async function editParentPhone(studentId) {
+  const phone = prompt('Enter new parent WhatsApp number:');
+  if (!phone) return;
+  try {
+    await api('/api/admin/students/' + studentId, { method: 'PATCH', body: JSON.stringify({ parent_phone: phone }) });
+    showToast('✅ Parent phone updated');
+    openProfile(studentId);
+    loadStudents();
+  } catch(e) { showToast('Failed to update ❌'); }
+}
+
+// ── Sign-in Log ───────────────────────────────────────────
+let allSigninLogs = [];
+let signinPeriod = 'today';
+
+async function loadSigninLog() {
+  const body = document.getElementById('signin-log-body');
+  if (!body) return;
+  body.innerHTML = '<div class="loading">Loading...</div>';
+  try {
+    let url = '/api/admin/signin-log?period=' + signinPeriod;
+    const customDate = document.getElementById('signin-custom-date');
+    if (signinPeriod === 'custom' && customDate && customDate.value) url = '/api/admin/signin-log?date=' + customDate.value;
+    allSigninLogs = await api(url);
+    renderSigninLog(allSigninLogs);
+  } catch(e) { body.innerHTML = '<div class="loading">Error loading sign-in log</div>'; }
+}
+
+function renderSigninLog(rows) {
+  const body = document.getElementById('signin-log-body');
+  if (!rows.length) {
+    body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">No sign-in records found</div>';
+    return;
+  }
+  // Track who signed in today for staff list highlighting
+  if (signinPeriod === 'today') {
+    todaySignedIn = new Set(rows.map(r => r.staff_name).filter(Boolean));
+    if (window._lastStaffRows) renderStaffGrid(window._lastStaffRows);
+  }
+  const warning = document.getElementById('signin-absent-warning');
+  if (signinPeriod === 'today' && warning) {
+    const signedInNames = new Set(rows.map(r => r.staff_name).filter(Boolean));
+    if (signedInNames.size > 0) {
+      warning.style.display = 'block';
+      warning.textContent = 'Signed in today: ' + [...signedInNames].join(', ');
+    } else { warning.style.display = 'none'; }
+  } else if (warning) { warning.style.display = 'none'; }
+
+  body.innerHTML = '<table class="data-table"><thead><tr><th>Teacher</th><th>Class</th><th>Date</th><th>Time</th><th>Photo Verified</th><th>Status</th></tr></thead><tbody>' +
+    rows.map(r => '<tr>' +
+      '<td><strong>' + (r.staff_name||'—') + '</strong></td>' +
+      '<td>' + (r.class||'—') + '</td>' +
+      '<td>' + (r.date ? new Date(r.date).toLocaleDateString('en-NG') : '—') + '</td>' +
+      '<td>' + (r.time||'—') + '</td>' +
+      '<td>' + (r.photo_verified ? '✅ Yes' : '⬜ No') + '</td>' +
+      '<td><span class="pill ' + (r.status === 'submitted' ? 'pill-green' : 'pill-gold') + '">' + (r.status||'—') + '</span></td>' +
+    '</tr>').join('') +
+    '</tbody></table>';
+}
+
+function setSigninPeriod(period, btn) {
+  signinPeriod = period;
+  document.querySelectorAll('.date-filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const customInput = document.getElementById('signin-custom-date');
+  if (customInput) customInput.style.display = period === 'custom' ? 'inline-block' : 'none';
+  if (period !== 'custom') loadSigninLog();
+}
+
+function filterSigninLog() {
+  const q = (document.getElementById('signin-search')?.value || '').toLowerCase();
+  const filtered = allSigninLogs.filter(r => (r.staff_name||'').toLowerCase().includes(q) || (r.class||'').toLowerCase().includes(q));
+  renderSigninLog(filtered);
+}
+
+function exportSigninLog() {
+  if (!allSigninLogs.length) { showToast('No data to export'); return; }
+  const csv = 'Teacher,Class,Date,Time,Photo Verified,Status\n' +
+    allSigninLogs.map(r => [r.staff_name||'', r.class||'', r.date||'', r.time||'', r.photo_verified ? 'Yes' : 'No', r.status||''].map(v => '"'+v+'"').join(',')).join('\n');
+  downloadCSV(csv, 'signin_log_export.csv');
+}
+
+// ── Fees ──────────────────────────────────────────────────
+let allFees = [];
+
+async function loadFees() {
+  const wrap = document.getElementById('fees-table-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="loading" style="padding:20px;">Loading...</div>';
+  try {
+    const data = await api('/api/admin/fees/summary');
+    allFees = data.students || [];
+    document.getElementById('fees-total-expected').textContent = '₦' + Number(data.totals?.expected||0).toLocaleString();
+    document.getElementById('fees-total-collected').textContent = '₦' + Number(data.totals?.collected||0).toLocaleString();
+    document.getElementById('fees-total-outstanding').textContent = '₦' + Number(data.totals?.outstanding||0).toLocaleString();
+    renderFeesTable(allFees);
+  } catch(e) { wrap.innerHTML = '<div class="loading">Error loading fees</div>'; }
+}
+
+function renderFeesTable(rows) {
+  const wrap = document.getElementById('fees-table-wrap');
+  if (!rows.length) { wrap.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No fee records found</div>'; return; }
+  wrap.innerHTML = '<table class="data-table"><thead><tr><th>Student</th><th>Class</th><th>Amount Due</th><th>Amount Paid</th><th>Balance</th><th>Status</th><th>Action</th></tr></thead><tbody>' +
+    rows.map(r => {
+      const status = r.fee_status || 'no record';
+      const pill = status === 'paid' ? 'pill-green' : status === 'partial' ? 'pill-gold' : status === 'unpaid' ? 'pill-red' : 'pill-gray';
+      return '<tr>' +
+        '<td><strong>' + r.name + '</strong></td>' +
+        '<td>' + (r.class_name||'—') + '</td>' +
+        '<td>₦' + Number(r.amount_due||0).toLocaleString() + '</td>' +
+        '<td>₦' + Number(r.amount_paid||0).toLocaleString() + '</td>' +
+        '<td>₦' + Number(r.balance||0).toLocaleString() + '</td>' +
+        '<td><span class="pill ' + pill + '">' + status + '</span></td>' +
+        '<td><button class="action-btn" onclick="openPaymentModal(\'r.id \',\'r.name \')">💳 Record</button></td>' +
+      '</tr>';
+    }).join('') + '</tbody></table>';
+}
+
+function filterFees() {
+  const q = (document.getElementById('fees-search')?.value || '').toLowerCase();
+  const filtered = allFees.filter(r => r.name.toLowerCase().includes(q) || (r.class_name||'').toLowerCase().includes(q));
+  renderFeesTable(filtered);
+}
+
+function exportFees() {
+  if (!allFees.length) { showToast('No data to export'); return; }
+  const csv = 'Student,Class,Amount Due,Amount Paid,Balance,Status\n' +
+    allFees.map(r => [r.name, r.class_name||'', r.amount_due||0, r.amount_paid||0, r.balance||0, r.fee_status||''].map(v => '"'+v+'"').join(',')).join('\n');
+  downloadCSV(csv, 'fees_export.csv');
+}
+
+// ── Payment Modal ─────────────────────────────────────────
+function openPaymentModal(studentId, studentName) {
+  document.getElementById('payment-student-id').value = studentId;
+  document.getElementById('payment-modal-student').textContent = 'Recording payment for: ' + studentName;
+  document.getElementById('payment-amount').value = '';
+  document.getElementById('payment-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('payment-modal').classList.add('show');
+}
+
+function closePaymentModal() {
+  document.getElementById('payment-modal').classList.remove('show');
+}
+
+async function submitPayment() {
+  const student_id = document.getElementById('payment-student-id').value;
+  const amount = document.getElementById('payment-amount').value;
+  const payment_method = document.getElementById('payment-method').value;
+  const payment_date = document.getElementById('payment-date').value;
+  if (!amount || Number(amount) <= 0) { showToast('Enter a valid amount ❌'); return; }
+  try {
+    await api('/api/admin/fees/payment', { method: 'POST', body: JSON.stringify({ student_id, amount: Number(amount), payment_method, payment_date }) });
+    showToast('✅ Payment recorded!');
+    closePaymentModal();
+    loadFees();
+    // Reload students to update fee status column
+    if (allStudents.length) loadStudents();
+  } catch(e) { showToast('Failed to save payment ❌'); }
+}
+
+// ── Class Summary ─────────────────────────────────────────
+let classSummaryData = [];
+
+async function loadClassOptions() {
+  const select = document.getElementById('class-select');
+  if (!select) return;
+  try {
+    const classes = await api('/api/admin/classes');
+    select.innerHTML = '<option value="">Select class...</option>' + classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
+  } catch(e) { console.log('Could not load classes'); }
+}
+
+async function loadClassSummary() {
+  const cls = document.getElementById('class-select')?.value;
+  const body = document.getElementById('class-summary-body');
+  if (!cls || !body) return;
+  body.innerHTML = '<div class="loading" style="padding:20px;">Loading class data...</div>';
+  try {
+    const data = await api('/api/admin/class-summary/' + encodeURIComponent(cls));
+    classSummaryData = data.students || [];
+    if (!classSummaryData.length) { body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">No students in this class</div>'; return; }
+    body.innerHTML = '<table class="data-table"><thead><tr><th>Student</th><th>Attendance %</th><th>Avg Score</th><th>HW Completion</th><th>Fee Status</th></tr></thead><tbody>' +
+      classSummaryData.map(r => {
+        const feeStatus = r.fee_status || 'no record';
+        const feePill = feeStatus === 'paid' ? 'pill-green' : feeStatus === 'partial' ? 'pill-gold' : 'pill-red';
+        return '<tr>' +
+          '<td><strong style="cursor:pointer;color:var(--green);" onclick=\"openProfile('+r.id+')\">' + r.name + '</strong></td>' +
+          '<td>' + (r.attendance_pct !== null ? r.attendance_pct + '%' : '—') + '</td>' +
+          '<td>' + (r.avg_score !== null ? r.avg_score + '%' : '—') + '</td>' +
+          '<td>' + (r.hw_completion !== null ? r.hw_completion + '%' : '—') + '</td>' +
+          '<td><span class="pill ' + feePill + '">' + feeStatus + '</span></td>' +
+        '</tr>';
+      }).join('') + '</tbody></table>';
+  } catch(e) { body.innerHTML = '<div class="loading">Error loading class data: ' + e.message + '</div>'; }
+}
+
+function exportClassSummary() {
+  if (!classSummaryData.length) { showToast('Select a class first'); return; }
+  const csv = 'Student,Class,Attendance %,Average Score,HW Completion,Fee Status\n' +
+    classSummaryData.map(r => [r.name, r.class_name||'', r.attendance_pct??'', r.avg_score??'', r.hw_completion??'', r.fee_status||''].map(v => '"'+v+'"').join(',')).join('\n');
+  downloadCSV(csv, 'class_summary_export.csv');
+}
+
+// ── Init date for payment modal ───────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const d = document.getElementById('payment-date');
+  if (d) d.value = new Date().toISOString().slice(0,10);
+});
+
+
+// ── Attendance Trend Chart ────────────────────────────────
+async function loadAttendanceTrend() {
+  const chart = document.getElementById('attend-trend-chart');
+  const labels = document.getElementById('attend-trend-labels');
+  if (!chart) return;
+  try {
+    const rows = await api('/api/admin/attendance?from=' + new Date(Date.now() - 29*86400000).toISOString().slice(0,10));
+    const days = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(Date.now() - i*86400000);
+      days.push({ date: d.toISOString().slice(0,10), label: d.toLocaleDateString('en-NG',{day:'numeric',month:'short'}) });
+    }
+    const byDate = {};
+    (rows || []).forEach(r => {
+      if (!byDate[r.date]) byDate[r.date] = { present: 0, total: 0 };
+      byDate[r.date].total++;
+      if (r.status === 'present') byDate[r.date].present++;
+    });
+    const maxTotal = Math.max(...days.map(d => (byDate[d.date]?.total || 0)), 1);
+    chart.innerHTML = days.map(d => {
+      const data = byDate[d.date];
+      const pct = data ? Math.round((data.present/data.total)*100) : 0;
+      const height = data ? Math.max(4, Math.round((data.present/maxTotal)*56)) : 2;
+      const color = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--gold)' : 'var(--danger)';
+      return '<div class="trend-bar" style="height:' + height + 'px;background:' + color + ';" data-tip="' + d.label + ': ' + pct + '%"></div>';
+    }).join('');
+    labels.innerHTML = days.map((d, i) => '<div class="trend-label">' + (i % 5 === 0 ? d.label : '') + '</div>').join('');
+  } catch(e) {
+    if (chart) chart.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:10px;">No attendance data yet</div>';
+  }
+}
+
+// ── Top Performing Students (Leaderboard) ─────────────────
+async function loadLeaderboard() {
+  const el = document.getElementById('leaderboard-body');
+  if (!el) return;
+  try {
+    const students = await api('/api/admin/students/list');
+    const top = students.filter(s => s.weekly_performance_score > 0).sort((a, b) => (b.weekly_performance_score||0) - (a.weekly_performance_score||0)).slice(0, 7);
+    if (!top.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">No score data yet</div>'; return; }
+    const medals = ['gold', 'silver', 'bronze'];
+    el.innerHTML = top.map((s, i) =>
+      '<div class="leaderboard-item">' +
+      '<div class="leaderboard-rank ' + (medals[i]||'') + '">' + (i+1) + '</div>' +
+      '<div><div class="leaderboard-name" style="cursor:pointer;color:var(--green);" onclick=\"openProfile('+s.id+')\">' + s.name + '</div>' +
+      '<div class="leaderboard-class">' + (s.class_name||'') + '</div></div>' +
+      '<div class="leaderboard-score">' + (s.weekly_performance_score||0) + '%</div></div>'
+    ).join('');
+  } catch(e) { el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">Could not load</div>'; }
+}
+
+// ── At-Risk Students Banner ───────────────────────────────
+async function loadRiskBanner() {
+  try {
+    const rows = await api('/api/admin/students/list');
+    const atRisk = rows.filter(s => s.weekly_performance_score > 0 && s.weekly_performance_score < 40);
+    const banner = document.getElementById('risk-banner');
+    const list = document.getElementById('risk-banner-list');
+    if (!banner || !list) return;
+    if (!atRisk.length) { banner.classList.remove('show'); return; }
+    banner.classList.add('show');
+    list.innerHTML = atRisk.slice(0, 5).map(s =>
+      '<div class="risk-item"><span>⚠️ ' + s.name + ' (' + (s.class_name||'—') + ')</span>' +
+      '<span style="cursor:pointer;color:var(--green);text-decoration:underline;" onclick=\"openProfile('+s.id+')\">View profile</span></div>'
+    ).join('') + (atRisk.length > 5 ? '<div style="font-size:11px;margin-top:6px;color:#7f1d1d;">...and ' + (atRisk.length - 5) + ' more at-risk students</div>' : '');
+  } catch(e) {}
+}
+
+// ── Homework History ──────────────────────────────────────
+let allHomeworks = [];
+
+async function loadHomeworkHistory() {
+  const el = document.getElementById('homework-history-body');
+  if (!el) return;
+  try {
+    allHomeworks = await api('/api/admin/homeworks');
+    const classFilter = document.getElementById('hw-class-filter');
+    if (classFilter) {
+      const classes = [...new Set(allHomeworks.map(h => h.class_name).filter(Boolean))].sort();
+      classFilter.innerHTML = '<option value="">All classes</option>' + classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
+    }
+    renderHomeworkHistory(allHomeworks);
+  } catch(e) { if(el) el.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:13px;">No homework records yet</div>'; }
+}
+
+function renderHomeworkHistory(rows) {
+  const el = document.getElementById('homework-history-body');
+  if (!rows.length) { el.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:13px;">No homework records</div>'; return; }
+  el.innerHTML = '<table class="data-table"><thead><tr><th>Date</th><th>Class</th><th>Subject</th><th>Description</th><th>Due</th></tr></thead><tbody>' +
+    rows.slice(0, 30).map(h =>
+      '<tr><td>' + (h.created_at ? new Date(h.created_at).toLocaleDateString('en-NG') : '—') + '</td>' +
+      '<td><strong>' + (h.class_name||'—') + '</strong></td>' +
+      '<td>' + (h.subject||'—') + '</td>' +
+      '<td style="max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (h.description||'—') + '</td>' +
+      '<td>' + (h.due_date ? new Date(h.due_date).toLocaleDateString('en-NG') : '—') + '</td></tr>'
+    ).join('') + '</tbody></table>';
+}
+
+function filterHomeworkHistory() {
+  const cls = document.getElementById('hw-class-filter')?.value;
+  renderHomeworkHistory(cls ? allHomeworks.filter(h => h.class_name === cls) : allHomeworks);
+}
+
+// ── Score Bar Chart ───────────────────────────────────────
+function renderScoreChart(subjects) {
+  const entries = Object.entries(subjects);
+  if (!entries.length) return '<div style="color:var(--text-muted);font-size:13px;">No scores recorded</div>';
+  const sorted = entries.sort((a,b) => b[1].avg - a[1].avg);
+  return '<div class="chart-bar-wrap">' + sorted.map(([subj, data]) => {
+    const avg = data.avg;
+    const fillClass = avg >= 70 ? '' : avg >= 50 ? 'gold' : 'danger';
+    return '<div class="chart-bar-row">' +
+      '<div class="chart-bar-label" title="' + subj + '">' + subj + '</div>' +
+      '<div class="chart-bar-track"><div class="chart-bar-fill ' + fillClass + '" style="width:' + avg + '%;"></div></div>' +
+      '<div class="chart-bar-val">' + avg + '%</div></div>';
+  }).join('') + '</div>';
+}
+
+// ── Send Message to Parent ────────────────────────────────
+let _currentProfilePhone = '';
+let _currentProfileData = null;
+
+function openMsgModal() {
+  if (!_currentProfilePhone) { showToast('No parent phone on record ❌'); return; }
+  const nameEl = document.getElementById('profile-name');
+  document.getElementById('msg-modal-recipient').textContent = 'To: ' + (nameEl?.textContent || 'Parent') + "'s parent (" + _currentProfilePhone + ')';
+  document.getElementById('msg-content').value = '';
+  document.getElementById('msg-modal').classList.add('show');
+}
+
+function closeMsgModal() {
+  document.getElementById('msg-modal').classList.remove('show');
+}
+
+async function sendDirectMessage() {
+  const msg = document.getElementById('msg-content').value.trim();
+  if (!msg) { showToast('Type a message first ❌'); return; }
+  if (!_currentProfilePhone) { showToast('No parent phone ❌'); return; }
+  try {
+    await api('/api/admin/message/send', { method: 'POST', body: JSON.stringify({ to: _currentProfilePhone, message: msg }) });
+    showToast('✅ Message sent to parent!');
+    closeMsgModal();
+  } catch(e) { showToast('Failed to send message ❌'); }
+}
+
+// ── Print PDF Report Card ─────────────────────────────────
+function printReportCard() {
+  const data = _currentProfileData;
+  if (!data) { showToast('Open a student profile first ❌'); return; }
+  const s = data.student;
+  const fee = data.fees?.[0];
+  const subjects = {};
+  (data.scores||[]).forEach(sc => {
+    if (!subjects[sc.subject]) subjects[sc.subject] = [];
+    subjects[sc.subject].push(Number(sc.score));
+  });
+  const subjectRows = Object.entries(subjects).map(([subj, vals]) => {
+    const avg = Math.round(vals.reduce((a,b)=>a+b,0)/vals.length);
+    const grade = avg>=70?'A':avg>=60?'B':avg>=50?'C':avg>=40?'D':'F';
+    const gc = avg>=70?'a':avg>=60?'b':avg>=50?'c':'f';
+    const remark = avg>=70?'Excellent':avg>=60?'Good':avg>=50?'Average':avg>=40?'Below Average':'Needs Improvement';
+    return '<tr><td>' + subj + '</td><td>' + avg + '%</td><td class="grade ' + gc + '">' + grade + '</td><td>' + remark + '</td></tr>';
+  }).join('');
+
+  const schoolName = window._schoolName || document.querySelector('.topnav-name')?.textContent || 'EduPing School';
+  const win = window.open('', '_blank');
+  win.document.write('<!DOCTYPE html><html><head><title>Report Card - ' + s.name + '</title><style>' +
+    'body{font-family:Arial,sans-serif;margin:40px auto;max-width:700px;color:#111;}' +
+    '.header{text-align:center;border-bottom:3px solid #1a7a4a;padding-bottom:16px;margin-bottom:24px;}' +
+    '.school-name{font-size:22px;font-weight:700;color:#1a7a4a;}' +
+    '.report-title{font-size:14px;color:#667781;margin-top:4px;}' +
+    '.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;background:#f5f5f5;padding:16px;border-radius:8px;}' +
+    '.info-item label{font-size:10px;text-transform:uppercase;color:#667781;display:block;margin-bottom:2px;}' +
+    '.info-item span{font-weight:600;font-size:14px;}' +
+    '.stat-row{display:flex;gap:16px;margin-bottom:20px;}' +
+    '.stat{flex:1;text-align:center;background:#f5f5f5;border-radius:8px;padding:12px;}' +
+    '.stat-val{font-size:22px;font-weight:700;color:#1a7a4a;}' +
+    '.stat-lbl{font-size:11px;color:#667781;}' +
+    'table{width:100%;border-collapse:collapse;margin-bottom:20px;}' +
+    'th{background:#1a7a4a;color:white;padding:10px;text-align:left;font-size:13px;}' +
+    'td{padding:8px 10px;border-bottom:1px solid #e9edef;font-size:13px;}' +
+    'tr:nth-child(even){background:#f9fafb;}' +
+    '.grade{font-weight:700;}.grade.a{color:#1a7a4a;}.grade.b{color:#3b82f6;}.grade.c{color:#f59e0b;}.grade.f{color:#e53935;}' +
+    '.footer{text-align:center;font-size:11px;color:#667781;border-top:1px solid #e9edef;padding-top:16px;}' +
+    '</style></head><body>' +
+    '<div class="header"><div class="school-name">' + schoolName + '</div>' +
+    '<div class="report-title">Student Academic Report — ' + new Date().toLocaleDateString('en-NG',{year:'numeric',month:'long'}) + '</div></div>' +
+    '<div class="info-grid">' +
+    '<div class="info-item"><label>Student Name</label><span>' + s.name + '</span></div>' +
+    '<div class="info-item"><label>Class</label><span>' + (s.class_name||'—') + '</span></div>' +
+    '<div class="info-item"><label>Parent / Guardian</label><span>' + (s.parent_name||'—') + '</span></div>' +
+    '<div class="info-item"><label>Contact</label><span>' + (s.parent_phone||'—') + '</span></div></div>' +
+    '<div class="stat-row">' +
+    '<div class="stat"><div class="stat-val">' + (data.attendance_pct !== null ? data.attendance_pct + '%' : '—') + '</div><div class="stat-lbl">Attendance</div></div>' +
+    '<div class="stat"><div class="stat-val">' + (data.hw_completion !== null ? data.hw_completion + '%' : '—') + '</div><div class="stat-lbl">HW Completion</div></div>' +
+    '<div class="stat"><div class="stat-val">' + (fee ? fee.status : 'No record') + '</div><div class="stat-lbl">Fee Status</div></div></div>' +
+    '<table><thead><tr><th>Subject</th><th>Average Score</th><th>Grade</th><th>Remark</th></tr></thead><tbody>' + subjectRows + '</tbody></table>' +
+    '<div class="footer">Generated by EduPing • ' + new Date().toLocaleString('en-NG') + ' • eduping.org</div>' +
+    '<script>window.onload=()=>window.print();<\/script></body></html>');
+  win.document.close();
+}
+
+// ── Full Student Profile (replaces earlier version) ───────
+async function openProfile(studentId) {
+  document.getElementById('profile-panel').classList.add('open');
+  document.getElementById('profile-overlay').classList.add('show');
+  document.getElementById('profile-name').textContent = 'Loading...';
+  document.getElementById('profile-class').textContent = '';
+  document.getElementById('profile-body').innerHTML = '<div class="loading" style="padding:40px;">Loading profile...</div>';
+  try {
+    const data = await api('/api/admin/students/' + studentId + '/profile');
+    _currentProfileData = data;
+    const s = data.student;
+    _currentProfilePhone = s.parent_phone || '';
+    document.getElementById('profile-name').textContent = s.name;
+    document.getElementById('profile-class').textContent = (s.class_name||'') + ' — ' + (s.parent_name||'');
+    const fee = data.fees && data.fees.length ? data.fees[0] : null;
+    const feeStatus = fee ? fee.status : 'no record';
+    const feePill = feeStatus==='paid'?'pill-green':feeStatus==='partial'?'pill-gold':'pill-red';
+    const attDots = (data.attendance||[]).slice(0,10).map(a =>
+      '<div class="attend-dot ' + a.status + '" title="' + a.date + '">' + (a.status==='present'?'P':'A') + '</div>'
+    ).join('');
+    const subjects = {};
+    (data.scores||[]).forEach(sc => {
+      if (!subjects[sc.subject]) subjects[sc.subject] = { vals: [] };
+      subjects[sc.subject].vals.push(Number(sc.score));
+    });
+    Object.keys(subjects).forEach(k => {
+      const v = subjects[k].vals;
+      subjects[k].avg = Math.round(v.reduce((a,b)=>a+b,0)/v.length);
+    });
+    const risk = data.risk;
+    const riskColor = risk ? (risk.risk_level==='critical'?'#fee2e2':risk.risk_level==='high'?'#fef3c7':'#f0fdf4') : '';
+    const riskHtml = risk
+      ? '<div style="background:' + riskColor + ';border-radius:8px;padding:12px;font-size:13px;margin-top:8px;">' +
+        '<strong>Risk Level: ' + risk.risk_level.toUpperCase() + '</strong>' +
+        (risk.plan_text ? '<div style="margin-top:8px;font-size:12px;color:var(--text-muted);white-space:pre-wrap;">' + risk.plan_text.slice(0,300) + '...</div>' : '') + '</div>'
+      : '<div style="color:var(--text-muted);font-size:13px;">No risk assessment yet</div>';
+
+    document.getElementById('profile-body').innerHTML =
+      '<div class="profile-section"><div class="profile-section-title">Overview</div>' +
+      '<div class="profile-stat-row">' +
+      '<div class="profile-stat"><div class="profile-stat-val">' + (data.attendance_pct!==null?data.attendance_pct+'%':'—') + '</div><div class="profile-stat-label">Attendance</div></div>' +
+      '<div class="profile-stat"><div class="profile-stat-val">' + (data.hw_completion!==null?data.hw_completion+'%':'—') + '</div><div class="profile-stat-label">HW Completion</div></div>' +
+      '<div class="profile-stat"><div class="profile-stat-val"><span class="pill ' + feePill + '">' + feeStatus + '</span></div><div class="profile-stat-label">Fee Status</div></div>' +
+      '</div><div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Last 10 school days:</div>' +
+      '<div class="attend-mini">' + (attDots||'<div style="font-size:12px;color:var(--text-muted);">No data</div>') + '</div></div>' +
+      '<div class="profile-section"><div class="profile-section-title">Contact Info</div>' +
+      '<div style="font-size:13px;display:flex;flex-direction:column;gap:8px;">' +
+      '<div><strong>Parent:</strong> ' + (s.parent_name||'—') + '</div>' +
+      '<div style="display:flex;align-items:center;gap:8px;"><strong>Phone:</strong> <span>' + (s.parent_phone||'—') + '</span>' +
+      '<button class="action-btn" onclick="editParentPhone(\'s.id \')">Edit</button></div></div></div>' +
+      '<div class="profile-section"><div class="profile-section-title">Score History</div>' + renderScoreChart(subjects) + '</div>' +
+      '<div class="profile-section"><div class="profile-section-title">Fees</div>' +
+      (fee
+        ? '<div style="font-size:13px;display:flex;flex-direction:column;gap:6px;">' +
+          '<div><strong>Amount Due:</strong> ₦' + Number(fee.amount_due).toLocaleString() + '</div>' +
+          '<div><strong>Amount Paid:</strong> ₦' + Number(fee.amount_paid).toLocaleString() + '</div>' +
+          '<div><strong>Balance:</strong> ₦' + (Number(fee.amount_due)-Number(fee.amount_paid)).toLocaleString() + '</div>' +
+          '<button class="broadcast-btn" style="margin-top:8px;" onclick="openPaymentModal(\'s.id \',\'s.name \')">💳 Record Payment</button></div>'
+        : '<div style="font-size:13px;color:var(--text-muted);">No fee record. <button class="action-btn" onclick="openPaymentModal(\'s.id \',\'s.name \')">Add payment</button></div>') +
+      '</div>' +
+      '<div class="profile-section"><div class="profile-section-title">Risk & Intervention</div>' + riskHtml + '</div>';
+  } catch(e) {
+    document.getElementById('profile-body').innerHTML = '<div class="loading" style="padding:40px;">Could not load profile: ' + e.message + '</div>';
+  }
+}
+
+// ── Override loadDashboard to include new widgets ─────────
+async function loadDashboard() {
+  try {
+    const d = await api('/api/admin/dashboard');
+    document.getElementById('stat-conversations').textContent = d.conversations;
+    document.getElementById('stat-staff').textContent = d.staff;
+    document.getElementById('stat-fees').textContent = '₦' + Number(d.outstanding_fees || 0).toLocaleString();
+    document.getElementById('stat-admissions').textContent = d.new_admissions;
+    document.getElementById('admit-alert-sub').textContent = d.new_admissions + ' new inquiries pending';
+    renderSignins(d.signin);
+    loadRecentConvos();
+    loadAbsentees();
+    loadAttendanceTrend();
+    loadLeaderboard();
+    loadRiskBanner();
+    loadHomeworkHistory();
+    window._schoolName = d.school_name || document.querySelector('.topnav-name')?.textContent || 'EduPing School';
+    loadUpcomingEventsWidget();
+    // Update notification badge
+    api('/api/admin/absentees/today').then(rows => {
+      const badge = document.getElementById('notif-badge');
+      if (badge && rows.length > 0) { badge.textContent = rows.length; badge.style.display = 'inline'; }
+    }).catch(() => {});
+  } catch(e) { console.log('Dashboard error:', e); }
+}
+
+
+
+// ── EVENTS HUB ────────────────────────────────────────────
+let allEvents = [];
+let allGalleries = [];
+const eventTypeColors = { academic:'#e53935', social:'#1a7a4a', sports:'#f59e0b', holiday:'#3b82f6', exam:'#7c3aed' };
+const eventTypeEmoji = { academic:'📚', social:'🎉', sports:'⚽', holiday:'🏖', exam:'📝' };
+
+async function loadEvents() {
+  // Check if events are enabled for this school
+  try {
+    const school = await api('/api/admin/school');
+    const locked = document.getElementById('events-locked-banner');
+    const active = document.getElementById('events-active');
+    if (!school.events_enabled) {
+      if (locked) locked.style.display = 'block';
+      if (active) active.style.display = 'none';
+      return;
+    }
+    if (locked) locked.style.display = 'none';
+    if (active) active.style.display = 'block';
+  } catch(e) {}
+
+  try {
+    allEvents = await api('/api/admin/events');
+    allGalleries = await api('/api/admin/events/galleries');
+    renderEvents(allEvents.filter(e => new Date(e.date) >= new Date(new Date().toDateString())));
+    renderGalleries(allGalleries);
+    updateEventStats();
+  } catch(e) {
+    const el = document.getElementById('events-list');
+    if (el) el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:12px;">No events yet — add your first event above.</div>';
+  }
+}
+
+function updateEventStats() {
+  const today = new Date().toDateString();
+  const upcoming = allEvents.filter(e => new Date(e.date) >= new Date(today)).length;
+  const galleries = allGalleries.length;
+  const photos = allGalleries.reduce((a, g) => a + (g.photo_count || 0), 0);
+  const u = document.getElementById('evt-stat-upcoming');
+  const g = document.getElementById('evt-stat-galleries');
+  const p = document.getElementById('evt-stat-photos');
+  if (u) u.textContent = upcoming;
+  if (g) g.textContent = galleries;
+  if (p) p.textContent = photos;
+}
+
+function getCountdown(dateStr) {
+  const evtDate = new Date(dateStr);
+  const today = new Date(new Date().toDateString());
+  const diff = Math.round((evtDate - today) / 86400000);
+  if (diff === 0) return { label: 'TODAY', cls: 'today' };
+  if (diff < 0) return { label: Math.abs(diff) + 'd ago', cls: 'past' };
+  return { label: diff, cls: 'upcoming' };
+}
+
+function renderEvents(events) {
+  const el = document.getElementById('events-list');
+  if (!el) return;
+  if (!events.length) {
+    el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;">No events in this category</div>';
+    return;
+  }
+  el.innerHTML = events.sort((a,b) => new Date(a.date) - new Date(b.date)).map(e => {
+    const cd = getCountdown(e.date);
+    const color = eventTypeColors[e.type] || 'var(--green)';
+    const emoji = eventTypeEmoji[e.type] || '📅';
+    const dateStr = new Date(e.date).toLocaleDateString('en-NG', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    let cdHtml = '';
+    if (cd.cls === 'today') cdHtml = '<div class="event-countdown-today">TODAY</div>';
+    else if (cd.cls === 'past') cdHtml = '<div class="event-countdown-past">' + cd.label + '</div>';
+    else cdHtml = '<div class="event-countdown-days">' + cd.label + '</div><div class="event-countdown-label">days away</div>';
+
+    return '<div class="event-card event-type-' + e.type + '" style="border-left-color:' + color + ';">' +
+      '<div class="event-countdown">' + cdHtml + '</div>' +
+      '<div class="event-info">' +
+        '<div class="event-name">' + emoji + ' ' + e.name + '</div>' +
+        '<div class="event-meta">' +
+          '<span>📅 ' + dateStr + (e.time ? ' · ' + formatTime(e.time) : '') + '</span>' +
+        '</div>' +
+        (e.description ? '<div style="font-size:12px;color:var(--text-muted);margin-top:6px;">' + e.description + '</div>' : '') +
+        '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">' +
+          '<span class="event-type-pill" style="background:' + color + '20;color:' + color + ';">' + (e.type||'event') + '</span>' +
+          (e.notify_parents ? '<span class="event-type-pill" style="background:#e8f5e9;color:#1a7a4a;">📲 Parents notified</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="event-actions">' +
+        '<button class="action-btn" onclick="openEventGallery(\'' + e.id + '\',\'' + e.name.replace(/'/g,'') + '\')">📸 Gallery</button>' +
+        '<button class="action-btn" onclick="postLiveFeed(\'' + e.id + '\',\'' + e.name.replace(/'/g,'') + '\')">📡 Live Update</button>' +
+        '<button class="action-btn" onclick="notifyParentsEvent(\'' + e.id + '\')">📲 Notify</button>' +
+        '<button class="action-btn" style="color:var(--danger);border-color:var(--danger);" onclick="deleteEvent(\'' + e.id + '\')">Delete</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function filterEvents(filter, btn) {
+  document.querySelectorAll('.event-tab').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const today = new Date(new Date().toDateString());
+  let filtered;
+  if (filter === 'upcoming') filtered = allEvents.filter(e => new Date(e.date) >= today);
+  else if (filter === 'today') filtered = allEvents.filter(e => new Date(e.date).toDateString() === today.toDateString());
+  else if (filter === 'past') filtered = allEvents.filter(e => new Date(e.date) < today);
+  else filtered = allEvents;
+  renderEvents(filtered);
+}
+
+function formatTime(t) {
+  if (!t) return '';
+  const [h, m] = t.split(':');
+  const hr = parseInt(h);
+  return (hr > 12 ? hr - 12 : hr || 12) + ':' + m + ' ' + (hr >= 12 ? 'PM' : 'AM');
+}
+
+async function addEvent() {
+  const name = document.getElementById('evt-name').value.trim();
+  const date = document.getElementById('evt-date').value;
+  const time = document.getElementById('evt-time').value;
+  const type = document.getElementById('evt-type').value;
+  const description = document.getElementById('evt-desc').value.trim();
+  const notify_parents = document.getElementById('evt-notify').checked;
+  if (!name || !date) { showToast('Event name and date are required ❌'); return; }
+  try {
+    await api('/api/admin/events', { method: 'POST', body: JSON.stringify({ name, date, time, type, description, notify_parents }) });
+    showToast('✅ Event saved!');
+    document.getElementById('evt-name').value = '';
+    document.getElementById('evt-desc').value = '';
+    document.getElementById('evt-date').value = '';
+    loadEvents();
+    loadUpcomingEventsWidget();
+    // Update notification badge
+    api('/api/admin/absentees/today').then(rows => {
+      const badge = document.getElementById('notif-badge');
+      if (badge && rows.length > 0) { badge.textContent = rows.length; badge.style.display = 'inline'; }
+    }).catch(() => {});
+  } catch(e) { showToast('Failed to save event ❌'); }
+}
+
+async function deleteEvent(id) {
+  if (!confirm('Delete this event?')) return;
+  try {
+    await api('/api/admin/events/' + id, { method: 'DELETE' });
+    showToast('Event deleted');
+    loadEvents();
+    loadUpcomingEventsWidget();
+    // Update notification badge
+    api('/api/admin/absentees/today').then(rows => {
+      const badge = document.getElementById('notif-badge');
+      if (badge && rows.length > 0) { badge.textContent = rows.length; badge.style.display = 'inline'; }
+    }).catch(() => {});
+  } catch(e) { showToast('Failed to delete ❌'); }
+}
+
+async function notifyParentsEvent(eventId) {
+  try {
+    await api('/api/admin/events/' + eventId + '/notify', { method: 'POST' });
+    showToast('✅ Parents notified via WhatsApp!');
+  } catch(e) { showToast('Failed to notify ❌'); }
+}
+
+async function notifyAllParentsEvents() {
+  try {
+    await api('/api/admin/events/notify-all', { method: 'POST' });
+    showToast('✅ All upcoming events sent to parents!');
+  } catch(e) { showToast('Failed ❌'); }
+}
+
+// ── Live Feed ─────────────────────────────────────────────
+function postLiveFeed(eventId, eventName) {
+  const msg = prompt('Post a live update for ' + eventName + ':');
+  if (!msg) return;
+  api('/api/admin/events/' + eventId + '/feed', { method: 'POST', body: JSON.stringify({ message: msg }) })
+    .then(() => showToast('✅ Live update posted!'))
+    .catch(() => showToast('Failed to post ❌'));
+}
+
+// ── Photo Gallery ─────────────────────────────────────────
+let _galleryEventId = '';
+let _galleryEventName = '';
+
+function openEventGallery(eventId, eventName) {
+  _galleryEventId = eventId;
+  _galleryEventName = eventName;
+  // Scroll to galleries section and show upload for this event
+  document.getElementById('galleries-list').scrollIntoView({ behavior: 'smooth' });
+  showGalleryUploader(eventId, eventName);
+}
+
+function showGalleryUploader(eventId, eventName) {
+  const el = document.getElementById('galleries-list');
+  const uploaderId = 'uploader-' + eventId;
+  // Check if uploader already shown
+  if (document.getElementById(uploaderId)) return;
+  const uploaderHtml = '<div id="' + uploaderId + '" class="dash-card" style="margin-bottom:16px;">' +
+    '<div class="dash-card-header"><div class="dash-card-title">📸 Upload Photos — ' + eventName + '</div></div>' +
+    '<div class="dash-card-body" style="padding:16px 18px;">' +
+    '<div class="upload-zone" onclick="document.getElementById(\'photo-input-' + eventId + '\').click()" ' +
+    'ondragover="this.classList.add(\'dragover\');event.preventDefault()" ' +
+    'ondragleave="this.classList.remove(\'dragover\')" ' +
+    'ondrop="handlePhotoDrop(event,\'' + eventId + '\')">' +
+    '<div class="upload-zone-icon">📷</div>' +
+    '<div class="upload-zone-text">Click or drag photos here to upload<br><span style="font-size:11px;">JPG, PNG — multiple files supported</span></div>' +
+    '</div>' +
+    '<input type="file" id="photo-input-' + eventId + '" multiple accept="image/*" style="display:none;" onchange="uploadPhotos(this.files,\'' + eventId + '\')">' +
+    '<div id="upload-progress-' + eventId + '" style="margin-top:10px;"></div>' +
+    '</div></div>';
+  el.insertAdjacentHTML('afterbegin', uploaderHtml);
+}
+
+async function uploadPhotos(files, eventId) {
+  const progress = document.getElementById('upload-progress-' + eventId);
+  if (!files.length) return;
+  if (progress) progress.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Uploading ' + files.length + ' photo(s)...</div>';
+  let uploaded = 0;
+  for (const file of files) {
+    try {
+      const base64 = await fileToBase64(file);
+      await api('/api/admin/events/' + eventId + '/photos', {
+        method: 'POST',
+        body: JSON.stringify({ image_data: base64, filename: file.name, mime_type: file.type })
+      });
+      uploaded++;
+      if (progress) progress.innerHTML = '<div style="font-size:13px;color:var(--green);">✅ ' + uploaded + '/' + files.length + ' uploaded...</div>';
+    } catch(e) {
+      if (progress) progress.innerHTML = '<div style="font-size:13px;color:var(--danger);">❌ Failed to upload ' + file.name + '</div>';
+    }
+  }
+  if (progress) progress.innerHTML = '<div style="font-size:13px;color:var(--green);">✅ All ' + uploaded + ' photos uploaded!</div>';
+  showToast('✅ ' + uploaded + ' photos uploaded!');
+  loadEvents();
+  loadGalleries();
+}
+
+function handlePhotoDrop(event, eventId) {
+  event.preventDefault();
+  event.currentTarget.classList.remove('dragover');
+  uploadPhotos(event.dataTransfer.files, eventId);
+}
+
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const reader = new FileReader();
+    reader.onload = () => res(reader.result.split(',')[1]);
+    reader.onerror = rej;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function loadGalleries() {
+  try {
+    allGalleries = await api('/api/admin/events/galleries');
+    renderGalleries(allGalleries);
+  } catch(e) {}
+}
+
+function renderGalleries(galleries) {
+  const el = document.getElementById('galleries-list');
+  if (!el) return;
+  // Keep any uploaders that are showing
+  const uploaders = el.querySelectorAll('[id^="uploader-"]');
+  const uploaderHtml = Array.from(uploaders).map(u => u.outerHTML).join('');
+
+  if (!galleries.length) {
+    el.innerHTML = uploaderHtml + '<div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;">No photo galleries yet — click 📸 Gallery on an event to upload photos</div>';
+    return;
+  }
+
+  const galHtml = galleries.map(g => {
+    const shareUrl = window.location.origin + '/gallery/' + g.share_token;
+    return '<div class="dash-card" style="margin-bottom:16px;">' +
+      '<div class="dash-card-header">' +
+        '<div class="dash-card-title">📸 ' + g.event_name + ' <span style="font-weight:400;font-size:12px;color:var(--text-muted);">(' + (g.photo_count||0) + ' photos)</span></div>' +
+        '<div style="display:flex;gap:6px;">' +
+          '<button class="export-btn" onclick="copyGalleryLink(\'' + shareUrl + '\')">🔗 Copy Link</button>' +
+          '<button class="export-btn" onclick="blastGalleryLink(\'' + g.event_id + '\',\'' + shareUrl + '\')">📲 Send to Parents</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="dash-card-body" style="padding:12px 18px;">' +
+        '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;word-break:break-all;">🔗 ' + shareUrl + '</div>' +
+        '<div class="gallery-grid" id="gallery-' + g.event_id + '">' +
+          (g.photos || []).slice(0,8).map(p => '<img class="gallery-thumb" src="' + p.url + '" alt="' + g.event_name + '" onclick="window.open(\'' + p.url + '\',\'_blank\')">').join('') +
+          (g.photo_count > 8 ? '<div style="display:flex;align-items:center;justify-content:center;background:#f0f2f5;border-radius:8px;font-size:13px;color:var(--text-muted);aspect-ratio:1;">+' + (g.photo_count - 8) + ' more</div>' : '') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  el.innerHTML = uploaderHtml + galHtml;
+}
+
+function copyGalleryLink(url) {
+  navigator.clipboard.writeText(url).then(() => showToast('🔗 Gallery link copied!')).catch(() => {
+    prompt('Copy this link:', url);
+  });
+}
+
+async function blastGalleryLink(eventId, shareUrl) {
+  try {
+    await api('/api/admin/events/' + eventId + '/blast-gallery', { method: 'POST', body: JSON.stringify({ share_url: shareUrl }) });
+    showToast('✅ Gallery link sent to all parents via WhatsApp!');
+  } catch(e) { showToast('Failed to send ❌'); }
+}
+
+// ── Upcoming Events Widget (Overview) ─────────────────────
+async function loadUpcomingEventsWidget() {
+  const el = document.getElementById('upcoming-events-body');
+  if (!el) return;
+  try {
+    const events = await api('/api/admin/events');
+    const today = new Date(new Date().toDateString());
+    const upcoming = events.filter(e => new Date(e.date) >= today).sort((a,b) => new Date(a.date) - new Date(b.date)).slice(0, 3);
+    if (!upcoming.length) {
+      el.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;">No upcoming events. <span style="color:var(--green);cursor:pointer;" onclick="switchSection(\'events\', null)">Add one →</span></div>';
+      return;
+    }
+    el.innerHTML = upcoming.map(e => {
+      const cd = getCountdown(e.date);
+      const color = eventTypeColors[e.type] || 'var(--green)';
+      const emoji = eventTypeEmoji[e.type] || '📅';
+      const dateStr = new Date(e.date).toLocaleDateString('en-NG', { weekday:'short', day:'numeric', month:'short' });
+      return '<div style="display:flex;align-items:center;gap:14px;padding:10px 0;border-bottom:1px solid #f5f5f5;">' +
+        '<div style="min-width:48px;text-align:center;">' +
+          (cd.cls === 'today'
+            ? '<div style="font-size:11px;font-weight:700;color:white;background:var(--green);border-radius:6px;padding:3px 6px;">TODAY</div>'
+            : '<div style="font-size:22px;font-weight:800;color:' + color + ';">' + cd.label + '</div><div style="font-size:9px;color:var(--text-muted);">days</div>') +
+        '</div>' +
+        '<div style="flex:1;">' +
+          '<div style="font-weight:600;font-size:13px;">' + emoji + ' ' + e.name + '</div>' +
+          '<div style="font-size:11px;color:var(--text-muted);">' + dateStr + (e.time ? ' · ' + formatTime(e.time) : '') + '</div>' +
+        '</div>' +
+        '<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:' + color + '20;color:' + color + ';">' + (e.type||'event') + '</span>' +
+      '</div>';
+    }).join('');
+  } catch(e) {
+    const el2 = document.getElementById('upcoming-events-body');
+    if (el2) el2.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Events feature not yet active</div>';
+  }
+}
+
+
+
+// ══════════════════════════════════════════════════════════
+// TEACHER CHATS
+// ══════════════════════════════════════════════════════════
+let allTeacherChats = [];
+let activeTeacherPhone = '';
+
+async function loadTeacherChats() {
+  const listEl = document.getElementById('teacher-chat-list');
+  if (!listEl) return;
+  try {
+    const data = await api('/api/admin/chats?type=staff');
+    allTeacherChats = data || [];
+    renderTeacherChatList(allTeacherChats);
+  } catch(e) {
+    // fallback - try loading from messages with staff filter
+    listEl.innerHTML = '<div style="padding:16px;font-size:13px;color:var(--text-muted);">No teacher conversations yet</div>';
+  }
+}
+
+function renderTeacherChatList(chats) {
+  const listEl = document.getElementById('teacher-chat-list');
+  if (!chats.length) {
+    listEl.innerHTML = '<div style="padding:16px;font-size:13px;color:var(--text-muted);">No teacher conversations yet</div>';
+    return;
+  }
+  listEl.innerHTML = chats.map(c => {
+    const isActive = c.phone === activeTeacherPhone;
+    return '<div onclick="openTeacherChat(\'' + c.phone + '\',\'' + (c.name||'Teacher').replace(/'/g,'') + '\')" style="padding:14px 16px;cursor:pointer;border-bottom:1px solid #f5f5f5;background:' + (isActive ? 'var(--green-pale)' : 'white') + ';transition:background .15s;">' +
+      '<div style="font-weight:600;font-size:13px;margin-bottom:2px;">' + (c.name||c.phone) + '</div>' +
+      '<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (c.last_message||'—') + '</div>' +
+      '<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">' + (c.last_time ? new Date(c.last_time).toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit'}) : '') + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function openTeacherChat(phone, name) {
+  activeTeacherPhone = phone;
+  renderTeacherChatList(allTeacherChats);
+  const msgEl = document.getElementById('teacher-chat-messages');
+  msgEl.innerHTML = '<div class="loading" style="padding:20px;">Loading messages...</div>';
+  try {
+    const messages = await api('/api/admin/chats/' + encodeURIComponent(phone) + '/messages');
+    if (!messages.length) {
+      msgEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px;">No messages yet</div>';
+      return;
+    }
+    msgEl.innerHTML = messages.map(m => {
+      const isOutgoing = m.direction === 'outbound' || m.role === 'assistant';
+      return '<div style="display:flex;justify-content:' + (isOutgoing ? 'flex-end' : 'flex-start') + ';margin-bottom:8px;">' +
+        '<div style="max-width:75%;background:' + (isOutgoing ? 'var(--green-bubble)' : 'white') + ';border-radius:' + (isOutgoing ? '12px 0 12px 12px' : '0 12px 12px 12px') + ';padding:8px 12px;font-size:13px;box-shadow:0 1px 2px rgba(0,0,0,.08);">' +
+          '<div style="line-height:1.5;">' + (m.body||m.message||'') + '</div>' +
+          '<div style="font-size:10px;color:var(--text-muted);text-align:right;margin-top:3px;">' + (m.created_at ? new Date(m.created_at).toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit'}) : '') + '</div>' +
+        '</div></div>';
+    }).join('');
+    msgEl.scrollTop = msgEl.scrollHeight;
+  } catch(e) {
+    msgEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px;">Could not load messages</div>';
+  }
+}
+
+function filterTeacherChats() {
+  const q = (document.getElementById('teacher-chat-search')?.value || '').toLowerCase();
+  renderTeacherChatList(allTeacherChats.filter(c => (c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q)));
+}
+
+// ══════════════════════════════════════════════════════════
+// NOTIFICATIONS / ALERTS
+// ══════════════════════════════════════════════════════════
+let allNotifications = [];
+
+async function loadNotifications() {
+  try {
+    const [students, absentees, feesData, signinData] = await Promise.all([
+      api('/api/admin/students/list').catch(() => []),
+      api('/api/admin/absentees/today').catch(() => []),
+      api('/api/admin/fees/summary').catch(() => ({ students: [], totals: {} })),
+      api('/api/admin/signin-log?period=today').catch(() => [])
+    ]);
+
+    const atRisk = students.filter(s => s.weekly_performance_score > 0 && s.weekly_performance_score < 40);
+    const feeDefaulters = (feesData.students || []).filter(s => s.fee_status === 'unpaid' && s.amount_due > 0);
+
+    const u = document.getElementById('notif-stat-atrisk');
+    const a = document.getElementById('notif-stat-absent');
+    const f = document.getElementById('notif-stat-fees');
+    const si = document.getElementById('notif-stat-signin');
+    if (u) u.textContent = atRisk.length;
+    if (a) a.textContent = absentees.length;
+    if (f) f.textContent = feeDefaulters.length;
+    if (si) si.textContent = signinData.length;
+
+    // Build notification list
+    allNotifications = [];
+    atRisk.forEach(s => allNotifications.push({ type:'risk', icon:'⚠️', title: s.name + ' — At Risk', body: 'Performance score: ' + s.weekly_performance_score + '% · ' + (s.class_name||'—'), id: s.id, color:'#fee2e2' }));
+    absentees.forEach(s => allNotifications.push({ type:'absence', icon:'🔴', title: s.name + ' — Absent Today', body: 'Class: ' + (s.class_name||'—') + ' · Parent: ' + (s.parent_phone||'—'), color:'#fef3c7' }));
+    feeDefaulters.slice(0,20).forEach(s => allNotifications.push({ type:'fees', icon:'💰', title: s.name + ' — Fee Outstanding', body: 'Balance: ₦' + Number(s.balance||0).toLocaleString() + ' · Class: ' + (s.class_name||'—'), id: s.id, color:'#f0f9ff' }));
+
+    renderNotifications(allNotifications);
+  } catch(e) {
+    const el = document.getElementById('notif-list');
+    if (el) el.innerHTML = '<div style="padding:20px;color:var(--text-muted);font-size:13px;">Could not load alerts</div>';
+  }
+}
+
+function renderNotifications(notifs) {
+  const el = document.getElementById('notif-list');
+  if (!el) return;
+  if (!notifs.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--green);font-size:13px;">✅ No alerts right now — everything looks good!</div>';
+    return;
+  }
+  el.innerHTML = '<table class="data-table"><thead><tr><th>Alert</th><th>Details</th><th>Action</th></tr></thead><tbody>' +
+    notifs.map(n => '<tr style="background:' + n.color + '20;">' +
+      '<td><span style="font-size:16px;">' + n.icon + '</span> <strong>' + n.title + '</strong></td>' +
+      '<td style="font-size:12px;color:var(--text-muted);">' + n.body + '</td>' +
+      '<td>' + (n.id ? '<button class="action-btn" onclick="openProfile(\'' + n.id + '\')">View</button>' : '') + '</td>' +
+    '</tr>').join('') + '</tbody></table>';
+}
+
+function filterNotifs(type, btn) {
+  document.querySelectorAll('.date-filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const filtered = type === 'all' ? allNotifications : allNotifications.filter(n => n.type === type);
+  renderNotifications(filtered);
+}
+
+// ══════════════════════════════════════════════════════════
+// TERM CALENDAR
+// ══════════════════════════════════════════════════════════
+async function loadTermCalendar() {
+  try {
+    const school = await api('/api/admin/school');
+    if (school.current_term) {
+      const tn = document.getElementById('term-name');
+      if (tn) tn.value = school.current_term;
+    }
+    renderTermProgress(school);
+  } catch(e) {}
+}
+
+function renderTermProgress(school) {
+  const el = document.getElementById('term-progress-body');
+  if (!el) return;
+  const now = new Date();
+  const start = school.term_start ? new Date(school.term_start) : null;
+  const end = school.term_end ? new Date(school.term_end) : null;
+  let progressHtml = '';
+  if (start && end) {
+    const total = end - start;
+    const elapsed = now - start;
+    const pct = Math.max(0, Math.min(100, Math.round((elapsed/total)*100)));
+    const daysLeft = Math.max(0, Math.round((end - now) / 86400000));
+    progressHtml = '<div style="margin-bottom:16px;">' +
+      '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:6px;"><span>Term Progress</span><span>' + pct + '%</span></div>' +
+      '<div style="background:#e9edef;border-radius:20px;height:8px;overflow:hidden;"><div style="width:' + pct + '%;height:100%;background:var(--green);border-radius:20px;transition:width .6s;"></div></div>' +
+      '<div style="font-size:12px;color:var(--text-muted);margin-top:6px;">' + daysLeft + ' days remaining</div></div>';
+  }
+  el.innerHTML = progressHtml +
+    '<div style="font-size:13px;display:flex;flex-direction:column;gap:8px;">' +
+    '<div><strong>Current Term:</strong> ' + (school.current_term||'Not set') + '</div>' +
+    '<div><strong>Fee Deadline:</strong> ' + (school.fee_deadline||'Not set') + '</div>' +
+    '</div>';
+}
+
+async function saveTermDates() {
+  const termName = document.getElementById('term-name')?.value;
+  const termStart = document.getElementById('term-start')?.value;
+  const termEnd = document.getElementById('term-end')?.value;
+  const feeDeadline = document.getElementById('fee-deadline-date')?.value;
+  try {
+    await api('/api/admin/school/term', { method: 'POST', body: JSON.stringify({ current_term: termName, term_start: termStart, term_end: termEnd, fee_deadline: feeDeadline }) });
+    showToast('✅ Term dates saved!');
+    loadTermCalendar();
+  } catch(e) { showToast('Failed to save ❌'); }
+}
+
+function addExamSlot() {
+  const subject = prompt('Subject / Exam name:');
+  if (!subject) return;
+  const date = prompt('Date (YYYY-MM-DD):');
+  if (!date) return;
+  const time = prompt('Time (e.g. 09:00 AM):');
+  api('/api/admin/events', { method: 'POST', body: JSON.stringify({ name: subject + ' Exam', date, time, type: 'exam', description: subject + ' examination', notify_parents: true }) })
+    .then(() => { showToast('✅ Exam added!'); loadExamSchedule(); })
+    .catch(() => showToast('Failed ❌'));
+}
+
+async function loadExamSchedule() {
+  try {
+    const events = await api('/api/admin/events');
+    const exams = events.filter(e => e.type === 'exam').sort((a,b) => new Date(a.date)-new Date(b.date));
+    const el = document.getElementById('exam-schedule-body');
+    if (!el) return;
+    if (!exams.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No exams scheduled — click ➕ Add Exam to begin</div>'; return; }
+    el.innerHTML = '<table class="data-table"><thead><tr><th>Exam</th><th>Date</th><th>Time</th><th>Days Away</th></tr></thead><tbody>' +
+      exams.map(e => {
+        const diff = Math.round((new Date(e.date) - new Date(new Date().toDateString())) / 86400000);
+        const badge = diff === 0 ? '<span style="color:var(--green);font-weight:700;">TODAY</span>' : diff < 0 ? '<span style="color:var(--text-muted);">Done</span>' : diff + ' days';
+        return '<tr><td><strong>' + e.name + '</strong></td><td>' + new Date(e.date).toLocaleDateString('en-NG',{weekday:'short',day:'numeric',month:'short'}) + '</td><td>' + (e.time||'—') + '</td><td>' + badge + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  } catch(e) {}
+}
+
+// ══════════════════════════════════════════════════════════
+// PERFORMANCE RANKINGS
+// ══════════════════════════════════════════════════════════
+let performanceData = [];
+
+async function loadPerformanceRankings() {
+  try {
+    const students = await api('/api/admin/students/list');
+    performanceData = students;
+
+    // Class rankings
+    const byClass = {};
+    students.forEach(s => {
+      if (!s.class_name) return;
+      if (!byClass[s.class_name]) byClass[s.class_name] = { class_name: s.class_name, students: [], total: 0, count: 0 };
+      byClass[s.class_name].students.push(s);
+      if (s.weekly_performance_score > 0) { byClass[s.class_name].total += s.weekly_performance_score; byClass[s.class_name].count++; }
+    });
+    const classes = Object.values(byClass).map(c => ({ ...c, avg: c.count ? Math.round(c.total/c.count) : 0 })).sort((a,b) => b.avg - a.avg);
+
+    const rankEl = document.getElementById('class-rankings-body');
+    if (rankEl) {
+      rankEl.innerHTML = '<table class="data-table"><thead><tr><th>Rank</th><th>Class</th><th>Students</th><th>Avg Score</th><th>Performance</th></tr></thead><tbody>' +
+        classes.map((c, i) => {
+          const color = c.avg >= 70 ? 'var(--green)' : c.avg >= 50 ? 'var(--gold)' : 'var(--danger)';
+          const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1);
+          return '<tr><td style="font-size:18px;">' + medal + '</td><td><strong>' + c.class_name + '</strong></td><td>' + c.students.length + '</td>' +
+            '<td style="font-weight:700;color:' + color + ';">' + (c.avg||'—') + '%</td>' +
+            '<td style="width:160px;"><div style="background:#e9edef;border-radius:20px;height:8px;overflow:hidden;"><div style="width:' + (c.avg||0) + '%;height:100%;background:' + color + ';border-radius:20px;"></div></div></td></tr>';
+        }).join('') + '</tbody></table>';
+    }
+
+    // Top 10
+    const topEl = document.getElementById('top-students-body');
+    if (topEl) {
+      const top = students.filter(s => s.weekly_performance_score > 0).sort((a,b) => b.weekly_performance_score - a.weekly_performance_score).slice(0,10);
+      topEl.innerHTML = top.length ? '<table class="data-table"><thead><tr><th>#</th><th>Student</th><th>Class</th><th>Score</th></tr></thead><tbody>' +
+        top.map((s,i) => '<tr><td style="font-weight:700;color:var(--green);">' + (i+1) + '</td><td style="cursor:pointer;color:var(--green);" onclick="openProfile(\'' + s.id + '\')">' + s.name + '</td><td>' + (s.class_name||'—') + '</td><td><strong>' + s.weekly_performance_score + '%</strong></td></tr>').join('') +
+        '</tbody></table>' : '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No score data yet</div>';
+    }
+
+    // Bottom students
+    const botEl = document.getElementById('bottom-students-body');
+    if (botEl) {
+      const bottom = students.filter(s => s.weekly_performance_score > 0 && s.weekly_performance_score < 50).sort((a,b) => a.weekly_performance_score - b.weekly_performance_score).slice(0,10);
+      botEl.innerHTML = bottom.length ? '<table class="data-table"><thead><tr><th>Student</th><th>Class</th><th>Score</th><th>Action</th></tr></thead><tbody>' +
+        bottom.map(s => '<tr><td style="cursor:pointer;color:var(--green);" onclick="openProfile(\'' + s.id + '\')">' + s.name + '</td><td>' + (s.class_name||'—') + '</td><td style="color:var(--danger);font-weight:700;">' + s.weekly_performance_score + '%</td><td><button class="action-btn" onclick="openProfile(\'' + s.id + '\')">View</button></td></tr>').join('') +
+        '</tbody></table>' : '<div style="padding:20px;text-align:center;color:var(--green);font-size:13px;">✅ All students performing above 50%</div>';
+    }
+  } catch(e) { console.log('Rankings error:', e); }
+}
+
+function exportPerformance() {
+  if (!performanceData.length) { showToast('No data to export'); return; }
+  const csv = 'Student,Class,Performance Score\n' + performanceData.map(s => [s.name, s.class_name||'', s.weekly_performance_score||0].map(v => '"'+v+'"').join(',')).join('\n');
+  downloadCSV(csv, 'performance_rankings.csv');
+}
+
+// ══════════════════════════════════════════════════════════
+// STAFF MANAGEMENT — CSV IMPORT, PROFILE, DEACTIVATE
+// ══════════════════════════════════════════════════════════
+function switchStaffTab(tab, btn) {
+  document.querySelectorAll('#staff-add-body .date-filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('staff-tab-manual-content').style.display = tab === 'manual' ? 'block' : 'none';
+  document.getElementById('staff-tab-csv-content').style.display = tab === 'csv' ? 'block' : 'none';
+}
+
+function downloadStaffTemplate() {
+  const csv = 'Name,Role,Subject,Class,Phone,Email\nMrs Amaka Johnson,teacher,Mathematics,JSS2A,+2348011112233,amaka@school.com\nMr Peter Obi,subject_teacher,English,JSS1B,+2348022223333,';
+  downloadCSV(csv, 'staff_template.csv');
+  showToast('📥 Staff template downloaded!');
+}
+
+async function importStaffCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const resultEl = document.getElementById('staff-csv-result');
+  resultEl.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Reading file...</div>';
+  try {
+    const text = await file.text();
+    const lines = text.trim().split('\n');
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/[^a-z]/g,''));
+    const rows = lines.slice(1).filter(l => l.trim());
+    let added = 0, failed = 0;
+    for (const row of rows) {
+      const vals = row.split(',').map(v => v.trim().replace(/^"|"$/g,''));
+      const obj = {};
+      headers.forEach((h, i) => obj[h] = vals[i] || '');
+      if (!obj.name && !obj.fullname) { failed++; continue; }
+      try {
+        await api('/api/admin/staff', { method: 'POST', body: JSON.stringify({
+          name: obj.name || obj.fullname,
+          role: obj.role || 'teacher',
+          subject: obj.subject || '',
+          class: obj.class || obj.classname || '',
+          phone: obj.phone || obj.whatsapp || '',
+          email: obj.email || ''
+        })});
+        added++;
+      } catch(e) { failed++; }
+    }
+    resultEl.innerHTML = '<div style="background:var(--green-pale);border-radius:8px;padding:12px;font-size:13px;color:var(--green);">✅ ' + added + ' staff imported' + (failed ? ', ' + failed + ' failed' : '') + '</div>';
+    loadStaff();
+  } catch(e) { resultEl.innerHTML = '<div style="color:var(--danger);font-size:13px;">Failed to read file: ' + e.message + '</div>'; }
+}
+
+async function openStaffProfile(staffId) {
+  const modal = document.getElementById('staff-profile-modal');
+  if (!modal) return;
+  modal.classList.add('show');
+  document.getElementById('staff-modal-name').textContent = 'Loading...';
+  document.getElementById('staff-modal-role').textContent = '';
+  document.getElementById('staff-modal-body').innerHTML = '<div class="loading">Loading...</div>';
+  try {
+    const staff = (window._lastStaffRows || []).find(s => s.id === staffId);
+    if (!staff) { modal.classList.remove('show'); return; }
+    const initials = staff.name.split(' ').slice(-1)[0]?.[0] + (staff.name.split(' ')[0]?.[0] || '');
+    document.getElementById('staff-modal-avatar').textContent = initials.toUpperCase();
+    document.getElementById('staff-modal-name').textContent = staff.name;
+    document.getElementById('staff-modal-role').textContent = (staff.role||'Staff') + (staff.class ? ' · ' + staff.class : '') + (staff.subject ? ' · ' + staff.subject : '');
+    document.getElementById('staff-modal-body').innerHTML =
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;margin-bottom:16px;">' +
+      '<div><strong>Phone:</strong> ' + (staff.phone||'—') + '</div>' +
+      '<div><strong>Class:</strong> ' + (staff.class||'—') + '</div>' +
+      '<div><strong>Subject:</strong> ' + (staff.subject||'—') + '</div>' +
+      '<div><strong>Status:</strong> <span class="pill ' + (staff.status==='active'?'pill-green':'pill-red') + '">' + (staff.status||'active') + '</span></div>' +
+      '<div><strong>Attendance submissions:</strong> ' + (staff.attendance_submissions||0) + '</div>' +
+      '<div><strong>Homeworks assigned:</strong> ' + (staff.homework_assigned||0) + '</div>' +
+      '<div><strong>Scores uploaded:</strong> ' + (staff.scores_uploaded||0) + '</div>' +
+      '<div><strong>Staff of Week:</strong> ' + (staff.staff_of_week_count||0) + 'x</div>' +
+      '</div>';
+    document.getElementById('staff-modal-msg-btn').onclick = () => {
+      if (staff.phone) window.open('https://wa.me/' + staff.phone.replace(/\D/g,''), '_blank');
+      else showToast('No phone number on record');
+    };
+    document.getElementById('staff-modal-edit-btn').onclick = () => editStaffDetails(staff);
+    document.getElementById('staff-modal-deactivate-btn').onclick = () => deactivateStaff(staffId, staff.name);
+  } catch(e) { document.getElementById('staff-modal-body').innerHTML = '<div style="color:var(--danger);">Could not load profile</div>'; }
+}
+
+function closeStaffModal() {
+  document.getElementById('staff-profile-modal')?.classList.remove('show');
+}
+
+async function editStaffDetails(staff) {
+  const phone = prompt('Update WhatsApp number:', staff.phone || '');
+  if (phone === null) return;
+  const cls = prompt('Update class:', staff.class || '');
+  if (cls === null) return;
+  try {
+    await api('/api/admin/staff/' + staff.id, { method: 'PATCH', body: JSON.stringify({ phone, class: cls }) });
+    showToast('✅ Staff details updated');
+    closeStaffModal();
+    loadStaff();
+  } catch(e) { showToast('Failed to update ❌'); }
+}
+
+async function deactivateStaff(staffId, name) {
+  if (!confirm('Deactivate ' + name + '? They will lose WhatsApp access but records will be kept.')) return;
+  try {
+    await api('/api/admin/staff/' + staffId, { method: 'PATCH', body: JSON.stringify({ status: 'inactive' }) });
+    showToast('✅ ' + name + ' deactivated');
+    closeStaffModal();
+    loadStaff();
+  } catch(e) { showToast('Failed ❌'); }
+}
+
+
+
+// ══════════════════════════════════════════════════════════
+// BROADCAST COMPOSER UPGRADES
+// ══════════════════════════════════════════════════════════
+
+// Extended templates
+const broadcastTemplates = {
+  fee: '💰 *Fee Payment Reminder*\n\nDear Parent,\n\nThis is a reminder that school fees for the current term are due. Kindly ensure payment is made as soon as possible to avoid disruption to your child\'s education.\n\nThank you for your continued support.\n\n🏫 {school_name}',
+  event: '📅 *Upcoming School Event*\n\nDear Parent,\n\nWe would like to remind you of an upcoming school event. Please make arrangements to attend or ensure your child is prepared.\n\nThank you.\n\n🏫 {school_name}',
+  exam: '📝 *Examination Notice*\n\nDear Parent,\n\nExaminations are approaching. Please ensure your child is revising adequately and has all required materials.\n\nWe wish all our students success.\n\n🏫 {school_name}',
+  award: '🏆 *Student of the Week*\n\nWe are proud to celebrate outstanding performance this week. Congratulations to our exceptional students!\n\nKeep up the excellent work!\n\n🏫 {school_name}',
+  pta: '👨‍👩‍👧 *PTA Meeting Reminder*\n\nDear Parent,\n\nThis is a reminder that our Parent-Teacher Association meeting is coming up soon. Your presence is important and greatly valued.\n\nPlease make every effort to attend.\n\n🏫 {school_name}',
+  result: '📊 *Results Available*\n\nDear Parent,\n\nYour child\'s results are now available. You can ask EduPing for a detailed breakdown by sending a message to this number.\n\nThank you for your partnership.\n\n🏫 {school_name}',
+  holiday: '🏖 *Holiday Notice*\n\nDear Parent,\n\nPlease be informed that school will be on holiday. We wish all our students and families a restful break.\n\nSee you when we return!\n\n🏫 {school_name}',
+  reopening: '🏫 *Resumption Reminder*\n\nDear Parent,\n\nSchool resumes soon. Please ensure your child is prepared with all required books, uniforms and materials.\n\nWe look forward to welcoming everyone back!\n\n🏫 {school_name}',
+};
+
+function useTemplate(type) {
+  const schoolName = window._schoolName || 'EduPing School';
+  const msg = (broadcastTemplates[type] || '').replace('{school_name}', schoolName);
+  const el = document.getElementById('broadcast-msg');
+  if (el) { el.value = msg; updateCharCount(); }
+}
+
+function updateCharCount() {
+  const el = document.getElementById('broadcast-msg');
+  const cc = document.getElementById('broadcast-char-count');
+  if (el && cc) cc.textContent = el.value.length + ' chars';
+}
+
+async function updateBroadcastCount() {
+  const target = document.getElementById('broadcast-target')?.value;
+  const countEl = document.getElementById('broadcast-preview-count');
+  const classGroup = document.getElementById('broadcast-class-group');
+  if (classGroup) classGroup.style.display = target === 'class' ? 'block' : 'none';
+
+  // Load classes into select if needed
+  if (target === 'class') {
+    try {
+      const classes = await api('/api/admin/classes');
+      const sel = document.getElementById('broadcast-class');
+      if (sel) sel.innerHTML = classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
+    } catch(e) {}
+  }
+
+  try {
+    let count = 0;
+    if (target === 'all_parents') {
+      const s = await api('/api/admin/students/list');
+      count = new Set(s.filter(x => x.parent_phone).map(x => x.parent_phone)).size;
+    } else if (target === 'staff') {
+      const s = await api('/api/admin/staff');
+      count = s.filter(x => x.phone).length;
+    } else if (target === 'fee_defaulters') {
+      const f = await api('/api/admin/fees/summary');
+      count = (f.students||[]).filter(s => s.fee_status === 'unpaid').length;
+    } else if (target === 'absent_today') {
+      const a = await api('/api/admin/absentees/today');
+      count = a.length;
+    }
+    if (countEl && count > 0) countEl.textContent = count + ' recipients';
+  } catch(e) {}
+}
+
+function previewBroadcast() {
+  const msg = document.getElementById('broadcast-msg')?.value;
+  const target = document.getElementById('broadcast-target')?.value;
+  if (!msg) { showToast('Type a message first'); return; }
+  alert('Preview:\n\nTo: ' + target + '\n\n' + msg);
+}
+
+// Override sendBroadcast to support new targets
+const _origSendBroadcast = typeof sendBroadcast === 'function' ? sendBroadcast : null;
+async function sendBroadcast() {
+  const msg = document.getElementById('broadcast-msg')?.value?.trim();
+  const target = document.getElementById('broadcast-target')?.value;
+  const cls = document.getElementById('broadcast-class')?.value;
+  if (!msg) { showToast('Type a message first ❌'); return; }
+  const sending = document.getElementById('broadcast-sending');
+  if (sending) sending.style.display = 'block';
+  try {
+    let endpoint = '/api/admin/broadcast';
+    const body = { message: msg, target, class_name: cls || undefined };
+    await api(endpoint, { method: 'POST', body: JSON.stringify(body) });
+    showToast('✅ Broadcast sent!');
+    document.getElementById('broadcast-msg').value = '';
+    updateCharCount();
+  } catch(e) { showToast('Failed to send broadcast ❌'); }
+  if (sending) sending.style.display = 'none';
+}
+
+// ── Progress Report Generator ──────────────────────────
+async function loadReportStudents() {
+  const cls = document.getElementById('report-class')?.value;
+  const sel = document.getElementById('report-student');
+  if (!sel) return;
+  try {
+    const students = await api('/api/admin/students/list' + (cls ? '?class_name=' + encodeURIComponent(cls) : ''));
+    sel.innerHTML = '<option value="">All students in class</option>' + students.map(s => '<option value="' + s.id + '">' + s.name + ' (' + (s.class_name||'—') + ')</option>').join('');
+  } catch(e) {}
+}
+
+async function generateProgressReport() {
+  const cls = document.getElementById('report-class')?.value;
+  const studentId = document.getElementById('report-student')?.value;
+  const resultEl = document.getElementById('report-result');
+  if (!resultEl) return;
+
+  if (studentId) {
+    // Single student report
+    resultEl.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Generating report...</div>';
+    try {
+      await openProfile(studentId);
+      setTimeout(() => {
+        printReportCard();
+        resultEl.innerHTML = '<div style="background:var(--green-pale);border-radius:8px;padding:12px;font-size:13px;color:var(--green);">✅ Report card opened for printing. You can also send it via WhatsApp from the student profile.</div>';
+      }, 1000);
+    } catch(e) { resultEl.innerHTML = '<div style="color:var(--danger);font-size:13px;">Could not generate report</div>'; }
+  } else {
+    // All students in class - send reports via WhatsApp
+    if (!cls) { showToast('Select a class first'); return; }
+    resultEl.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Sending progress reports to all parents in ' + cls + '...</div>';
+    try {
+      const res = await api('/api/admin/broadcast/progress-reports', { method: 'POST', body: JSON.stringify({ class_name: cls }) });
+      resultEl.innerHTML = '<div style="background:var(--green-pale);border-radius:8px;padding:12px;font-size:13px;color:var(--green);">✅ Progress reports sent to ' + (res.sent||0) + ' parents via WhatsApp!</div>';
+    } catch(e) { resultEl.innerHTML = '<div style="color:var(--danger);font-size:13px;">Failed to send reports: ' + e.message + '</div>'; }
+  }
+}
+
+// Load class options for report generator and broadcast when broadcast section opens
+const _origLoadBroadcast = typeof loadBroadcast === 'function' ? loadBroadcast : async () => {};
+async function loadBroadcast() {
+  try {
+    const classes = await api('/api/admin/classes');
+    const reportClass = document.getElementById('report-class');
+    if (reportClass) reportClass.innerHTML = '<option value="">All classes</option>' + classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
+  } catch(e) {}
+  updateBroadcastCount();
+}
+
+
+// ── Password Toggle ───────────────────────────────────────
+function togglePassword() {
+  const input = document.getElementById('login-password');
+  const btn = document.getElementById('pass-toggle');
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.textContent = '🙈';
+  } else {
+    input.type = 'password';
+    btn.textContent = '👁';
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════
+// RESULTS PORTAL
+// ══════════════════════════════════════════════════════════
+let resultStudents = [];
+let allPINLogs = [];
+
+async function loadResults() {
+  // Load classes
+  try {
+    const classes = await api('/api/admin/classes');
+    const sel = document.getElementById('res-class-select');
+    if (sel) sel.innerHTML = '<option value="">Select class...</option>' + classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
+  } catch(e) {}
+  // Load stats
+  try {
+    const stats = await api('/api/admin/results/stats');
+    const u = document.getElementById('res-stat-uploaded');
+    const p = document.getElementById('res-stat-pins');
+    const a = document.getElementById('res-stat-accessed');
+    const pe = document.getElementById('res-stat-pending');
+    if (u) u.textContent = stats.uploaded || 0;
+    if (p) p.textContent = stats.pins || 0;
+    if (a) a.textContent = stats.accessed || 0;
+    if (pe) pe.textContent = stats.fee_pending || 0;
+  } catch(e) {}
+  loadPINLog();
+}
+
+function updateResultModel() {
+  const model = document.getElementById('res-access-model')?.value;
+  const priceGroup = document.getElementById('res-price-group');
+  const bundledInfo = document.getElementById('res-bundled-info');
+  if (priceGroup) priceGroup.style.display = model === 'paid' ? 'block' : 'none';
+  if (bundledInfo) {
+    if (model === 'bundled') {
+      bundledInfo.style.display = 'block';
+      bundledInfo.style.background = 'var(--green-pale)';
+      bundledInfo.style.color = 'var(--green)';
+      bundledInfo.innerHTML = '✅ <strong>Bundled model:</strong> Parents who have paid complete school fees will automatically receive their child\'s result PIN when you release results. Parents with outstanding fees will receive a payment reminder instead.';
+    } else if (model === 'free') {
+      bundledInfo.style.display = 'block';
+      bundledInfo.style.background = '#f0f9ff';
+      bundledInfo.style.color = '#0055cc';
+      bundledInfo.innerHTML = '📢 <strong>Free access:</strong> All parents will receive their child\'s result PIN regardless of fee payment status.';
+    } else {
+      bundledInfo.style.display = 'none';
+    }
+  }
+}
+
+async function loadResultStudents() {
+  const cls = document.getElementById('res-class-select')?.value;
+  const el = document.getElementById('res-student-table');
+  if (!cls || !el) return;
+  el.innerHTML = '<div class="loading" style="padding:20px;">Loading students...</div>';
+  try {
+    const students = await api('/api/admin/students/list?class_name=' + encodeURIComponent(cls));
+    resultStudents = students;
+    renderResultTable(students);
+  } catch(e) { el.innerHTML = '<div style="padding:20px;color:var(--danger);">Error loading students</div>'; }
+}
+
+function renderResultTable(students) {
+  const el = document.getElementById('res-student-table');
+  if (!students.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">No students in this class</div>'; return; }
+  el.innerHTML = '<table class="data-table"><thead><tr>' +
+    '<th>Student</th><th>Maths</th><th>English</th><th>Science</th><th>Other Subjects</th><th>Position</th><th>Remarks</th><th>Fee Status</th><th>Result Status</th>' +
+    '</tr></thead><tbody>' +
+    students.map(s => {
+      const feeOk = s.fee_status === 'paid';
+      const feePill = feeOk ? 'pill-green' : 'pill-red';
+      return '<tr id="res-row-' + s.id + '">' +
+        '<td><strong>' + s.name + '</strong></td>' +
+        '<td><input type="number" min="0" max="100" class="form-input" style="width:60px;padding:4px 6px;font-size:12px;" id="res-maths-' + s.id + '" placeholder="—"></td>' +
+        '<td><input type="number" min="0" max="100" class="form-input" style="width:60px;padding:4px 6px;font-size:12px;" id="res-english-' + s.id + '" placeholder="—"></td>' +
+        '<td><input type="number" min="0" max="100" class="form-input" style="width:60px;padding:4px 6px;font-size:12px;" id="res-science-' + s.id + '" placeholder="—"></td>' +
+        '<td><button class="action-btn" style="font-size:11px;" onclick="openSubjectModal(\'' + s.id + '\',\'' + s.name.replace(/'/g,'') + '\')">+ More subjects</button></td>' +
+        '<td><input type="number" min="1" class="form-input" style="width:50px;padding:4px 6px;font-size:12px;" id="res-position-' + s.id + '" placeholder="—"></td>' +
+        '<td><input type="text" class="form-input" style="width:120px;padding:4px 6px;font-size:12px;" id="res-remark-' + s.id + '" placeholder="Good effort"></td>' +
+        '<td><span class="pill ' + feePill + '">' + (s.fee_status||'unpaid') + '</span></td>' +
+        '<td id="res-status-' + s.id + '"><span class="pill pill-gray">Pending</span></td>' +
+      '</tr>';
+    }).join('') +
+    '</tbody></table>' +
+    '<div style="padding:12px 16px;display:flex;gap:10px;align-items:center;">' +
+    '<button class="broadcast-btn" onclick="saveClassResults()" style="max-width:180px;">💾 Save Results</button>' +
+    '<span style="font-size:12px;color:var(--text-muted);">Save before releasing</span>' +
+    '</div>';
+}
+
+async function saveClassResults() {
+  const cls = document.getElementById('res-class-select')?.value;
+  if (!cls) { showToast('Select a class first'); return; }
+  let saved = 0;
+  for (const s of resultStudents) {
+    const maths = document.getElementById('res-maths-' + s.id)?.value;
+    const english = document.getElementById('res-english-' + s.id)?.value;
+    const science = document.getElementById('res-science-' + s.id)?.value;
+    const position = document.getElementById('res-position-' + s.id)?.value;
+    const remark = document.getElementById('res-remark-' + s.id)?.value;
+    if (!maths && !english && !science) continue;
+    try {
+      await api('/api/admin/results', {
+        method: 'POST',
+        body: JSON.stringify({
+          student_id: s.id, class_name: cls,
+          term: document.getElementById('res-term')?.value || 'Current Term',
+          subjects: { Mathematics: maths, English: english, Science: science },
+          position, remark
+        })
+      });
+      const statusEl = document.getElementById('res-status-' + s.id);
+      if (statusEl) statusEl.innerHTML = '<span class="pill pill-green">Saved</span>';
+      saved++;
+    } catch(e) { console.warn('Failed to save result for', s.name); }
+  }
+  showToast('✅ ' + saved + ' results saved!');
+  loadResults();
+}
+
+async function releaseResults() {
+  const model = document.getElementById('res-access-model')?.value || 'bundled';
+  const term = document.getElementById('res-term')?.value;
+  const printLimit = document.getElementById('res-print-limit')?.value || '3';
+  const expiryDays = document.getElementById('res-expiry')?.value || '30';
+  const price = document.getElementById('res-price')?.value || '0';
+  if (!term) { showToast('Enter the term name first ❌'); return; }
+  if (!confirm('Release results to all parents now? Parents with paid fees will receive their PIN immediately.')) return;
+  try {
+    const res = await api('/api/admin/results/release', {
+      method: 'POST',
+      body: JSON.stringify({ model, term, print_limit: Number(printLimit), expiry_days: Number(expiryDays), price: Number(price) })
+    });
+    showToast('✅ Results released! ' + (res.sent||0) + ' PINs sent, ' + (res.pending||0) + ' parents reminded about fees.');
+    loadResults();
+    loadPINLog();
+  } catch(e) { showToast('Failed to release results ❌'); }
+}
+
+async function releaseResultsClass() {
+  const cls = document.getElementById('res-class-select')?.value;
+  if (!cls) { showToast('Select a class first'); return; }
+  const model = document.getElementById('res-access-model')?.value || 'bundled';
+  const term = document.getElementById('res-term')?.value || 'Current Term';
+  const printLimit = document.getElementById('res-print-limit')?.value || '3';
+  const expiryDays = document.getElementById('res-expiry')?.value || '30';
+  if (!confirm('Release results for ' + cls + ' only?')) return;
+  try {
+    const res = await api('/api/admin/results/release', {
+      method: 'POST',
+      body: JSON.stringify({ model, term, class_name: cls, print_limit: Number(printLimit), expiry_days: Number(expiryDays) })
+    });
+    showToast('✅ ' + cls + ' results released! ' + (res.sent||0) + ' PINs sent.');
+    loadResults();
+  } catch(e) { showToast('Failed ❌'); }
+}
+
+function previewResultMessage() {
+  const model = document.getElementById('res-access-model')?.value || 'bundled';
+  const schoolName = window._schoolName || 'Your School';
+  if (model === 'bundled') {
+    alert('WhatsApp message to PAID parents:\n\n📄 Result Ready — ' + schoolName + '\n\nDear Parent, your child\'s Third Term result is now available.\n\nYour result PIN: EPG-4821-7390\n\nView your child\'s result here:\neduping.org/results\n\nPIN valid for 30 days · 3 prints allowed\n' + schoolName + ' 🏫\n\n---\n\nMessage to UNPAID parents:\n\n⏳ Result Pending — ' + schoolName + '\n\nDear Parent, your child\'s result is ready but requires outstanding school fees to be cleared.\n\nKindly visit the school or contact the bursar to complete payment.\n\n' + schoolName + ' 🏫');
+  } else {
+    alert('Message preview for free/pay model — results sent to all parents with their PIN.');
+  }
+}
+
+async function loadPINLog() {
+  const el = document.getElementById('pin-log-body');
+  if (!el) return;
+  try {
+    allPINLogs = await api('/api/admin/results/pins');
+    renderPINLog(allPINLogs);
+  } catch(e) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No PINs generated yet</div>'; }
+}
+
+function renderPINLog(logs) {
+  const el = document.getElementById('pin-log-body');
+  if (!logs.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No PINs generated yet</div>'; return; }
+  el.innerHTML = '<table class="data-table"><thead><tr><th>Student</th><th>Class</th><th>PIN</th><th>Term</th><th>Sent</th><th>Prints Used</th><th>Expires</th><th>Status</th></tr></thead><tbody>' +
+    logs.map(p => {
+      const expired = p.expires_at && new Date(p.expires_at) < new Date();
+      const pill = p.accessed ? 'pill-green' : expired ? 'pill-red' : 'pill-gold';
+      const label = p.accessed ? 'Accessed' : expired ? 'Expired' : 'Sent';
+      return '<tr>' +
+        '<td><strong>' + (p.student_name||'—') + '</strong></td>' +
+        '<td>' + (p.class_name||'—') + '</td>' +
+        '<td style="font-family:monospace;letter-spacing:1px;font-weight:600;">' + (p.pin||'—') + '</td>' +
+        '<td>' + (p.term||'—') + '</td>' +
+        '<td>' + (p.sent_at ? new Date(p.sent_at).toLocaleDateString('en-NG') : '—') + '</td>' +
+        '<td>' + (p.print_count||0) + ' / ' + (p.print_limit||3) + '</td>' +
+        '<td>' + (p.expires_at ? new Date(p.expires_at).toLocaleDateString('en-NG') : '—') + '</td>' +
+        '<td><span class="pill ' + pill + '">' + label + '</span></td>' +
+      '</tr>';
+    }).join('') + '</tbody></table>';
+}
+
+function filterPINLog() {
+  const q = (document.getElementById('pin-search')?.value || '').toLowerCase();
+  renderPINLog(allPINLogs.filter(p => (p.student_name||'').toLowerCase().includes(q) || (p.class_name||'').toLowerCase().includes(q)));
+}
+
+function exportPINLog() {
+  if (!allPINLogs.length) { showToast('No PIN data to export'); return; }
+  const csv = 'Student,Class,PIN,Term,Sent Date,Prints Used,Expires,Status\n' +
+    allPINLogs.map(p => [p.student_name||'', p.class_name||'', p.pin||'', p.term||'', p.sent_at||'', p.print_count||0, p.expires_at||'', p.accessed?'Accessed':'Pending'].map(v => '"'+v+'"').join(',')).join('\n');
+  downloadCSV(csv, 'result_pins.csv');
+}
+
+function downloadResultTemplate() {
+  const csv = 'Student Name,Student ID,Mathematics,English Language,Basic Science,Social Studies,Agricultural Science,Position,Class Teacher Remark\nAmara Okafor,,,87,79,91,75,82,2,Excellent performance this term\n';
+  downloadCSV(csv, 'result_upload_template.csv');
+  showToast('📥 Template downloaded!');
+}
+
+async function importResultCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const cls = document.getElementById('res-class-select')?.value;
+  if (!cls) { showToast('Select a class first ❌'); return; }
+  const term = document.getElementById('res-term')?.value || 'Current Term';
+  const text = await file.text();
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,'').toLowerCase());
+  let saved = 0;
+  for (const line of lines.slice(1)) {
+    if (!line.trim()) continue;
+    const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g,''));
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = vals[i] || '');
+    const name = obj['student name'] || obj['name'] || obj['student'];
+    if (!name) continue;
+    const student = resultStudents.find(s => s.name.toLowerCase().includes(name.toLowerCase()));
+    if (!student) continue;
+    const subjects = {};
+    ['mathematics','english language','basic science','social studies','agricultural science'].forEach(sub => {
+      const key = headers.find(h => h.includes(sub.split(' ')[0]));
+      if (key && obj[key]) subjects[sub.charAt(0).toUpperCase() + sub.slice(1)] = obj[key];
+    });
+    try {
+      await api('/api/admin/results', { method: 'POST', body: JSON.stringify({ student_id: student.id, class_name: cls, term, subjects, position: obj['position'], remark: obj['class teacher remark'] || obj['remark'] }) });
+      saved++;
+    } catch(e) {}
+  }
+  showToast('✅ ' + saved + ' results imported!');
+  loadResults();
+}
+
 
 // ── Toast ─────────────────────────────────────────────────
 function showToast(msg) {
