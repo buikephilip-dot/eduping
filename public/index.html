@@ -458,6 +458,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         <button class="subnav-btn" onclick="switchSection('notifications',this)">🔔 Alerts <span id="notif-badge" style="display:none;background:var(--danger);color:white;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></button>
         <button class="subnav-btn" onclick="switchSection('termcal',this)">📅 Term Calendar</button>
         <button class="subnav-btn" onclick="switchSection('performance',this)">🏅 Rankings</button>
+        <button class="subnav-btn" onclick="switchSection('results',this)">📄 Results</button>
       </div>
 
       <!-- OVERVIEW -->
@@ -1214,6 +1215,103 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         </div>
       </div>
 
+      <!-- RESULTS PORTAL -->
+      <div id="section-results" class="dash-section">
+
+        <!-- Summary cards -->
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:18px;">
+          <div class="stat-card green"><div class="stat-icon">📄</div><div class="stat-value" id="res-stat-uploaded">—</div><div class="stat-label">Results uploaded</div></div>
+          <div class="stat-card blue"><div class="stat-icon">🔑</div><div class="stat-value" id="res-stat-pins">—</div><div class="stat-label">PINs generated</div></div>
+          <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-value" id="res-stat-accessed">—</div><div class="stat-label">Parents accessed</div></div>
+          <div class="stat-card red"><div class="stat-icon">⏳</div><div class="stat-value" id="res-stat-pending">—</div><div class="stat-label">Fee outstanding</div></div>
+        </div>
+
+        <!-- Settings card -->
+        <div class="dash-card full" style="margin-bottom:18px;">
+          <div class="dash-card-header">
+            <div class="dash-card-title">⚙️ Result Release Settings</div>
+          </div>
+          <div class="dash-card-body" style="padding:16px 18px;">
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px;">
+              <div class="form-group">
+                <label class="form-label">Term Name</label>
+                <input class="form-input" id="res-term" placeholder="Third Term 2024/2025">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Access Model</label>
+                <select class="form-select" id="res-access-model" onchange="updateResultModel()">
+                  <option value="bundled">Bundled with fees (recommended)</option>
+                  <option value="paid">Pay per result (₦ per student)</option>
+                  <option value="free">Free for all students</option>
+                </select>
+              </div>
+              <div class="form-group" id="res-price-group" style="display:none;">
+                <label class="form-label">Price per result (₦)</label>
+                <input class="form-input" id="res-price" type="number" placeholder="2000">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Print limit per PIN</label>
+                <select class="form-select" id="res-print-limit">
+                  <option value="3">3 prints</option>
+                  <option value="5">5 prints</option>
+                  <option value="10">10 prints</option>
+                  <option value="0">Unlimited</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">PIN expiry</label>
+                <select class="form-select" id="res-expiry">
+                  <option value="30">30 days</option>
+                  <option value="60">60 days</option>
+                  <option value="90">End of next term</option>
+                </select>
+              </div>
+            </div>
+            <!-- Bundled model info -->
+            <div id="res-bundled-info" style="background:var(--green-pale);border-radius:8px;padding:12px 16px;font-size:13px;color:var(--green);margin-bottom:16px;">
+              ✅ <strong>Bundled model:</strong> Parents who have paid complete school fees will automatically receive their child's result PIN when you release results. Parents with outstanding fees will receive a payment reminder instead.
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;">
+              <button class="broadcast-btn" onclick="releaseResults()" style="max-width:240px;">🚀 Release Results to All</button>
+              <button class="action-btn" onclick="releaseResultsClass()">📋 Release for Specific Class</button>
+              <button class="action-btn" onclick="previewResultMessage()">👁 Preview WhatsApp Message</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Upload + student table -->
+        <div class="dash-card full" style="margin-bottom:18px;">
+          <div class="dash-card-header">
+            <div class="dash-card-title">📊 Upload Results</div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <select class="form-select" id="res-class-select" onchange="loadResultStudents()" style="width:140px;font-size:13px;padding:6px 10px;">
+                <option value="">Select class...</option>
+              </select>
+              <button class="export-btn" onclick="downloadResultTemplate()">⬇ Template</button>
+              <button class="export-btn" onclick="document.getElementById('res-csv-input').click()">⬆ Import CSV</button>
+              <input type="file" id="res-csv-input" accept=".csv" style="display:none;" onchange="importResultCSV(event)">
+            </div>
+          </div>
+          <div class="dash-card-body" style="padding:0;" id="res-student-table">
+            <div style="padding:40px;text-align:center;color:var(--text-muted);font-size:13px;">Select a class to begin entering results</div>
+          </div>
+        </div>
+
+        <!-- PIN log -->
+        <div class="dash-card full">
+          <div class="dash-card-header">
+            <div class="dash-card-title">🔑 PIN Access Log</div>
+            <div style="display:flex;gap:8px;">
+              <input class="search-box" id="pin-search" placeholder="Search student..." oninput="filterPINLog()" style="width:160px;font-size:12px;">
+              <button class="export-btn" onclick="exportPINLog()">⬇ CSV</button>
+            </div>
+          </div>
+          <div class="dash-card-body" style="padding:0;" id="pin-log-body">
+            <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No PINs generated yet — release results to generate PINs</div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -1370,6 +1468,7 @@ function switchSection(name, btn) {
   if (name === 'notifications') loadNotifications();
   if (name === 'termcal') { loadTermCalendar(); loadExamSchedule(); }
   if (name === 'performance') loadPerformanceRankings();
+  if (name === 'results') loadResults();
 }
 
 // ── Dashboard data ────────────────────────────────────────
@@ -3686,6 +3785,256 @@ function togglePassword() {
     btn.textContent = '👁';
   }
 }
+
+
+// ══════════════════════════════════════════════════════════
+// RESULTS PORTAL
+// ══════════════════════════════════════════════════════════
+let resultStudents = [];
+let allPINLogs = [];
+
+async function loadResults() {
+  // Load classes
+  try {
+    const classes = await api('/api/admin/classes');
+    const sel = document.getElementById('res-class-select');
+    if (sel) sel.innerHTML = '<option value="">Select class...</option>' + classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
+  } catch(e) {}
+  // Load stats
+  try {
+    const stats = await api('/api/admin/results/stats');
+    const u = document.getElementById('res-stat-uploaded');
+    const p = document.getElementById('res-stat-pins');
+    const a = document.getElementById('res-stat-accessed');
+    const pe = document.getElementById('res-stat-pending');
+    if (u) u.textContent = stats.uploaded || 0;
+    if (p) p.textContent = stats.pins || 0;
+    if (a) a.textContent = stats.accessed || 0;
+    if (pe) pe.textContent = stats.fee_pending || 0;
+  } catch(e) {}
+  loadPINLog();
+}
+
+function updateResultModel() {
+  const model = document.getElementById('res-access-model')?.value;
+  const priceGroup = document.getElementById('res-price-group');
+  const bundledInfo = document.getElementById('res-bundled-info');
+  if (priceGroup) priceGroup.style.display = model === 'paid' ? 'block' : 'none';
+  if (bundledInfo) {
+    if (model === 'bundled') {
+      bundledInfo.style.display = 'block';
+      bundledInfo.style.background = 'var(--green-pale)';
+      bundledInfo.style.color = 'var(--green)';
+      bundledInfo.innerHTML = '✅ <strong>Bundled model:</strong> Parents who have paid complete school fees will automatically receive their child\'s result PIN when you release results. Parents with outstanding fees will receive a payment reminder instead.';
+    } else if (model === 'free') {
+      bundledInfo.style.display = 'block';
+      bundledInfo.style.background = '#f0f9ff';
+      bundledInfo.style.color = '#0055cc';
+      bundledInfo.innerHTML = '📢 <strong>Free access:</strong> All parents will receive their child\'s result PIN regardless of fee payment status.';
+    } else {
+      bundledInfo.style.display = 'none';
+    }
+  }
+}
+
+async function loadResultStudents() {
+  const cls = document.getElementById('res-class-select')?.value;
+  const el = document.getElementById('res-student-table');
+  if (!cls || !el) return;
+  el.innerHTML = '<div class="loading" style="padding:20px;">Loading students...</div>';
+  try {
+    const students = await api('/api/admin/students/list?class_name=' + encodeURIComponent(cls));
+    resultStudents = students;
+    renderResultTable(students);
+  } catch(e) { el.innerHTML = '<div style="padding:20px;color:var(--danger);">Error loading students</div>'; }
+}
+
+function renderResultTable(students) {
+  const el = document.getElementById('res-student-table');
+  if (!students.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">No students in this class</div>'; return; }
+  el.innerHTML = '<table class="data-table"><thead><tr>' +
+    '<th>Student</th><th>Maths</th><th>English</th><th>Science</th><th>Other Subjects</th><th>Position</th><th>Remarks</th><th>Fee Status</th><th>Result Status</th>' +
+    '</tr></thead><tbody>' +
+    students.map(s => {
+      const feeOk = s.fee_status === 'paid';
+      const feePill = feeOk ? 'pill-green' : 'pill-red';
+      return '<tr id="res-row-' + s.id + '">' +
+        '<td><strong>' + s.name + '</strong></td>' +
+        '<td><input type="number" min="0" max="100" class="form-input" style="width:60px;padding:4px 6px;font-size:12px;" id="res-maths-' + s.id + '" placeholder="—"></td>' +
+        '<td><input type="number" min="0" max="100" class="form-input" style="width:60px;padding:4px 6px;font-size:12px;" id="res-english-' + s.id + '" placeholder="—"></td>' +
+        '<td><input type="number" min="0" max="100" class="form-input" style="width:60px;padding:4px 6px;font-size:12px;" id="res-science-' + s.id + '" placeholder="—"></td>' +
+        '<td><button class="action-btn" style="font-size:11px;" onclick="openSubjectModal(\'' + s.id + '\',\'' + s.name.replace(/'/g,'') + '\')">+ More subjects</button></td>' +
+        '<td><input type="number" min="1" class="form-input" style="width:50px;padding:4px 6px;font-size:12px;" id="res-position-' + s.id + '" placeholder="—"></td>' +
+        '<td><input type="text" class="form-input" style="width:120px;padding:4px 6px;font-size:12px;" id="res-remark-' + s.id + '" placeholder="Good effort"></td>' +
+        '<td><span class="pill ' + feePill + '">' + (s.fee_status||'unpaid') + '</span></td>' +
+        '<td id="res-status-' + s.id + '"><span class="pill pill-gray">Pending</span></td>' +
+      '</tr>';
+    }).join('') +
+    '</tbody></table>' +
+    '<div style="padding:12px 16px;display:flex;gap:10px;align-items:center;">' +
+    '<button class="broadcast-btn" onclick="saveClassResults()" style="max-width:180px;">💾 Save Results</button>' +
+    '<span style="font-size:12px;color:var(--text-muted);">Save before releasing</span>' +
+    '</div>';
+}
+
+async function saveClassResults() {
+  const cls = document.getElementById('res-class-select')?.value;
+  if (!cls) { showToast('Select a class first'); return; }
+  let saved = 0;
+  for (const s of resultStudents) {
+    const maths = document.getElementById('res-maths-' + s.id)?.value;
+    const english = document.getElementById('res-english-' + s.id)?.value;
+    const science = document.getElementById('res-science-' + s.id)?.value;
+    const position = document.getElementById('res-position-' + s.id)?.value;
+    const remark = document.getElementById('res-remark-' + s.id)?.value;
+    if (!maths && !english && !science) continue;
+    try {
+      await api('/api/admin/results', {
+        method: 'POST',
+        body: JSON.stringify({
+          student_id: s.id, class_name: cls,
+          term: document.getElementById('res-term')?.value || 'Current Term',
+          subjects: { Mathematics: maths, English: english, Science: science },
+          position, remark
+        })
+      });
+      const statusEl = document.getElementById('res-status-' + s.id);
+      if (statusEl) statusEl.innerHTML = '<span class="pill pill-green">Saved</span>';
+      saved++;
+    } catch(e) { console.warn('Failed to save result for', s.name); }
+  }
+  showToast('✅ ' + saved + ' results saved!');
+  loadResults();
+}
+
+async function releaseResults() {
+  const model = document.getElementById('res-access-model')?.value || 'bundled';
+  const term = document.getElementById('res-term')?.value;
+  const printLimit = document.getElementById('res-print-limit')?.value || '3';
+  const expiryDays = document.getElementById('res-expiry')?.value || '30';
+  const price = document.getElementById('res-price')?.value || '0';
+  if (!term) { showToast('Enter the term name first ❌'); return; }
+  if (!confirm('Release results to all parents now? Parents with paid fees will receive their PIN immediately.')) return;
+  try {
+    const res = await api('/api/admin/results/release', {
+      method: 'POST',
+      body: JSON.stringify({ model, term, print_limit: Number(printLimit), expiry_days: Number(expiryDays), price: Number(price) })
+    });
+    showToast('✅ Results released! ' + (res.sent||0) + ' PINs sent, ' + (res.pending||0) + ' parents reminded about fees.');
+    loadResults();
+    loadPINLog();
+  } catch(e) { showToast('Failed to release results ❌'); }
+}
+
+async function releaseResultsClass() {
+  const cls = document.getElementById('res-class-select')?.value;
+  if (!cls) { showToast('Select a class first'); return; }
+  const model = document.getElementById('res-access-model')?.value || 'bundled';
+  const term = document.getElementById('res-term')?.value || 'Current Term';
+  const printLimit = document.getElementById('res-print-limit')?.value || '3';
+  const expiryDays = document.getElementById('res-expiry')?.value || '30';
+  if (!confirm('Release results for ' + cls + ' only?')) return;
+  try {
+    const res = await api('/api/admin/results/release', {
+      method: 'POST',
+      body: JSON.stringify({ model, term, class_name: cls, print_limit: Number(printLimit), expiry_days: Number(expiryDays) })
+    });
+    showToast('✅ ' + cls + ' results released! ' + (res.sent||0) + ' PINs sent.');
+    loadResults();
+  } catch(e) { showToast('Failed ❌'); }
+}
+
+function previewResultMessage() {
+  const model = document.getElementById('res-access-model')?.value || 'bundled';
+  const schoolName = window._schoolName || 'Your School';
+  if (model === 'bundled') {
+    alert('WhatsApp message to PAID parents:\n\n📄 Result Ready — ' + schoolName + '\n\nDear Parent, your child\'s Third Term result is now available.\n\nYour result PIN: EPG-4821-7390\n\nView your child\'s result here:\neduping.org/results\n\nPIN valid for 30 days · 3 prints allowed\n' + schoolName + ' 🏫\n\n---\n\nMessage to UNPAID parents:\n\n⏳ Result Pending — ' + schoolName + '\n\nDear Parent, your child\'s result is ready but requires outstanding school fees to be cleared.\n\nKindly visit the school or contact the bursar to complete payment.\n\n' + schoolName + ' 🏫');
+  } else {
+    alert('Message preview for free/pay model — results sent to all parents with their PIN.');
+  }
+}
+
+async function loadPINLog() {
+  const el = document.getElementById('pin-log-body');
+  if (!el) return;
+  try {
+    allPINLogs = await api('/api/admin/results/pins');
+    renderPINLog(allPINLogs);
+  } catch(e) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No PINs generated yet</div>'; }
+}
+
+function renderPINLog(logs) {
+  const el = document.getElementById('pin-log-body');
+  if (!logs.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No PINs generated yet</div>'; return; }
+  el.innerHTML = '<table class="data-table"><thead><tr><th>Student</th><th>Class</th><th>PIN</th><th>Term</th><th>Sent</th><th>Prints Used</th><th>Expires</th><th>Status</th></tr></thead><tbody>' +
+    logs.map(p => {
+      const expired = p.expires_at && new Date(p.expires_at) < new Date();
+      const pill = p.accessed ? 'pill-green' : expired ? 'pill-red' : 'pill-gold';
+      const label = p.accessed ? 'Accessed' : expired ? 'Expired' : 'Sent';
+      return '<tr>' +
+        '<td><strong>' + (p.student_name||'—') + '</strong></td>' +
+        '<td>' + (p.class_name||'—') + '</td>' +
+        '<td style="font-family:monospace;letter-spacing:1px;font-weight:600;">' + (p.pin||'—') + '</td>' +
+        '<td>' + (p.term||'—') + '</td>' +
+        '<td>' + (p.sent_at ? new Date(p.sent_at).toLocaleDateString('en-NG') : '—') + '</td>' +
+        '<td>' + (p.print_count||0) + ' / ' + (p.print_limit||3) + '</td>' +
+        '<td>' + (p.expires_at ? new Date(p.expires_at).toLocaleDateString('en-NG') : '—') + '</td>' +
+        '<td><span class="pill ' + pill + '">' + label + '</span></td>' +
+      '</tr>';
+    }).join('') + '</tbody></table>';
+}
+
+function filterPINLog() {
+  const q = (document.getElementById('pin-search')?.value || '').toLowerCase();
+  renderPINLog(allPINLogs.filter(p => (p.student_name||'').toLowerCase().includes(q) || (p.class_name||'').toLowerCase().includes(q)));
+}
+
+function exportPINLog() {
+  if (!allPINLogs.length) { showToast('No PIN data to export'); return; }
+  const csv = 'Student,Class,PIN,Term,Sent Date,Prints Used,Expires,Status\n' +
+    allPINLogs.map(p => [p.student_name||'', p.class_name||'', p.pin||'', p.term||'', p.sent_at||'', p.print_count||0, p.expires_at||'', p.accessed?'Accessed':'Pending'].map(v => '"'+v+'"').join(',')).join('\n');
+  downloadCSV(csv, 'result_pins.csv');
+}
+
+function downloadResultTemplate() {
+  const csv = 'Student Name,Student ID,Mathematics,English Language,Basic Science,Social Studies,Agricultural Science,Position,Class Teacher Remark\nAmara Okafor,,,87,79,91,75,82,2,Excellent performance this term\n';
+  downloadCSV(csv, 'result_upload_template.csv');
+  showToast('📥 Template downloaded!');
+}
+
+async function importResultCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const cls = document.getElementById('res-class-select')?.value;
+  if (!cls) { showToast('Select a class first ❌'); return; }
+  const term = document.getElementById('res-term')?.value || 'Current Term';
+  const text = await file.text();
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,'').toLowerCase());
+  let saved = 0;
+  for (const line of lines.slice(1)) {
+    if (!line.trim()) continue;
+    const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g,''));
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = vals[i] || '');
+    const name = obj['student name'] || obj['name'] || obj['student'];
+    if (!name) continue;
+    const student = resultStudents.find(s => s.name.toLowerCase().includes(name.toLowerCase()));
+    if (!student) continue;
+    const subjects = {};
+    ['mathematics','english language','basic science','social studies','agricultural science'].forEach(sub => {
+      const key = headers.find(h => h.includes(sub.split(' ')[0]));
+      if (key && obj[key]) subjects[sub.charAt(0).toUpperCase() + sub.slice(1)] = obj[key];
+    });
+    try {
+      await api('/api/admin/results', { method: 'POST', body: JSON.stringify({ student_id: student.id, class_name: cls, term, subjects, position: obj['position'], remark: obj['class teacher remark'] || obj['remark'] }) });
+      saved++;
+    } catch(e) {}
+  }
+  showToast('✅ ' + saved + ' results imported!');
+  loadResults();
+}
+
 
 // ── Toast ─────────────────────────────────────────────────
 function showToast(msg) {
