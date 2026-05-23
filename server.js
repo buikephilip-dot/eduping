@@ -67,10 +67,44 @@ app.use(express.static(path.join(__dirname, 'public')));
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 12,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000
+  max: 25,                       // up from 12 — Railway supports 100+
+  min: 2,                        // keep 2 warm connections always ready
+  idleTimeoutMillis: 30000,      // release idle connections after 30s
+  connectionTimeoutMillis: 5000, // fail fast if pool exhausted
+  statement_timeout: 8000,       // kill queries running over 8s
+  query_timeout: 8000,           // client-side query timeout
+  application_name: 'eduping',   // visible in pg_stat_activity for debugging
 });
+
+// ── Per-tenant query rate limiting ────────────────────────
+const _schoolQueryCount = {};
+function rateLimitDB(schoolId) {
+  if (!schoolId) return;
+  const key = schoolId + ':' + Math.floor(Date.now() / 60000);
+  _schoolQueryCount[key] = (_schoolQueryCount[key] || 0) + 1;
+  if (_schoolQueryCount[key] % 1000 === 0) {
+    const now = Math.floor(Date.now() / 60000);
+    Object.keys(_schoolQueryCount).forEach(k => {
+      if (parseInt(k.split(':')[1]) < now - 2) delete _schoolQueryCount[k];
+    });
+  }
+  if (_schoolQueryCount[key] > 150) {
+    console.warn('[RateLimit] School ' + schoolId + ' exceeded 150 DB queries/min');
+    throw new Error('Too many requests — please try again in a moment');
+  }
+}
+
+// ── Pool health monitoring ────────────────────────────────
+pool.on('error', (err) => {
+  console.error('[Pool] Unexpected error on idle client:', err.message);
+});
+
+setInterval(() => {
+  const { totalCount, idleCount, waitingCount } = pool;
+  if (waitingCount > 0) {
+    console.warn('[Pool] ' + waitingCount + ' queries waiting — total:' + totalCount + ' idle:' + idleCount);
+  }
+}, 30000);
 
 function hasAi() { return Boolean(process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY); }
 function hasTextAi() { return Boolean(process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY); }
@@ -591,6 +625,7 @@ function requireSuper(req, res, next) {
   next();
 }
 async function requireSchool(req, res, next) {
+  try { rateLimitDB(req.headers['x-school-id']); } catch(e) { return res.status(429).json({ error: e.message }); }
   const schoolId = req.headers['x-school-id'] || req.query.school_id || req.body.school_id;
   const password = req.headers['x-admin-password'] || req.body.admin_password || req.query.admin_password;
   if (!schoolId || !password) return bad(res, 'Missing school_id or admin password', 401);
