@@ -1699,10 +1699,9 @@ function demoClassSummary(cls) {
   };
 }
 
-// ── Patch api() for demo mode ─────────────────────────────
-const _realApi = api;
-async function api(url, opts = {}) {
-  if (!isDemoMode) return _realApi(url, opts);
+// ── Demo API handler (called directly from patched api()) ─
+async function _demoApiHandler(url, opts = {}) {
+  const isDemoModeActive = true;
 
   // POST requests in demo mode — just succeed silently
   if (opts.method && opts.method !== 'GET') {
@@ -1767,6 +1766,10 @@ function startDemo() {
 
 
 async function api(url, opts = {}) {
+  // Demo mode intercept — must be first check
+  if (typeof isDemoMode !== 'undefined' && isDemoMode) {
+    return _demoApiHandler(url, opts);
+  }
   opts.headers = { 'Content-Type': 'application/json', 'x-school-id': schoolId, 'x-admin-password': adminPassword, ...(opts.headers || {}) };
   const res = await fetch(url, opts);
   if (!res.ok) throw new Error(await res.text());
