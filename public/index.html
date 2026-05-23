@@ -319,6 +319,127 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
 .event-tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid #f0f2f5;padding-bottom:0;}
 .event-tab{padding:8px 16px;font-size:13px;font-weight:500;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;}
 .event-tab.active{color:var(--green);border-bottom-color:var(--green);font-weight:600;}
+
+/* ── SECTION TRANSITIONS ─────────────────────────────── */
+.dash-section{
+  animation: sectionFadeIn .35s cubic-bezier(.4,0,.2,1);
+}
+@keyframes sectionFadeIn{
+  from{opacity:0;transform:translateY(12px);}
+  to{opacity:1;transform:translateY(0);}
+}
+
+/* Stat card pop-in */
+.stat-card{
+  animation: cardPop .4s cubic-bezier(.34,1.56,.64,1) both;
+}
+.stat-card:nth-child(2){animation-delay:.06s;}
+.stat-card:nth-child(3){animation-delay:.12s;}
+.stat-card:nth-child(4){animation-delay:.18s;}
+@keyframes cardPop{
+  from{opacity:0;transform:scale(.92);}
+  to{opacity:1;transform:scale(1);}
+}
+
+/* Staff card hover lift */
+.staff-card{transition:transform .2s ease,box-shadow .2s ease;cursor:pointer;}
+.staff-card:hover{transform:translateY(-4px);box-shadow:0 8px 24px rgba(0,0,0,.1);}
+
+/* Button ripple */
+.broadcast-btn,.qr-btn,.action-btn{position:relative;overflow:hidden;}
+.broadcast-btn::after,.qr-btn::after,.action-btn::after{
+  content:'';position:absolute;inset:0;background:rgba(255,255,255,.2);
+  transform:scale(0);border-radius:inherit;transition:transform .3s;
+}
+.broadcast-btn:active::after,.qr-btn:active::after,.action-btn:active::after{transform:scale(1);}
+
+/* Table row hover */
+.data-table tbody tr{transition:background .15s;}
+.data-table tbody tr:hover{background:var(--green-pale);}
+
+/* Chart bar animated fill */
+.chart-bar-fill{transition:width .8s cubic-bezier(.4,0,.2,1);}
+.trend-bar{transition:height .6s cubic-bezier(.4,0,.2,1);}
+
+/* Subnav active indicator slide */
+.subnav-btn{position:relative;transition:color .2s,background .2s;}
+.subnav-btn.active::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
+  background:var(--green);border-radius:2px 2px 0 0;
+  animation:slideIn .2s ease;
+}
+@keyframes slideIn{from{transform:scaleX(0);}to{transform:scaleX(1);}}
+
+/* Profile panel smooth open */
+.profile-panel{transition:transform .35s cubic-bezier(.4,0,.2,1);}
+
+/* Toast slide up */
+.toast{transition:opacity .25s,transform .25s;}
+.toast.show{transform:translateY(-8px);}
+
+/* Loading pulse */
+.loading{animation:pulse 1.5s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+
+/* Number counter animation - applied via JS */
+.stat-value{transition:all .3s ease;}
+
+/* ── DARK MODE ────────────────────────────────────────── */
+[data-theme="dark"]{
+  --bg:        #0f1a14;
+  --gray-bg:   #1a2820;
+  --border:    #2a3d30;
+  --text:      #e8f0eb;
+  --text-muted:#7a9a84;
+  --green-pale:#1a3028;
+  --green-bubble:#1a3028;
+  --white:     #151f1a;
+  --card-bg:   #1a2820;
+  --danger:    #f87171;
+  --gold:      #f6c444;
+}
+[data-theme="dark"] body{background:var(--bg);color:var(--text);}
+[data-theme="dark"] .topnav{background:#0d1a10;border-bottom-color:#2a3d30;}
+[data-theme="dark"] .sidebar{background:#0d1a10;border-right-color:#2a3d30;}
+[data-theme="dark"] .dash-card{background:var(--card-bg);border-color:var(--border);}
+[data-theme="dark"] .dash-card-header{border-bottom-color:var(--border);}
+[data-theme="dark"] .data-table th{background:#0d1a10;color:var(--text-muted);border-color:var(--border);}
+[data-theme="dark"] .data-table td{border-color:var(--border);color:var(--text);}
+[data-theme="dark"] .data-table tbody tr:hover{background:var(--green-pale);}
+[data-theme="dark"] .form-input,[data-theme="dark"] .form-select,[data-theme="dark"] .form-textarea{background:#1a2820;border-color:var(--border);color:var(--text);}
+[data-theme="dark"] .stat-card{background:var(--card-bg);border-color:var(--border);}
+[data-theme="dark"] .staff-card{background:var(--card-bg);border-color:var(--border);}
+[data-theme="dark"] .search-box{background:#1a2820;border-color:var(--border);color:var(--text);}
+[data-theme="dark"] .subnav-btn{color:var(--text-muted);}
+[data-theme="dark"] .subnav-btn.active{background:var(--green-pale);color:var(--green);}
+[data-theme="dark"] .profile-panel,[data-theme="dark"] .payment-modal-box,[data-theme="dark"] .msg-modal-box{background:#1a2820;color:var(--text);}
+[data-theme="dark"] .profile-section{border-bottom-color:var(--border);}
+[data-theme="dark"] .how-step{border-bottom-color:var(--border);}
+[data-theme="dark"] .leaderboard-item{border-bottom-color:var(--border);}
+[data-theme="dark"] .event-card{background:var(--card-bg);}
+[data-theme="dark"] .event-feature{background:#0d1a10;}
+[data-theme="dark"] .absent-class-label{border-bottom-color:var(--border);}
+[data-theme="dark"] .date-filter-btn{background:#1a2820;border-color:var(--border);color:var(--text-muted);}
+[data-theme="dark"] .export-btn{border-color:var(--border);color:var(--text-muted);}
+[data-theme="dark"] .export-btn:hover{border-color:var(--green);color:var(--green);}
+[data-theme="dark"] .qualify-section{background:#0d1a10;border-color:var(--border);}
+[data-theme="dark"] .upload-zone{border-color:var(--border);}
+[data-theme="dark"] .class-group-header{background:#1a3028;}
+[data-theme="dark"] .floating-card{background:#1a2820;border-color:var(--border);}
+[data-theme="dark"] .wa-body{background:#1a2820;}
+[data-theme="dark"] .wa-msg.received{background:#2a3d30;}
+[data-theme="dark"] .login-card{background:#1a2820;}
+[data-theme="dark"] .login-logo{color:var(--text);}
+[data-theme="dark"] input::placeholder{color:var(--text-muted);}
+
+/* Dark mode toggle button */
+.dark-toggle{
+  background:none;border:1.5px solid var(--border);border-radius:20px;
+  padding:5px 12px;cursor:pointer;font-size:13px;color:var(--text-muted);
+  display:flex;align-items:center;gap:6px;transition:all .2s;font-family:'DM Sans',sans-serif;
+}
+.dark-toggle:hover{border-color:var(--green);color:var(--green);}
+
 </style>
 </head>
 <body>
@@ -351,9 +472,16 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
     <button class="tab-btn active" onclick="switchView('chat',this)">💬 Parent Chat</button>
     <button class="tab-btn" onclick="switchView('dashboard',this)">📊 Admin Dashboard</button>
   </div>
-  <div class="ai-status"><span class="ai-dot"></span> EduPing</div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <button class="dark-toggle" onclick="toggleDarkMode()" id="dark-toggle-btn">🌙 Dark</button>
+    <div class="ai-status"><span class="ai-dot"></span> EduPing</div>
+  </div>
 </div>
 
+<div id="demo-banner" style="display:none;background:#fef3c7;color:#92400e;padding:8px 16px;text-align:center;font-size:13px;font-weight:500;border-bottom:1px solid #f6c44350;">
+  👀 <strong>Demo Mode</strong> — Greenfield Academy, Abuja &nbsp;|&nbsp; All data is simulated &nbsp;
+  <button onclick="exitDemo()" style="background:#92400e;color:white;border:none;border-radius:10px;padding:2px 10px;font-size:11px;cursor:pointer;margin-left:8px;">Exit Demo</button>
+</div>
 <div class="main">
 
   <!-- LOGIN VIEW -->
@@ -376,6 +504,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         </div>
         <div class="modal-err" id="login-err" style="display:none;">Wrong school ID or password. Try again.</div>
         <button class="login-btn" onclick="doLogin()">Login to Dashboard</button>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:12px;">
+          <div style="flex:1;height:1px;background:var(--border);"></div>
+          <div style="font-size:12px;color:var(--text-muted);">or</div>
+          <div style="flex:1;height:1px;background:var(--border);"></div>
+        </div>
+        <button onclick="startDemo()" style="width:100%;margin-top:12px;background:transparent;border:2px solid var(--green);color:var(--green);border-radius:8px;padding:12px;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .2s;" onmouseover="this.style.background='var(--green)';this.style.color='white'" onmouseout="this.style.background='transparent';this.style.color='var(--green)'">
+          👀 Try Live Demo — Greenfield Academy
+        </button>
         <div style="margin-top:16px;font-size:12px;color:var(--text-muted);">
           Don't know your school ID? Contact <a href="/superadmin" style="color:var(--green);">EduPing Super Admin</a>
         </div>
@@ -1399,6 +1535,237 @@ let schoolId = '', adminPassword = '', schoolData = null, chatHistory = [];
 const colors = ['#1a7a4a','#c9a84c','#3b82f6','#7c3aed','#e53935','#0891b2'];
 
 // ── API helper ────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════
+// DEMO MODE — Full fake data, no server needed
+// ══════════════════════════════════════════════════════════
+let isDemoMode = false;
+
+const DEMO_SCHOOL = {
+  id: 'demo-greenfield', name: 'Greenfield Academy', city: 'Abuja',
+  plan: 'growth', status: 'active', current_term: 'Third Term 2024/2025',
+  twilio_number: '+14155238886', events_enabled: true,
+  term_start: '2025-04-28', term_end: '2025-07-18'
+};
+
+const DEMO_STAFF = [
+  { id: 's1', name: 'Mrs Amaka Johnson', role: 'teacher', subject: 'Mathematics', class: 'JSS2A', phone: '+2348034202913', status: 'active', attendance_submissions: 42, homework_assigned: 18, scores_uploaded: 36, staff_of_week_count: 2, absences: 1 },
+  { id: 's2', name: 'Mr Peter Okafor', role: 'teacher', subject: 'English Language', class: 'JSS1B', phone: '+2348045313024', status: 'active', attendance_submissions: 38, homework_assigned: 14, scores_uploaded: 28, staff_of_week_count: 1, absences: 2 },
+  { id: 's3', name: 'Mrs Fatima Abdullahi', role: 'teacher', subject: 'Basic Science', class: 'JSS3A', phone: '+2348056424135', status: 'active', attendance_submissions: 45, homework_assigned: 20, scores_uploaded: 40, staff_of_week_count: 3, absences: 0 },
+  { id: 's4', name: 'Mr Chukwuemeka Eze', role: 'subject_teacher', subject: 'Social Studies', class: 'JSS2A', phone: '+2348067535246', status: 'active', attendance_submissions: 30, homework_assigned: 10, scores_uploaded: 20, staff_of_week_count: 0, absences: 3 },
+  { id: 's5', name: 'Mrs Grace Oluwole', role: 'head_teacher', subject: '', class: '', phone: '+2348078646357', status: 'active', attendance_submissions: 5, homework_assigned: 0, scores_uploaded: 0, staff_of_week_count: 1, absences: 0 },
+];
+
+const DEMO_STUDENTS = [
+  { id: 'st1', name: 'Tobiloba Adeyemi', class_name: 'JSS2A', parent_name: 'Mr Adeyemi', parent_phone: '+2348069956420', fee_status: 'paid', weekly_performance_score: 87, amount_due: 65000, amount_paid: 65000, balance: 0 },
+  { id: 'st2', name: 'Amara Okafor', class_name: 'JSS2A', parent_name: 'Mrs Okafor', parent_phone: '+2348031111111', fee_status: 'paid', weekly_performance_score: 92, amount_due: 65000, amount_paid: 65000, balance: 0 },
+  { id: 'st3', name: 'Chukwuemeka Eze Jr', class_name: 'JSS2A', parent_name: 'Mr Eze', parent_phone: '+2348032222222', fee_status: 'partial', weekly_performance_score: 64, amount_due: 65000, amount_paid: 30000, balance: 35000 },
+  { id: 'st4', name: 'Fatima Bello', class_name: 'JSS2A', parent_name: 'Alhaji Bello', parent_phone: '+2348033333333', fee_status: 'unpaid', weekly_performance_score: 45, amount_due: 65000, amount_paid: 0, balance: 65000 },
+  { id: 'st5', name: 'David Nwosu', class_name: 'JSS2A', parent_name: 'Dr Nwosu', parent_phone: '+2348034444444', fee_status: 'paid', weekly_performance_score: 78, amount_due: 65000, amount_paid: 65000, balance: 0 },
+  { id: 'st6', name: 'Aisha Mohammed', class_name: 'JSS1B', parent_name: 'Mallam Mohammed', parent_phone: '+2348035555555', fee_status: 'paid', weekly_performance_score: 81, amount_due: 65000, amount_paid: 65000, balance: 0 },
+  { id: 'st7', name: 'Emeka Okonkwo', class_name: 'JSS1B', parent_name: 'Mrs Okonkwo', parent_phone: '+2348036666666', fee_status: 'paid', weekly_performance_score: 74, amount_due: 65000, amount_paid: 65000, balance: 0 },
+  { id: 'st8', name: 'Blessing Adeyemi', class_name: 'JSS1B', parent_name: 'Pastor Adeyemi', parent_phone: '+2348037777777', fee_status: 'unpaid', weekly_performance_score: 38, amount_due: 65000, amount_paid: 0, balance: 65000 },
+  { id: 'st9', name: 'Victor Obi', class_name: 'JSS3A', parent_name: 'Mr Obi', parent_phone: '+2348038888888', fee_status: 'paid', weekly_performance_score: 95, amount_due: 65000, amount_paid: 65000, balance: 0 },
+  { id: 'st10', name: 'Ngozi Ibe', class_name: 'JSS3A', parent_name: 'Mrs Ibe', parent_phone: '+2348039999999', fee_status: 'partial', weekly_performance_score: 69, amount_due: 65000, amount_paid: 40000, balance: 25000 },
+  { id: 'st11', name: 'Yusuf Ibrahim', class_name: 'JSS3A', parent_name: 'Alhaji Ibrahim', parent_phone: '+2348040000000', fee_status: 'paid', weekly_performance_score: 83, amount_due: 65000, amount_paid: 65000, balance: 0 },
+  { id: 'st12', name: 'Chidinma Okafor', class_name: 'JSS3A', parent_name: 'Chief Okafor', parent_phone: '+2348041111111', fee_status: 'paid', weekly_performance_score: 71, amount_due: 65000, amount_paid: 65000, balance: 0 },
+];
+
+const today = new Date().toISOString().slice(0,10);
+const DEMO_ATTENDANCE = DEMO_STUDENTS.map(s => ({
+  student_id: s.id, name: s.name, class_name: s.class_name,
+  date: today, status: ['st4','st8'].includes(s.id) ? 'absent' : 'present',
+  parent_phone: s.parent_phone, marked_by: 'Mrs Amaka Johnson'
+}));
+
+const DEMO_SIGNIN = [
+  { staff_name: 'Mrs Amaka Johnson', class: 'JSS2A', date: today, time: '07:48', photo_verified: true, status: 'submitted', role: 'teacher' },
+  { staff_name: 'Mr Peter Okafor', class: 'JSS1B', date: today, time: '07:52', photo_verified: true, status: 'submitted', role: 'teacher' },
+  { staff_name: 'Mrs Fatima Abdullahi', class: 'JSS3A', date: today, time: '08:01', photo_verified: true, status: 'submitted', role: 'teacher' },
+];
+
+const DEMO_MESSAGES = [
+  { phone: '+2348069956420', name: 'Mr Adeyemi (Tobiloba)', last_message: 'Thank you for the update on the homework', last_time: new Date(Date.now()-3600000).toISOString() },
+  { phone: '+2348031111111', name: 'Mrs Okafor (Amara)', last_message: 'What time is the PTA meeting?', last_time: new Date(Date.now()-7200000).toISOString() },
+  { phone: '+2348032222222', name: 'Mr Eze (Chukwuemeka)', last_message: 'How did my son do in the last test?', last_time: new Date(Date.now()-10800000).toISOString() },
+  { phone: '+2348035555555', name: 'Mallam Mohammed (Aisha)', last_message: 'Please confirm Aisha\'s attendance today', last_time: new Date(Date.now()-14400000).toISOString() },
+];
+
+const DEMO_HOMEWORKS = [
+  { id: 'hw1', class_name: 'JSS2A', subject: 'Mathematics', description: 'Solve quadratic equations on page 45 Q1-10', due_date: new Date(Date.now()+3*86400000).toISOString(), created_at: new Date(Date.now()-86400000).toISOString(), assigned_by_name: 'Mrs Amaka Johnson' },
+  { id: 'hw2', class_name: 'JSS1B', subject: 'English Language', description: 'Write a 300-word essay on My Family', due_date: new Date(Date.now()+2*86400000).toISOString(), created_at: new Date(Date.now()-172800000).toISOString(), assigned_by_name: 'Mr Peter Okafor' },
+  { id: 'hw3', class_name: 'JSS3A', subject: 'Basic Science', description: 'Draw and label the human digestive system', due_date: new Date(Date.now()+4*86400000).toISOString(), created_at: new Date(Date.now()-259200000).toISOString(), assigned_by_name: 'Mrs Fatima Abdullahi' },
+];
+
+const DEMO_EVENTS = [
+  { id: 'ev1', name: 'Third Term Examination', date: new Date(Date.now()+14*86400000).toISOString().slice(0,10), time: '08:00', type: 'exam', description: 'End of term examinations for all classes', notify_parents: true },
+  { id: 'ev2', name: 'PTA Meeting', date: new Date(Date.now()+7*86400000).toISOString().slice(0,10), time: '10:00', type: 'social', description: 'Parent-Teacher Association quarterly meeting', notify_parents: true },
+  { id: 'ev3', name: 'Sports Day', date: new Date(Date.now()+21*86400000).toISOString().slice(0,10), time: '08:00', type: 'sports', description: 'Annual inter-class sports competition', notify_parents: true },
+  { id: 'ev4', name: 'Prize Giving Day', date: new Date(Date.now()+28*86400000).toISOString().slice(0,10), time: '10:00', type: 'social', description: 'End of year prize giving ceremony for outstanding students', notify_parents: true },
+];
+
+// Attendance trend - last 30 days
+function buildDemoAttendanceTrend() {
+  const rows = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(Date.now() - i*86400000);
+    const dateStr = d.toISOString().slice(0,10);
+    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+    if (!isWeekend) {
+      DEMO_STUDENTS.forEach(s => {
+        const absent = Math.random() < 0.08; // 8% absence rate
+        rows.push({ date: dateStr, status: absent ? 'absent' : 'present', student_id: s.id });
+      });
+    }
+  }
+  return rows;
+}
+
+const DEMO_ATTENDANCE_TREND = buildDemoAttendanceTrend();
+
+const DEMO_FEES_SUMMARY = {
+  students: DEMO_STUDENTS.map(s => ({
+    id: s.id, name: s.name, class_name: s.class_name,
+    amount_due: s.amount_due, amount_paid: s.amount_paid,
+    balance: s.balance, fee_status: s.fee_status
+  })),
+  totals: {
+    expected: DEMO_STUDENTS.reduce((a,s) => a + s.amount_due, 0),
+    collected: DEMO_STUDENTS.reduce((a,s) => a + s.amount_paid, 0),
+    outstanding: DEMO_STUDENTS.reduce((a,s) => a + s.balance, 0),
+  }
+};
+
+// ── Demo API interceptor ──────────────────────────────────
+const DEMO_ROUTES = {
+  '/api/admin/dashboard': () => ({
+    conversations: 47, staff: DEMO_STAFF.length, outstanding_fees: DEMO_FEES_SUMMARY.totals.outstanding,
+    new_admissions: 3, school_name: DEMO_SCHOOL.name,
+    signin: DEMO_SIGNIN.map(s => ({ name: s.staff_name, submitted: true }))
+  }),
+  '/api/admin/school': () => DEMO_SCHOOL,
+  '/api/admin/staff': () => DEMO_STAFF,
+  '/api/admin/students': () => DEMO_STUDENTS,
+  '/api/admin/students/list': () => DEMO_STUDENTS,
+  '/api/admin/classes': () => ['JSS1B', 'JSS2A', 'JSS3A'],
+  '/api/admin/absentees/today': () => DEMO_ATTENDANCE.filter(a => a.status === 'absent'),
+  '/api/admin/signin-log': () => DEMO_SIGNIN,
+  '/api/admin/fees/summary': () => DEMO_FEES_SUMMARY,
+  '/api/admin/homeworks': () => DEMO_HOMEWORKS,
+  '/api/admin/events': () => DEMO_EVENTS,
+  '/api/admin/events/galleries': () => [],
+  '/api/admin/attendance': () => DEMO_ATTENDANCE_TREND,
+  '/api/admin/chats': () => DEMO_MESSAGES,
+  '/api/admin/results/stats': () => ({ uploaded: 12, pins: 8, accessed: 6, fee_pending: 3 }),
+  '/api/admin/results/pins': () => [],
+  '/api/admin/waitlist': () => ({ ok: true }),
+};
+
+// Student profile demo data
+function demoStudentProfile(id) {
+  const s = DEMO_STUDENTS.find(st => st.id === id);
+  if (!s) return null;
+  return {
+    student: { ...s, id },
+    fees: [{ amount_due: s.amount_due, amount_paid: s.amount_paid, status: s.fee_status }],
+    scores: [
+      { subject: 'Mathematics', score: s.weekly_performance_score - 5, uploaded_at: new Date().toISOString() },
+      { subject: 'English Language', score: s.weekly_performance_score + 3, uploaded_at: new Date().toISOString() },
+      { subject: 'Basic Science', score: s.weekly_performance_score - 8, uploaded_at: new Date().toISOString() },
+      { subject: 'Social Studies', score: s.weekly_performance_score + 1, uploaded_at: new Date().toISOString() },
+    ],
+    attendance: Array.from({length:10},(_,i) => ({
+      date: new Date(Date.now()-i*86400000).toISOString().slice(0,10),
+      status: Math.random() < 0.85 ? 'present' : 'absent'
+    })),
+    attendance_pct: s.weekly_performance_score > 60 ? 88 : 72,
+    hw_completion: s.weekly_performance_score > 60 ? 85 : 60,
+    risk: s.weekly_performance_score < 50 ? { risk_level: 'high', plan_text: 'Student requires additional support in core subjects. Recommend weekly check-ins with class teacher.' } : null
+  };
+}
+
+// Class summary demo
+function demoClassSummary(cls) {
+  const students = DEMO_STUDENTS.filter(s => s.class_name === cls);
+  return {
+    class_name: cls,
+    students: students.map(s => ({
+      id: s.id, name: s.name, class_name: s.class_name,
+      attendance_pct: 70 + Math.floor(Math.random()*25),
+      avg_score: s.weekly_performance_score,
+      hw_completion: 60 + Math.floor(Math.random()*35),
+      fee_status: s.fee_status, amount_due: s.amount_due, amount_paid: s.amount_paid
+    }))
+  };
+}
+
+// ── Patch api() for demo mode ─────────────────────────────
+const _realApi = api;
+async function api(url, opts = {}) {
+  if (!isDemoMode) return _realApi(url, opts);
+
+  // POST requests in demo mode — just succeed silently
+  if (opts.method && opts.method !== 'GET') {
+    await new Promise(r => setTimeout(r, 300)); // fake latency
+    return { ok: true, sent: 5, pending: 2 };
+  }
+
+  // Strip query params for matching
+  const baseUrl = url.split('?')[0];
+
+  // Student profile
+  if (baseUrl.match(/\/api\/admin\/students\/(.+)\/profile/)) {
+    const id = baseUrl.split('/')[4];
+    await new Promise(r => setTimeout(r, 200));
+    return demoStudentProfile(id) || { student: {}, fees: [], scores: [], attendance: [], attendance_pct: 0, hw_completion: 0, risk: null };
+  }
+
+  // Class summary
+  if (baseUrl.match(/\/api\/admin\/class-summary\//)) {
+    const cls = decodeURIComponent(baseUrl.split('/').pop());
+    await new Promise(r => setTimeout(r, 200));
+    return demoClassSummary(cls);
+  }
+
+  // Chats messages
+  if (baseUrl.match(/\/api\/admin\/chats\/.+\/messages/)) {
+    await new Promise(r => setTimeout(r, 200));
+    return [
+      { body: 'Good morning! How did my child do today?', direction: 'inbound', created_at: new Date(Date.now()-3600000).toISOString() },
+      { body: 'Good morning! Tobiloba had a great day. She scored 87% in today\'s Maths test and was present. 📚', direction: 'outbound', created_at: new Date(Date.now()-3500000).toISOString() },
+      { body: 'Wonderful! Thank you EduPing', direction: 'inbound', created_at: new Date(Date.now()-3400000).toISOString() },
+    ];
+  }
+
+  // Exact matches
+  if (DEMO_ROUTES[baseUrl]) {
+    await new Promise(r => setTimeout(r, 150 + Math.random()*150)); // realistic latency
+    return DEMO_ROUTES[baseUrl]();
+  }
+
+  // Fallback
+  console.log('[DEMO] Unhandled route:', url);
+  return {};
+}
+
+// ── Start Demo ────────────────────────────────────────────
+function startDemo() {
+  isDemoMode = true;
+  schoolId = DEMO_SCHOOL.id;
+  adminPassword = 'demo';
+  schoolData = DEMO_SCHOOL;
+  window._schoolName = DEMO_SCHOOL.name;
+
+  // Show demo banner
+  const banner = document.getElementById('demo-banner');
+  if (banner) banner.style.display = 'block';
+
+  onLoggedIn();
+  showToast('👀 Demo Mode — Greenfield Academy, Abuja');
+}
+
+
+
 async function api(url, opts = {}) {
   opts.headers = { 'Content-Type': 'application/json', 'x-school-id': schoolId, 'x-admin-password': adminPassword, ...(opts.headers || {}) };
   const res = await fetch(url, opts);
@@ -4036,7 +4403,187 @@ async function importResultCSV(event) {
 }
 
 
+
+// ── Dark Mode ─────────────────────────────────────────────
+function toggleDarkMode() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  const btn = document.getElementById('dark-toggle-btn');
+  if (btn) btn.textContent = isDark ? '🌙 Dark' : '☀️ Light';
+  localStorage.setItem('eduping-theme', isDark ? 'light' : 'dark');
+}
+
+// Init theme on load
+(function initTheme() {
+  const saved = localStorage.getItem('eduping-theme') || 'light';
+  document.documentElement.setAttribute('data-theme', saved);
+  const btn = document.getElementById('dark-toggle-btn');
+  if (btn) btn.textContent = saved === 'dark' ? '☀️ Light' : '🌙 Dark';
+})();
+
+// ── Animated Number Counter ───────────────────────────────
+function animateCount(el, target, prefix = '', suffix = '') {
+  if (!el) return;
+  const num = parseInt(String(target).replace(/[^0-9]/g, '')) || 0;
+  const duration = 800;
+  const steps = 30;
+  const increment = num / steps;
+  let current = 0;
+  let step = 0;
+  const timer = setInterval(() => {
+    step++;
+    current = Math.min(Math.round(increment * step), num);
+    el.textContent = prefix + current.toLocaleString() + suffix;
+    if (step >= steps) clearInterval(timer);
+  }, duration / steps);
+}
+
+// Patch stat cards to animate
+const _origSetStatText = (el, val) => { if (el) el.textContent = val; };
+function setStatAnimated(id, val, prefix = '', suffix = '') {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const num = parseInt(String(val).replace(/[^0-9]/g, ''));
+  if (!isNaN(num) && num > 0) animateCount(el, num, prefix, suffix);
+  else if (el) el.textContent = val;
+}
+
+// ── Dynamic Attendance Trend Chart ───────────────────────
+async function loadAttendanceTrend() {
+  const chart = document.getElementById('attend-trend-chart');
+  const labels = document.getElementById('attend-trend-labels');
+  if (!chart) return;
+  try {
+    const rows = await api('/api/admin/attendance?from=' + new Date(Date.now() - 29*86400000).toISOString().slice(0,10));
+    const days = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(Date.now() - i*86400000);
+      days.push({ date: d.toISOString().slice(0,10), label: d.toLocaleDateString('en-NG',{day:'numeric',month:'short'}) });
+    }
+    const byDate = {};
+    (rows || []).forEach(r => {
+      if (!byDate[r.date]) byDate[r.date] = { present: 0, total: 0 };
+      byDate[r.date].total++;
+      if (r.status === 'present') byDate[r.date].present++;
+    });
+    const maxTotal = Math.max(...days.map(d => (byDate[d.date]?.total || 0)), 1);
+
+    // Render bars at height 0 first then animate
+    chart.innerHTML = days.map((d, i) => {
+      const data = byDate[d.date];
+      const pct = data ? Math.round((data.present/data.total)*100) : 0;
+      const color = pct >= 80 ? 'var(--green)' : pct >= 60 ? '#f59e0b' : 'var(--danger)';
+      return '<div class="trend-bar" style="height:2px;background:' + color + ';flex:1;border-radius:3px 3px 0 0;transition:height .6s cubic-bezier(.4,0,.2,1);transition-delay:' + (i*20) + 'ms;" data-tip="' + d.label + ': ' + pct + '%" data-h="' + (data ? Math.max(4, Math.round((data.present/maxTotal)*56)) : 2) + '"></div>';
+    }).join('');
+
+    // Animate bars after paint
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        chart.querySelectorAll('.trend-bar').forEach(bar => {
+          bar.style.height = bar.getAttribute('data-h') + 'px';
+        });
+      }, 100);
+    });
+
+    labels.innerHTML = days.map((d, i) => '<div class="trend-label">' + (i % 5 === 0 ? d.label : '') + '</div>').join('');
+  } catch(e) {
+    if (chart) chart.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:10px;">No attendance data yet</div>';
+  }
+}
+
+// ── Section Switch with Animation ─────────────────────────
+// Patch switchSection to add fade transition
+const _baseSwitch = switchSection;
+function switchSection(name, btn) {
+  // Hide all sections with fade out
+  document.querySelectorAll('.dash-section').forEach(s => {
+    s.style.opacity = '0';
+    s.style.transform = 'translateY(8px)';
+  });
+  setTimeout(() => {
+    _baseSwitch(name, btn);
+    // The newly shown section gets animation from CSS keyframe
+    const activeSection = document.getElementById('section-' + name);
+    if (activeSection) {
+      activeSection.style.opacity = '';
+      activeSection.style.transform = '';
+    }
+  }, 120);
+}
+
+// ── Tooltip on trend bars ─────────────────────────────────
+document.addEventListener('mouseover', e => {
+  const bar = e.target.closest('.trend-bar');
+  if (!bar || !bar.dataset.tip) return;
+  let tip = document.getElementById('trend-tooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'trend-tooltip';
+    tip.style.cssText = 'position:fixed;background:#333;color:white;font-size:11px;padding:4px 8px;border-radius:4px;pointer-events:none;z-index:9999;white-space:nowrap;';
+    document.body.appendChild(tip);
+  }
+  tip.textContent = bar.dataset.tip;
+  tip.style.display = 'block';
+});
+document.addEventListener('mousemove', e => {
+  const tip = document.getElementById('trend-tooltip');
+  if (tip && tip.style.display === 'block') {
+    tip.style.left = (e.clientX + 10) + 'px';
+    tip.style.top = (e.clientY - 28) + 'px';
+  }
+});
+document.addEventListener('mouseout', e => {
+  if (!e.target.closest('.trend-bar')) {
+    const tip = document.getElementById('trend-tooltip');
+    if (tip) tip.style.display = 'none';
+  }
+});
+
+// ── Score chart bar animation ──────────────────────────────
+function renderScoreChart(subjects) {
+  const entries = Object.entries(subjects);
+  if (!entries.length) return '<div style="color:var(--text-muted);font-size:13px;">No scores recorded</div>';
+  const sorted = entries.sort((a,b) => b[1].avg - a[1].avg);
+  const html = '<div class="chart-bar-wrap">' + sorted.map(([subj, data]) => {
+    const avg = data.avg;
+    const fillClass = avg >= 70 ? '' : avg >= 50 ? 'gold' : 'danger';
+    const color = avg >= 70 ? 'var(--green)' : avg >= 50 ? '#f59e0b' : 'var(--danger)';
+    return '<div class="chart-bar-row">' +
+      '<div class="chart-bar-label" title="' + subj + '">' + subj + '</div>' +
+      '<div class="chart-bar-track"><div class="chart-bar-fill ' + fillClass + '" style="width:0%;background:' + color + ';" data-target="' + avg + '"></div></div>' +
+      '<div class="chart-bar-val">' + avg + '%</div></div>';
+  }).join('') + '</div>';
+  // Animate after render
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      document.querySelectorAll('.chart-bar-fill[data-target]').forEach(bar => {
+        bar.style.width = bar.getAttribute('data-target') + '%';
+      });
+    }, 100);
+  });
+  return html;
+}
+
+
 // ── Toast ─────────────────────────────────────────────────
+function exitDemo() {
+  isDemoMode = false;
+  schoolId = ''; adminPassword = ''; schoolData = null;
+  window._schoolName = '';
+  const banner = document.getElementById('demo-banner');
+  if (banner) banner.style.display = 'none';
+  document.getElementById('login-view').style.display = '';
+  switchSection('overview', document.querySelector('.subnav-btn'));
+  showView('login');
+  showToast('Demo ended — please log in with your school credentials');
+}
+
+function showView(view) {
+  document.querySelectorAll('.app-view,.login-wrap').forEach(v => v.style.display = 'none');
+  const el = document.getElementById(view + '-wrap') || document.getElementById(view + '-view');
+  if (el) el.style.display = '';
+}
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
