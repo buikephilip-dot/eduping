@@ -1803,6 +1803,7 @@ function onLoggedIn() {
   document.getElementById('dash-school-sub').textContent = schoolData.name;
   document.getElementById('dash-date').textContent = new Date().toLocaleDateString('en-NG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   switchView('dashboard', document.querySelectorAll('.tab-btn')[1]);
+  loadDashboard();
 }
 
 // ── View switching ────────────────────────────────────────
@@ -1815,44 +1816,50 @@ function switchView(view, btn) {
   if (view === 'chat') loadConversations();
 }
 
-const switchSection = function(name, btn) {
-  // Fade out all sections, then switch and let CSS keyframe animate the new one in
-  document.querySelectorAll('.dash-section').forEach(s => {
-    s.style.opacity = '0';
-    s.style.transform = 'translateY(8px)';
-  });
-  setTimeout(() => {
-    document.querySelectorAll('.dash-section').forEach(s => s.classList.remove('active'));
-    document.querySelectorAll('.subnav-btn').forEach(b => b.classList.remove('active'));
-    const activeSection = document.getElementById('section-' + name);
-    if (activeSection) {
-      activeSection.classList.add('active');
-      activeSection.style.opacity = '';
-      activeSection.style.transform = '';
-    }
-    if (btn) btn.classList.add('active');
-    if (name === 'students') loadStudents();
-    if (name === 'staff') { loadStaff(); loadSigninLog(); }
-    if (name === 'admissions') loadAdmissions();
-    if (name === 'sickbay') loadSickbay();
-    if (name === 'awards') loadAwards();
-    if (name === 'documents') loadDocuments();
-    if (name === 'appraisal') loadAppraisal();
-    if (name === 'usage') loadUsage();
-    if (name === 'chats') loadChats();
-    if (name === 'broadcast') loadBroadcast();
-    if (name === 'fees') loadFees();
-    if (name === 'classsummary') loadClassOptions();
-    if (name === 'events') loadEvents();
-    if (name === 'teacherchats') loadTeacherChats();
-    if (name === 'notifications') loadNotifications();
-    if (name === 'termcal') { loadTermCalendar(); loadExamSchedule(); }
-    if (name === 'performance') loadPerformanceRankings();
-    if (name === 'results') loadResults();
-  }, 120);
-};
+function switchSection(name, btn) {
+  document.querySelectorAll('.dash-section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.subnav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('section-' + name).classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (name === 'students') loadStudents();
+  if (name === 'staff') { loadStaff(); loadSigninLog(); }
+  if (name === 'admissions') loadAdmissions();
+  if (name === 'sickbay') loadSickbay();
+  if (name === 'awards') loadAwards();
+  if (name === 'documents') loadDocuments();
+  if (name === 'appraisal') loadAppraisal();
+  if (name === 'usage') loadUsage();
+  if (name === 'chats') loadChats();
+  if (name === 'broadcast') loadBroadcast();
+  if (name === 'fees') loadFees();
+  if (name === 'classsummary') loadClassOptions();
+  if (name === 'events') loadEvents();
+  if (name === 'teacherchats') loadTeacherChats();
+  if (name === 'notifications') loadNotifications();
+  if (name === 'termcal') { loadTermCalendar(); loadExamSchedule(); }
+  if (name === 'performance') loadPerformanceRankings();
+  if (name === 'results') loadResults();
+}
 
-// ── Dashboard data — see full definition below (line ~3266) ─
+// ── Dashboard data ────────────────────────────────────────
+async function loadDashboard() {
+  try {
+    const d = await api('/api/admin/dashboard');
+    document.getElementById('stat-conversations').textContent = d.conversations;
+    document.getElementById('stat-staff').textContent = d.staff;
+    document.getElementById('stat-fees').textContent = '₦' + Number(d.outstanding_fees || 0).toLocaleString();
+    document.getElementById('stat-admissions').textContent = d.new_admissions;
+    document.getElementById('admit-alert-sub').textContent = d.new_admissions + ' new inquiries pending';
+    renderSignins(d.signin);
+    loadRecentConvos();
+    loadAbsentees();
+  } catch(e) { console.log('Dashboard error:', e); }
+
+  // Attendance chart
+  const chart = document.getElementById('attend-chart');
+  const days = [{l:'Mon',p:94},{l:'Tue',p:88},{l:'Wed',p:91},{l:'Thu',p:96},{l:'Fri',p:91}];
+  chart.innerHTML = days.map(d => `<div class="attend-bar-wrap"><div class="attend-pct">${d.p}%</div><div class="attend-bar" style="height:90px"><div class="attend-bar-fill" style="height:${d.p}%"></div></div><div class="attend-label">${d.l}</div></div>`).join('');
+}
 
 function renderSignins(signins) {
   const el = document.getElementById('signin-today');
@@ -1928,7 +1935,7 @@ function renderStudentsGrouped(rows) {
           '<td>' + (r.weekly_performance_score||0) + '%</td>' +
           '<td style="display:flex;gap:6px;">' +
           '<button class="action-btn" onclick=\"openProfile('+r.id+')\">View</button>' +
-          '<button class="action-btn" style="color:var(--danger);border-color:var(--danger);" onclick=\"removeStudent(\''+r.id+'\',\''+r.name.replace(/'/g,'')+'\')">Remove</button>' +
+          '<button class="action-btn" style="color:var(--danger);border-color:var(--danger);" onclick=\"removeStudent('+r.id+',\'r.name \')">Remove</button>' +
           '</td></tr>';
       }).join('');
     }
@@ -2583,7 +2590,7 @@ function renderChatList(msgs) {
     ));
     const isActive = phone === activePhone;
     const time = last.created_at ? new Date(last.created_at).toLocaleTimeString('en-NG', {hour:'2-digit',minute:'2-digit'}) : '';
-    return '<div onclick="openChat(\'' + phone + '\')" style="padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--border);background:' + (isActive ? 'var(--green-pale)' : 'white') + ';transition:background .15s;">' +
+    return '<div onclick="openChat(\'phone \')" style="padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--border);background:' + (isActive ? 'var(--green-pale)' : 'white') + ';transition:background .15s;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
       '<span style="font-size:13px;font-weight:600;color:var(--text);">' + phone + '</span>' +
       '<span style="font-size:11px;color:var(--text-muted);">' + time + '</span>' +
@@ -2746,7 +2753,7 @@ async function openProfile(studentId) {
         '<div style="font-size:13px;display:flex;flex-direction:column;gap:8px;">' +
           '<div><strong>Parent:</strong> ' + (s.parent_name||'—') + '</div>' +
           '<div style="display:flex;align-items:center;gap:8px;"><strong>Phone:</strong> <span id="profile-phone">' + (s.parent_phone||'—') + '</span>' +
-          '<button class="action-btn" onclick="editParentPhone(\'' + s.id + '\')">Edit</button></div>' +
+          '<button class="action-btn" onclick="editParentPhone(\'s.id \')">Edit</button></div>' +
         '</div>' +
       '</div>' +
       '<div class="profile-section">' +
@@ -2759,8 +2766,8 @@ async function openProfile(studentId) {
           '<div><strong>Amount Due:</strong> ₦' + Number(fee.amount_due).toLocaleString() + '</div>' +
           '<div><strong>Amount Paid:</strong> ₦' + Number(fee.amount_paid).toLocaleString() + '</div>' +
           '<div><strong>Balance:</strong> ₦' + (Number(fee.amount_due) - Number(fee.amount_paid)).toLocaleString() + '</div>' +
-          '<button class="broadcast-btn" style="margin-top:8px;" onclick="openPaymentModal(\'' + s.id + '\',\'' + s.name.replace(/'/g,'') + '\')">💳 Record Payment</button>' +
-          '</div>' : '<div style="font-size:13px;color:var(--text-muted);">No fee record. <button class="action-btn" onclick="openPaymentModal(\'' + s.id + '\',\'' + s.name.replace(/'/g,'') + '\')">Add payment</button></div>') +
+          '<button class="broadcast-btn" style="margin-top:8px;" onclick="openPaymentModal(\'s.id \',\'s.name \')">💳 Record Payment</button>' +
+          '</div>' : '<div style="font-size:13px;color:var(--text-muted);">No fee record. <button class="action-btn" onclick="openPaymentModal(\'s.id \',\'s.name \')">Add payment</button></div>') +
       '</div>' +
       '<div class="profile-section">' +
         '<div class="profile-section-title">Risk & Intervention</div>' +
@@ -3264,14 +3271,14 @@ async function loadDashboard() {
     document.getElementById('stat-admissions').textContent = d.new_admissions;
     document.getElementById('admit-alert-sub').textContent = d.new_admissions + ' new inquiries pending';
     renderSignins(d.signin);
-    loadRecentConvos().catch(e => console.warn('Recent convos error:', e));
-    loadAbsentees().catch(e => console.warn('Absentees error:', e));
-    loadAttendanceTrend().catch(e => console.warn('Attendance trend error:', e));
-    loadLeaderboard().catch(e => console.warn('Leaderboard error:', e));
-    loadRiskBanner().catch(e => console.warn('Risk banner error:', e));
-    loadHomeworkHistory().catch(e => console.warn('Homework history error:', e));
+    loadRecentConvos();
+    loadAbsentees();
+    loadAttendanceTrend();
+    loadLeaderboard();
+    loadRiskBanner();
+    loadHomeworkHistory();
     window._schoolName = d.school_name || document.querySelector('.topnav-name')?.textContent || 'EduPing School';
-    loadUpcomingEventsWidget().catch(e => console.warn('Events widget error:', e));
+    loadUpcomingEventsWidget();
     // Update notification badge
     api('/api/admin/absentees/today').then(rows => {
       const badge = document.getElementById('notif-badge');
@@ -4410,12 +4417,12 @@ function toggleDarkMode() {
 }
 
 // Init theme on load
-document.addEventListener('DOMContentLoaded', function initTheme() {
+(function initTheme() {
   const saved = localStorage.getItem('eduping-theme') || 'light';
   document.documentElement.setAttribute('data-theme', saved);
   const btn = document.getElementById('dark-toggle-btn');
   if (btn) btn.textContent = saved === 'dark' ? '☀️ Light' : '🌙 Dark';
-});
+})();
 
 // ── Animated Number Counter ───────────────────────────────
 function animateCount(el, target, prefix = '', suffix = '') {
@@ -4485,6 +4492,26 @@ async function loadAttendanceTrend() {
   } catch(e) {
     if (chart) chart.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:10px;">No attendance data yet</div>';
   }
+}
+
+// ── Section Switch with Animation ─────────────────────────
+// Patch switchSection to add fade transition
+const _baseSwitch = switchSection;
+function switchSection(name, btn) {
+  // Hide all sections with fade out
+  document.querySelectorAll('.dash-section').forEach(s => {
+    s.style.opacity = '0';
+    s.style.transform = 'translateY(8px)';
+  });
+  setTimeout(() => {
+    _baseSwitch(name, btn);
+    // The newly shown section gets animation from CSS keyframe
+    const activeSection = document.getElementById('section-' + name);
+    if (activeSection) {
+      activeSection.style.opacity = '';
+      activeSection.style.transform = '';
+    }
+  }, 120);
 }
 
 // ── Tooltip on trend bars ─────────────────────────────────
