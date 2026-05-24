@@ -279,21 +279,6 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS idx_risk_school ON student_risk_scores(school_id, risk_level);
     CREATE INDEX IF NOT EXISTS idx_intervention_student ON intervention_plans(student_id);
   `);
-    // Fix events table column names for existing deployments
-    try { await q(`ALTER TABLE school_events RENAME COLUMN title TO name`); } catch(e) {}
-    try { await q(`ALTER TABLE school_events RENAME COLUMN event_date TO date`); } catch(e) {}
-    try { await q(`ALTER TABLE school_events ADD COLUMN IF NOT EXISTS time TEXT`); } catch(e) {}
-    try { await q(`ALTER TABLE school_events ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'social'`); } catch(e) {}
-    try { await q(`ALTER TABLE school_events ADD COLUMN IF NOT EXISTS description TEXT`); } catch(e) {}
-    try { await q(`ALTER TABLE school_events ADD COLUMN IF NOT EXISTS notify_parents BOOLEAN DEFAULT false`); } catch(e) {}
-    try { await q(`ALTER TABLE schools ADD COLUMN IF NOT EXISTS events_enabled BOOLEAN DEFAULT false`); } catch(e) {}
-    try { await q(`ALTER TABLE schools ADD COLUMN IF NOT EXISTS term_start DATE`); } catch(e) {}
-    try { await q(`ALTER TABLE schools ADD COLUMN IF NOT EXISTS term_end DATE`); } catch(e) {}
-    try { await q(`ALTER TABLE schools ADD COLUMN IF NOT EXISTS fee_deadline DATE`); } catch(e) {}
-    try { await q(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS email TEXT`); } catch(e) {}
-    try { await q(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active'`); } catch(e) {}
-    console.log('✅ Schema migrations applied');
-
 }
 
 async function seedIfEmpty() {
@@ -645,15 +630,7 @@ async function requireSchool(req, res, next) {
   const password = req.headers['x-admin-password'] || req.body.admin_password || req.query.admin_password;
   if (!schoolId || !password) return bad(res, 'Missing school_id or admin password', 401);
   const school = await getSchool(schoolId);
-  let pwValid = false;
-  if (school) {
-    if (school.admin_password && school.admin_password.startsWith('$2')) {
-      pwValid = await require('bcrypt').compare(password, school.admin_password);
-    } else {
-      pwValid = school.admin_password === password;
-    }
-  }
-  if (!school || !pwValid) return bad(res, 'Unauthorized school admin', 401);
+  if (!school || school.admin_password !== password) return bad(res, 'Unauthorized school admin', 401);
   req.school = school;
   next();
 }
@@ -927,25 +904,16 @@ app.post('/api/admin/students/import-bulk', requireSchool, async (req, res) => {
     const { students } = req.body;
     if (!students || !students.length) return res.status(400).json({ error: 'No students provided' });
     const sid = req.school.id;
-    // Filter valid rows and normalise phones
-    const valid = students.filter(s => s.name && s.name.trim());
-    const names = valid.map(s => s.name.trim());
-    const classes = valid.map(s => s.class_name || '');
-    const parentNames = valid.map(s => s.parent_name || '');
-    const parentPhones = valid.map(s => {
-      const p = String(s.parent_phone || '').trim();
-      if (!p) return '';
-      return p.startsWith('+') ? p : '+234' + p.replace(/^0/, '');
-    });
-    // Single bulk insert — ON CONFLICT DO NOTHING prevents duplicates
-    const result = await q(`
-      INSERT INTO students (school_id, name, class_name, parent_name, parent_phone, weekly_performance_score)
-      SELECT $1, unnest($2::text[]), unnest($3::text[]), unnest($4::text[]), unnest($5::text[]), 0
-      ON CONFLICT DO NOTHING
-    `, [sid, names, classes, parentNames, parentPhones]);
-    const imported = result.rowCount || 0;
-    const skipped = valid.length - imported;
-    res.json({ imported, skipped, total: students.length });
+    let imported = 0, skipped = 0;
+    for (const s of students) {
+      if (!s.name || !s.parent_phone) { skipped++; continue; }
+      const phone = s.parent_phone.startsWith('+') ? s.parent_phone : '+234' + s.parent_phone.replace(/^0/, '');
+      const existing = await q(`SELECT id FROM students WHERE school_id=$1 AND parent_phone=$2 AND name=$3 LIMIT 1`, [sid, phone, s.name]);
+      if (existing.rows.length) { skipped++; continue; }
+      await q(`INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6)`, [sid, s.name, s.class_name||'', s.parent_name||'', phone, 0]);
+      imported++;
+    }
+    res.json({ imported, skipped });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -996,7 +964,7 @@ app.post('/api/admin/students/import-pdf', requireSchool, async (req, res) => {
   try {
     const { pdfText } = req.body;
     if (!pdfText || pdfText.trim().length < 10) return res.status(400).json({ error: 'No PDF text provided.' });
-    const prompt = 'Extract ALL student records from this school register text. Return ONLY a JSON array, no explanation, no markdown: [{"name":"Full Name","class_name":"Class","parent_name":"Parent name if visible","parent_phone":"Phone if visible"}]. Text: ' + pdfText.replace(/ignore|forget|system|prompt|instruction/gi, '[...]').slice(0, 8000);
+    const prompt = 'Extract ALL student records from this school register text. Return ONLY a JSON array, no explanation, no markdown: [{"name":"Full Name","class_name":"Class","parent_name":"Parent name if visible","parent_phone":"Phone if visible"}]. Text: ' + pdfText.slice(0, 8000);
     const result = await callAI('You are a data extraction assistant. Extract student records and return only valid JSON array.', prompt, null);
     let students = [];
     try {
@@ -1403,12 +1371,7 @@ async function weeklyReports() {
   const schools = (await q(`SELECT * FROM schools WHERE status=$1`, ['active'])).rows;
   for (const school of schools) {
     const students = (await q(`SELECT * FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL`, [school.id])).rows;
-    let wkDelay = 0;
-    for (const st of students) {
-      await new Promise(r => setTimeout(r, wkDelay));
-      wkDelay += 200; // 200ms between sends — ~5 msg/sec
-      await twilioSend(st.parent_phone, school.twilio_number || process.env.TWILIO_DEFAULT_FROM, `Weekly report for ${st.name}: performance score ${st.weekly_performance_score || 0}%. For details, reply with your question. ${school.name} 🏫`).catch(e => console.warn('Weekly report failed:', st.name));
-    }
+    for (const st of students) await twilioSend(st.parent_phone, school.twilio_number || process.env.TWILIO_DEFAULT_FROM, `Weekly report for ${st.name}: performance score ${st.weekly_performance_score || 0}%. For details, reply with your question. ${school.name} 🏫`);
   }
 }
 async function dailyFeeReminders() {
@@ -1503,7 +1466,6 @@ app.get('/api/admin/school', requireSchool, async (req, res) => {
 // GET /api/admin/events
 app.get('/api/admin/events', requireSchool, async (req, res) => {
   try {
-    if (!req.school.events_enabled) return json(res, []);
     const rows = await q(`SELECT * FROM school_events WHERE school_id=$1 ORDER BY date ASC`, [req.school.id]);
     json(res, rows.rows);
   } catch(err) { bad(res, err.message, 500); }
@@ -1563,9 +1525,8 @@ app.post('/api/admin/events/notify-all', requireSchool, async (req, res) => {
     }).join('\n');
     const msg = `📅 *Upcoming Events — ${school.name}*\n\n${eventList}\n\nStay updated with EduPing!\n${school.name} 🏫`;
     let sent = 0;
-    let _d=0;
     for (const p of parents.rows) {
-      try { await new Promise(r=>setTimeout(r,_d)); _d+=150; await twilioSend(p.parent_phone, from, msg); sent++; } catch(e) {}
+      try { await twilioSend(p.parent_phone, from, msg); sent++; } catch(e) {}
     }
     json(res, { ok: true, sent });
   } catch(err) { bad(res, err.message, 500); }
@@ -1587,8 +1548,6 @@ app.post('/api/admin/events/:id/photos', requireSchool, async (req, res) => {
     const { image_data, filename, mime_type } = req.body;
     if (!image_data) return bad(res, 'image_data required');
 
-    // Ensure fetch is available (Node 18+)
-    const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
     // Upload to Cloudinary
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
     const apiKey = process.env.CLOUDINARY_API_KEY;
@@ -1598,8 +1557,7 @@ app.post('/api/admin/events/:id/photos', requireSchool, async (req, res) => {
     const timestamp = Math.round(Date.now() / 1000);
     const folder = 'eduping/' + req.school.id + '/events/' + req.params.id;
     const crypto = require('crypto');
-    const sigStr = 'folder=' + folder + '&timestamp=' + timestamp + apiSecret;
-    const sig = crypto.createHash('sha1').update(sigStr).digest('hex');
+    const sig = crypto.createHash('sha1').update('folder=' + folder + '&timestamp=' + timestamp + apiSecret).digest('hex');
 
     const formData = new URLSearchParams();
     formData.append('file', 'data:' + (mime_type||'image/jpeg') + ';base64,' + image_data);
@@ -1608,7 +1566,7 @@ app.post('/api/admin/events/:id/photos', requireSchool, async (req, res) => {
     formData.append('folder', folder);
     formData.append('signature', sig);
 
-    const uploadRes = await fetchFn('https://api.cloudinary.com/v1_1/' + cloudName + '/image/upload', {
+    const uploadRes = await fetch('https://api.cloudinary.com/v1_1/' + cloudName + '/image/upload', {
       method: 'POST',
       body: formData
     });
@@ -1639,7 +1597,7 @@ app.get('/api/admin/events/galleries', requireSchool, async (req, res) => {
     const galleries = await q(`SELECT * FROM event_galleries WHERE school_id=$1 ORDER BY created_at DESC`, [req.school.id]);
     const result = [];
     for (const g of galleries.rows) {
-      const photos = await q(`SELECT url, public_id FROM event_photos WHERE gallery_id=$1 AND school_id=$2 ORDER BY created_at DESC`, [g.id, req.school.id]);
+      const photos = await q(`SELECT url, public_id FROM event_photos WHERE gallery_id=$1 ORDER BY created_at DESC`, [g.id]);
       result.push({ ...g, photos: photos.rows, photo_count: photos.rows.length });
     }
     json(res, result);
@@ -1657,9 +1615,8 @@ app.post('/api/admin/events/:id/blast-gallery', requireSchool, async (req, res) 
     const from = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
     const msg = `📸 *${evtName} — Photo Gallery*\n\nDear parent, photos from *${evtName}* are now available!\n\nView and download your child's photos here:\n${share_url}\n\n${school.name} 🏫`;
     let sent = 0;
-    let _d=0;
     for (const p of parents.rows) {
-      try { await new Promise(r=>setTimeout(r,_d)); _d+=150; await twilioSend(p.parent_phone, from, msg); sent++; } catch(e) {}
+      try { await twilioSend(p.parent_phone, from, msg); sent++; } catch(e) {}
     }
     json(res, { ok: true, sent });
   } catch(err) { bad(res, err.message, 500); }
@@ -1766,7 +1723,6 @@ app.post('/api/waitlist', async (req, res) => {
 // GET /api/admin/waitlist — view all leads in dashboard
 app.get('/api/admin/waitlist', requireSchool, async (req, res) => {
   try {
-    if (req.headers['x-master-key'] !== process.env.MASTER_ADMIN_KEY) return bad(res, 'Forbidden', 403);
     const rows = await q(`SELECT * FROM waitlist ORDER BY created_at DESC`, []);
     json(res, rows.rows);
   } catch(err) { bad(res, err.message, 500); }
@@ -1799,32 +1755,29 @@ app.get('/api/admin/chats', requireSchool, async (req, res) => {
     const type = req.query.type || 'parent';
     let sql, rows;
     if (type === 'staff') {
+      // Get staff phones then their messages
       const staff = await q(`SELECT phone, name FROM staff WHERE school_id=$1 AND phone IS NOT NULL AND phone != ''`, [sid]);
       const result = [];
       for (const s of staff.rows) {
-        const phoneNum = s.phone.replace(/[^0-9]/g,'').slice(-9);
-        const last = await q(`SELECT user_message as body, created_at FROM messages WHERE school_id=$1 AND from_number LIKE $2 ORDER BY created_at DESC LIMIT 1`,
-          [sid, '%' + phoneNum + '%']);
+        const last = await q(`SELECT body, created_at, direction FROM messages WHERE school_id=$1 AND from_number LIKE $2 OR (school_id=$1 AND to_number LIKE $2) ORDER BY created_at DESC LIMIT 1`,
+          [sid, '%' + s.phone.replace('+','').slice(-9) + '%']);
         result.push({ phone: s.phone, name: s.name, last_message: last.rows[0]?.body?.slice(0,60) || '—', last_time: last.rows[0]?.created_at });
       }
       return json(res, result);
     }
-    // Parent chats — use actual columns
-    const parentRows = await q(`SELECT DISTINCT ON (from_number) from_number as phone, user_message as last_message, created_at as last_time
-      FROM messages WHERE school_id=$1 ORDER BY from_number, created_at DESC`, [sid]);
-    json(res, parentRows.rows);
+    // Parent chats (existing)
+    rows = await q(`SELECT DISTINCT ON (from_number) from_number as phone, body as last_message, created_at as last_time
+      FROM messages WHERE school_id=$1 AND direction='inbound' ORDER BY from_number, created_at DESC`, [sid]);
+    json(res, rows.rows);
   } catch(err) { bad(res, err.message, 500); }
 });
 
 // GET /api/admin/chats/:phone/messages
 app.get('/api/admin/chats/:phone/messages', requireSchool, async (req, res) => {
   try {
-    const phone = decodeURIComponent(req.params.phone).replace(/[^0-9]/g,'').slice(-10);
-    const rows = await q(`SELECT user_message as body, 'inbound' as direction, created_at FROM messages 
-      WHERE school_id=$1 AND from_number LIKE $2
-      UNION ALL
-      SELECT assistant_reply as body, 'outbound' as direction, created_at FROM messages
-      WHERE school_id=$1 AND from_number LIKE $2 AND assistant_reply IS NOT NULL
+    const phone = decodeURIComponent(req.params.phone).replace(/\D/g,'').slice(-10);
+    const rows = await q(`SELECT body, direction, created_at, role FROM messages 
+      WHERE school_id=$1 AND (from_number LIKE $2 OR to_number LIKE $2) 
       ORDER BY created_at ASC LIMIT 100`, [req.school.id, '%' + phone + '%']);
     json(res, rows.rows);
   } catch(err) { bad(res, err.message, 500); }
