@@ -1921,13 +1921,13 @@ function renderStudentsGrouped(rows) {
         const feeStatus = r.fee_status || 'no record';
         const feePill = feeStatus === 'paid' ? 'pill-green' : feeStatus === 'partial' ? 'pill-gold' : feeStatus === 'unpaid' ? 'pill-red' : 'pill-gray';
         return '<tr data-class="' + cls + '">' +
-          '<td><strong style="cursor:pointer;color:var(--green);" onclick=\"openProfile('+r.id+')\">' + r.name + '</strong></td>' +
+          '<td><strong style="cursor:pointer;color:var(--green);" onclick=\"openProfile(\''+r.id+'\')\">' + r.name + '</strong></td>' +
           '<td>' + (r.parent_name||'—') + '</td>' +
           '<td>' + (r.parent_phone||'—') + '</td>' +
           '<td><span class="pill ' + feePill + '">' + feeStatus + '</span></td>' +
           '<td>' + (r.weekly_performance_score||0) + '%</td>' +
           '<td style="display:flex;gap:6px;">' +
-          '<button class="action-btn" onclick=\"openProfile('+r.id+')\">View</button>' +
+          '<button class="action-btn" onclick=\"openProfile(\''+r.id+'\')\">View</button>' +
           '<button class="action-btn" style="color:var(--danger);border-color:var(--danger);" onclick=\"removeStudent(\''+r.id+'\',\''+r.name.replace(/'/g,'')+'\')">Remove</button>' +
           '</td></tr>';
       }).join('');
@@ -2172,10 +2172,12 @@ function renderStaffGrid(rows) {
   const grid = document.getElementById('staff-grid');
   if (!grid) return;
   grid.innerHTML = rows.map(s => {
-    const initials = s.name.split(' ').slice(1).map(n => n[0]).join('').slice(0,2) || s.name[0];
+    const parts = s.name.trim().split(' ');
+    const initials = parts.length > 1 ? parts.slice(0,2).map(n => n[0]).join('').toUpperCase() : s.name.slice(0,2).toUpperCase();
     const color = colors[Math.abs(s.name.charCodeAt(0)) % colors.length];
     const notSignedIn = todaySignedIn.size > 0 && !todaySignedIn.has(s.name);
-    return `<div class="staff-card" style="${notSignedIn ? 'border:2px solid var(--danger);' : ''}" onclick="${cardClick}" title="Click to view profile" style="cursor:pointer;">
+    const borderStyle = notSignedIn ? 'border:2px solid var(--danger);' : '';
+    return `<div class="staff-card" style="${borderStyle}cursor:pointer;" onclick="openStaffProfile('${s.id}')" title="Click to view profile">
       <div class="staff-avatar" style="background:${color}">${initials}</div>
       <div class="staff-name">${s.name}${notSignedIn ? '<span class="staff-no-signin">Not signed in</span>' : ''}</div>
       <div class="staff-role">${s.role}${s.subject?' — '+s.subject:''}</div>
@@ -2889,7 +2891,7 @@ function renderFeesTable(rows) {
         '<td>₦' + Number(r.amount_paid||0).toLocaleString() + '</td>' +
         '<td>₦' + Number(r.balance||0).toLocaleString() + '</td>' +
         '<td><span class="pill ' + pill + '">' + status + '</span></td>' +
-        '<td><button class="action-btn" onclick="openPaymentModal(\'r.id \',\'r.name \')">💳 Record</button></td>' +
+        '<td><button class="action-btn" onclick="openPaymentModal(\'' + r.id + '\',\'' + r.name.replace(/'/g,'') + '\')">💳 Record</button></td>' +
       '</tr>';
     }).join('') + '</tbody></table>';
 }
@@ -3237,7 +3239,7 @@ async function openProfile(studentId) {
       '<div style="font-size:13px;display:flex;flex-direction:column;gap:8px;">' +
       '<div><strong>Parent:</strong> ' + (s.parent_name||'—') + '</div>' +
       '<div style="display:flex;align-items:center;gap:8px;"><strong>Phone:</strong> <span>' + (s.parent_phone||'—') + '</span>' +
-      '<button class="action-btn" onclick="editParentPhone(\'s.id \')">Edit</button></div></div></div>' +
+      '<button class="action-btn" onclick="editParentPhone(\'' + s.id + '\')">Edit</button></div></div></div>' +
       '<div class="profile-section"><div class="profile-section-title">Score History</div>' + renderScoreChart(subjects) + '</div>' +
       '<div class="profile-section"><div class="profile-section-title">Fees</div>' +
       (fee
@@ -3245,8 +3247,8 @@ async function openProfile(studentId) {
           '<div><strong>Amount Due:</strong> ₦' + Number(fee.amount_due).toLocaleString() + '</div>' +
           '<div><strong>Amount Paid:</strong> ₦' + Number(fee.amount_paid).toLocaleString() + '</div>' +
           '<div><strong>Balance:</strong> ₦' + (Number(fee.amount_due)-Number(fee.amount_paid)).toLocaleString() + '</div>' +
-          '<button class="broadcast-btn" style="margin-top:8px;" onclick="openPaymentModal(\'s.id \',\'s.name \')">💳 Record Payment</button></div>'
-        : '<div style="font-size:13px;color:var(--text-muted);">No fee record. <button class="action-btn" onclick="openPaymentModal(\'s.id \',\'s.name \')">Add payment</button></div>') +
+          '<button class="broadcast-btn" style="margin-top:8px;" onclick="openPaymentModal(\'' + s.id + '\',\'' + s.name.replace(/'/g,'') + '\')">💳 Record Payment</button></div>'
+        : '<div style="font-size:13px;color:var(--text-muted);">No fee record. <button class="action-btn" onclick="openPaymentModal(\'' + s.id + '\',\'' + s.name.replace(/'/g,'') + '\')">Add payment</button></div>') +
       '</div>' +
       '<div class="profile-section"><div class="profile-section-title">Risk & Intervention</div>' + riskHtml + '</div>';
   } catch(e) {
