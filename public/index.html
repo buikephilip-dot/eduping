@@ -1878,16 +1878,13 @@ let allStudents = [];
 let collapsedClasses = new Set();
 
 async function loadStudents() {
+  const el = document.getElementById('students-grouped-list');
   try {
     allStudents = await api('/api/admin/students/list');
     renderStudentsGrouped(allStudents);
   } catch(e) {
-    try {
-      allStudents = await api('/api/admin/students');
-      renderStudentsGrouped(allStudents);
-    } catch(e2) {
-      document.getElementById('students-grouped-list').innerHTML = '<div class="loading" style="padding:20px;">Error loading students</div>';
-    }
+    console.error('loadStudents error:', e);
+    if (el) el.innerHTML = '<div class="loading" style="padding:20px;color:var(--danger);">Could not load students — ' + (e.message||'unknown error') + '</div>';
   }
 }
 
