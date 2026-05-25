@@ -1263,60 +1263,15 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
 
       <!-- TEACHER CHATS -->
       <div id="section-teacherchats" class="dash-section">
-        <!-- Attendance Upload Card -->
-        <div class="dash-card full" style="margin-bottom:18px;">
-          <div class="dash-card-header">
-            <div class="dash-card-title">📋 Upload Class Attendance</div>
-            <div style="font-size:12px;color:var(--text-muted);">Admin or teacher can mark attendance for any class below</div>
-          </div>
-          <div class="dash-card-body" style="padding:16px 18px;">
-            <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;margin-bottom:16px;">
-              <div class="form-group" style="margin-bottom:0;">
-                <label class="form-label">Select Class *</label>
-                <select class="form-select" id="att-class-select" onchange="loadAttendanceRoster()">
-                  <option value="">Choose class...</option>
-                </select>
-              </div>
-              <div class="form-group" style="margin-bottom:0;">
-                <label class="form-label">Date</label>
-                <input class="form-input" id="att-date" type="date">
-              </div>
-              <button class="broadcast-btn" style="white-space:nowrap;padding:10px 18px;" onclick="markAllPresent()">✅ Mark All Present</button>
-            </div>
-            <div id="attendance-roster" style="display:none;">
-              <div style="background:var(--green-pale);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:var(--green);display:flex;align-items:center;justify-content:space-between;">
-                <span id="att-roster-summary">0 students</span>
-                <div style="display:flex;gap:8px;">
-                  <button class="qr-btn" style="font-size:12px;" onclick="setAllStatus('present')">✅ All Present</button>
-                  <button class="qr-btn" style="font-size:12px;border-color:var(--danger);color:var(--danger);" onclick="setAllStatus('absent')">❌ All Absent</button>
-                </div>
-              </div>
-              <div id="att-roster-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;max-height:300px;overflow-y:auto;padding:4px 0;"></div>
-              <div style="margin-top:14px;display:flex;gap:10px;align-items:center;">
-                <button class="broadcast-btn" onclick="submitAttendance()" style="max-width:220px;">📤 Submit Attendance</button>
-                <span style="font-size:12px;color:var(--text-muted);" id="att-submit-note">Parents of absent students will be notified via WhatsApp</span>
-              </div>
-            </div>
-            <div id="att-roster-loading" style="display:none;text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Loading students...</div>
-          </div>
-        </div>
-
-        <!-- Teacher Conversation Viewer -->
         <div class="dash-card full">
           <div class="dash-card-header">
             <div class="dash-card-title">💬 Teacher Conversations</div>
             <input class="search-box" id="teacher-chat-search" placeholder="Search teacher..." oninput="filterTeacherChats()" style="width:180px;font-size:13px;">
           </div>
-          <div style="display:flex;height:480px;overflow:hidden;border-top:1px solid #f0f2f5;">
+          <div style="display:flex;height:520px;overflow:hidden;">
             <div id="teacher-chat-list" style="width:280px;border-right:1px solid #f0f2f5;overflow-y:auto;flex-shrink:0;"><div class="loading" style="padding:20px;">Loading...</div></div>
-            <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
-              <div id="teacher-chat-messages" style="flex:1;overflow-y:auto;padding:16px;background:var(--gray-bg);">
-                <div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px;">Select a teacher to view their conversation</div>
-              </div>
-              <div id="teacher-reply-bar" style="display:none;padding:12px 16px;border-top:1px solid #e9edef;background:white;gap:8px;align-items:center;">
-                <input class="form-input" id="teacher-reply-input" placeholder="Reply to this teacher via WhatsApp..." style="margin:0;flex:1;">
-                <button class="broadcast-btn" style="margin:0;padding:8px 16px;white-space:nowrap;" onclick="sendTeacherReply()">Send ↗</button>
-              </div>
+            <div id="teacher-chat-messages" style="flex:1;overflow-y:auto;padding:16px;background:var(--gray-bg);">
+              <div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px;">Select a teacher to view their conversation</div>
             </div>
           </div>
         </div>
@@ -1704,7 +1659,6 @@ const DEMO_ROUTES = {
   '/api/admin/results/stats': () => ({ uploaded: 12, pins: 8, accessed: 6, fee_pending: 3 }),
   '/api/admin/results/pins': () => [],
   '/api/admin/waitlist': () => ({ ok: true }),
-  '/api/admin/attendance/bulk': () => ({ ok: true }),
 };
 
 // Student profile demo data
@@ -1890,7 +1844,7 @@ const switchSection = function(name, btn) {
     if (name === 'fees') loadFees();
     if (name === 'classsummary') loadClassOptions();
     if (name === 'events') loadEvents();
-    if (name === 'teacherchats') { loadTeacherChats(); loadAttendanceClasses(); }
+    if (name === 'teacherchats') loadTeacherChats();
     if (name === 'notifications') loadNotifications();
     if (name === 'termcal') { loadTermCalendar(); loadExamSchedule(); }
     if (name === 'performance') loadPerformanceRankings();
@@ -2985,18 +2939,11 @@ async function submitPayment() {
 let classSummaryData = [];
 
 async function loadClassOptions() {
+  const select = document.getElementById('class-select');
+  if (!select) return;
   try {
     const classes = await api('/api/admin/classes');
-    // Populate Class View dropdown
-    const select = document.getElementById('class-select');
-    if (select) {
-      select.innerHTML = '<option value="">Select class...</option>' + classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
-    }
-    // Also populate attendance class dropdown if it exists
-    const attSel = document.getElementById('att-class-select');
-    if (attSel && attSel.options.length <= 1) {
-      attSel.innerHTML = '<option value="">Choose class...</option>' + classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
-    }
+    select.innerHTML = '<option value="">Select class...</option>' + classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
   } catch(e) { console.log('Could not load classes'); }
 }
 
@@ -3676,118 +3623,6 @@ async function loadUpcomingEventsWidget() {
 
 
 // ══════════════════════════════════════════════════════════
-// ATTENDANCE ROSTER UPLOAD (Teacher/Admin side)
-// ══════════════════════════════════════════════════════════
-let rosterStudents = [];
-let activeTeacherPhoneReply = '';
-
-async function loadAttendanceClasses() {
-  const sel = document.getElementById('att-class-select');
-  if (!sel) return;
-  // Set today's date default
-  const dateEl = document.getElementById('att-date');
-  if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0,10);
-  try {
-    const classes = await api('/api/admin/classes');
-    sel.innerHTML = '<option value="">Choose class...</option>' + classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
-  } catch(e) { console.log('Could not load classes for attendance'); }
-}
-
-async function loadAttendanceRoster() {
-  const cls = document.getElementById('att-class-select')?.value;
-  const rosterDiv = document.getElementById('attendance-roster');
-  const loadingDiv = document.getElementById('att-roster-loading');
-  const listDiv = document.getElementById('att-roster-list');
-  if (!cls) { if (rosterDiv) rosterDiv.style.display = 'none'; return; }
-  if (rosterDiv) rosterDiv.style.display = 'none';
-  if (loadingDiv) loadingDiv.style.display = 'block';
-  try {
-    const students = await api('/api/admin/students/list');
-    rosterStudents = students.filter(s => s.class_name === cls);
-    if (loadingDiv) loadingDiv.style.display = 'none';
-    if (!rosterStudents.length) { showToast('No students in ' + cls); return; }
-    if (rosterDiv) rosterDiv.style.display = 'block';
-    const summaryEl = document.getElementById('att-roster-summary');
-    if (summaryEl) summaryEl.textContent = rosterStudents.length + ' students in ' + cls;
-    renderRoster();
-  } catch(e) {
-    if (loadingDiv) loadingDiv.style.display = 'none';
-    showToast('Could not load students ❌');
-  }
-}
-
-function renderRoster() {
-  const listDiv = document.getElementById('att-roster-list');
-  if (!listDiv) return;
-  listDiv.innerHTML = rosterStudents.map((s, i) => {
-    return '<div style="display:flex;align-items:center;gap:10px;background:white;border-radius:8px;padding:10px 12px;border:1.5px solid #e9edef;" id="att-row-' + i + '">' +
-      '<div style="flex:1;min-width:0;">' +
-        '<div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + s.name + '</div>' +
-        '<div style="font-size:11px;color:var(--text-muted);">' + (s.parent_name||'—') + '</div>' +
-      '</div>' +
-      '<div style="display:flex;gap:6px;">' +
-        '<button onclick="setStudentStatus(' + i + ',\'present\')" id="btn-present-' + i + '" style="background:var(--green);color:white;border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;font-family:\'DM Sans\',sans-serif;font-weight:600;">✅ P</button>' +
-        '<button onclick="setStudentStatus(' + i + ',\'absent\')" id="btn-absent-' + i + '" style="background:#f0f2f5;color:var(--text-muted);border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;font-family:\'DM Sans\',sans-serif;">❌ A</button>' +
-      '</div>' +
-    '</div>';
-  }).join('');
-  // Default all to present
-  rosterStudents.forEach((s, i) => { s._status = 'present'; highlightAttStatus(i, 'present'); });
-}
-
-function setStudentStatus(i, status) {
-  rosterStudents[i]._status = status;
-  highlightAttStatus(i, status);
-}
-
-function highlightAttStatus(i, status) {
-  const pBtn = document.getElementById('btn-present-' + i);
-  const aBtn = document.getElementById('btn-absent-' + i);
-  const row = document.getElementById('att-row-' + i);
-  if (!pBtn || !aBtn) return;
-  if (status === 'present') {
-    pBtn.style.background = 'var(--green)'; pBtn.style.color = 'white';
-    aBtn.style.background = '#f0f2f5'; aBtn.style.color = 'var(--text-muted)';
-    if (row) row.style.borderColor = 'var(--green)';
-  } else {
-    aBtn.style.background = 'var(--danger)'; aBtn.style.color = 'white';
-    pBtn.style.background = '#f0f2f5'; pBtn.style.color = 'var(--text-muted)';
-    if (row) row.style.borderColor = 'var(--danger)';
-  }
-}
-
-function setAllStatus(status) {
-  rosterStudents.forEach((s, i) => { s._status = status; highlightAttStatus(i, status); });
-  const presentCount = rosterStudents.filter(s => s._status === 'present').length;
-  const summaryEl = document.getElementById('att-roster-summary');
-  if (summaryEl) summaryEl.textContent = rosterStudents.length + ' students · ' + presentCount + ' present, ' + (rosterStudents.length - presentCount) + ' absent';
-}
-
-function markAllPresent() {
-  const cls = document.getElementById('att-class-select')?.value;
-  if (!cls) { showToast('Select a class first ❌'); return; }
-  if (!rosterStudents.length) { loadAttendanceRoster().then(() => setAllStatus('present')); return; }
-  setAllStatus('present');
-  showToast('All marked as present — click Submit to save ✅');
-}
-
-async function submitAttendance() {
-  const cls = document.getElementById('att-class-select')?.value;
-  const date = document.getElementById('att-date')?.value;
-  if (!cls) { showToast('Select a class first ❌'); return; }
-  if (!rosterStudents.length) { showToast('Load the roster first ❌'); return; }
-  const records = rosterStudents.map(s => ({ student_id: s.id, status: s._status || 'present', date: date || new Date().toISOString().slice(0,10) }));
-  const presentCount = records.filter(r => r.status === 'present').length;
-  const absentCount = records.length - presentCount;
-  try {
-    await api('/api/admin/attendance/bulk', { method: 'POST', body: JSON.stringify({ class_name: cls, date: date || new Date().toISOString().slice(0,10), records }) });
-    showToast('✅ Attendance saved! ' + presentCount + ' present, ' + absentCount + ' absent. Parents of absent students notified.');
-    // Reload absentees dashboard card
-    loadAbsentees();
-  } catch(e) { showToast('Failed to submit ❌ ' + (e.message || '')); }
-}
-
-// ══════════════════════════════════════════════════════════
 // TEACHER CHATS
 // ══════════════════════════════════════════════════════════
 let allTeacherChats = [];
@@ -3797,25 +3632,11 @@ async function loadTeacherChats() {
   const listEl = document.getElementById('teacher-chat-list');
   if (!listEl) return;
   try {
-    // In demo mode, build teacher chat list from DEMO_STAFF
-    let data;
-    if (typeof isDemoMode !== 'undefined' && isDemoMode) {
-      data = DEMO_STAFF.filter(s => s.phone).map(s => ({
-        phone: s.phone,
-        name: s.name,
-        last_message: s.class ? 'Teaching ' + s.class + ' — ' + s.subject : 'Staff member',
-        last_time: new Date(Date.now() - Math.random()*3600000*5).toISOString()
-      }));
-    } else {
-      data = await api('/api/admin/chats?type=staff');
-    }
+    const data = await api('/api/admin/chats?type=staff');
     allTeacherChats = data || [];
-    if (!allTeacherChats.length) {
-      listEl.innerHTML = '<div style="padding:16px;font-size:13px;color:var(--text-muted);text-align:center;line-height:1.6;">No teacher conversations yet.<br><span style="font-size:11px;">Teachers message EduPing on WhatsApp to sign in, set homework, and upload attendance.</span></div>';
-      return;
-    }
     renderTeacherChatList(allTeacherChats);
   } catch(e) {
+    // fallback - try loading from messages with staff filter
     listEl.innerHTML = '<div style="padding:16px;font-size:13px;color:var(--text-muted);">No teacher conversations yet</div>';
   }
 }
@@ -3838,28 +3659,13 @@ function renderTeacherChatList(chats) {
 
 async function openTeacherChat(phone, name) {
   activeTeacherPhone = phone;
-  activeTeacherPhoneReply = phone;
   renderTeacherChatList(allTeacherChats);
   const msgEl = document.getElementById('teacher-chat-messages');
-  const replyBar = document.getElementById('teacher-reply-bar');
   msgEl.innerHTML = '<div class="loading" style="padding:20px;">Loading messages...</div>';
   try {
-    let messages;
-    if (typeof isDemoMode !== 'undefined' && isDemoMode) {
-      // Generate demo messages for this teacher
-      const staffMember = DEMO_STAFF.find(s => s.phone === phone);
-      messages = [
-        { body: 'Good morning', direction: 'inbound', created_at: new Date(Date.now()-7200000).toISOString() },
-        { body: '✅ ' + (staffMember?.name||name) + ', your sign in has been recorded. Greenfield Academy 🏫', direction: 'outbound', created_at: new Date(Date.now()-7190000).toISOString() },
-        { body: 'homework: Read chapter 5 of the textbook and answer questions 1-10 on page 78. Due Friday.', direction: 'inbound', created_at: new Date(Date.now()-3600000).toISOString() },
-        { body: '✅ Homework saved for ' + (staffMember?.class||'your class') + '. Parents have been notified via WhatsApp. Greenfield Academy 🏫', direction: 'outbound', created_at: new Date(Date.now()-3590000).toISOString() },
-      ];
-    } else {
-      messages = await api('/api/admin/chats/' + encodeURIComponent(phone) + '/messages');
-    }
-    if (!messages || !messages.length) {
+    const messages = await api('/api/admin/chats/' + encodeURIComponent(phone) + '/messages');
+    if (!messages.length) {
       msgEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px;">No messages yet</div>';
-      if (replyBar) replyBar.style.display = 'flex';
       return;
     }
     msgEl.innerHTML = messages.map(m => {
@@ -3871,32 +3677,9 @@ async function openTeacherChat(phone, name) {
         '</div></div>';
     }).join('');
     msgEl.scrollTop = msgEl.scrollHeight;
-    if (replyBar) replyBar.style.display = 'flex';
   } catch(e) {
     msgEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px;">Could not load messages</div>';
   }
-}
-
-async function sendTeacherReply() {
-  const msg = document.getElementById('teacher-reply-input')?.value?.trim();
-  if (!msg || !activeTeacherPhoneReply) { showToast('Type a message first ❌'); return; }
-  try {
-    await api('/api/admin/send-message', { method:'POST', body: JSON.stringify({ to: activeTeacherPhoneReply, message: msg }) });
-    document.getElementById('teacher-reply-input').value = '';
-    showToast('✅ Message sent to teacher via WhatsApp!');
-    // Append message to chat window
-    const msgEl = document.getElementById('teacher-chat-messages');
-    if (msgEl) {
-      const div = document.createElement('div');
-      div.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:8px;';
-      div.innerHTML = '<div style="max-width:75%;background:var(--green-bubble);border-radius:12px 0 12px 12px;padding:8px 12px;font-size:13px;box-shadow:0 1px 2px rgba(0,0,0,.08);">' +
-        '<div style="line-height:1.5;">' + msg + '</div>' +
-        '<div style="font-size:10px;color:var(--text-muted);text-align:right;margin-top:3px;">' + new Date().toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit'}) + ' (Admin)</div>' +
-        '</div>';
-      msgEl.appendChild(div);
-      msgEl.scrollTop = msgEl.scrollHeight;
-    }
-  } catch(e) { showToast('Failed to send ❌'); }
 }
 
 function filterTeacherChats() {
