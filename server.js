@@ -914,6 +914,31 @@ for (const [table, fields] of crud) {
     json(res, (await q(sql, [req.school.id, ...vals])).rows[0], 201);
   });
 }
+// ── Student list with fee status (used by dashboard student tab) ──
+app.get('/api/admin/students/list', requireSchool, async (req, res) => {
+  try {
+    const rows = await q(`
+      SELECT s.*,
+        f.status  AS fee_status,
+        f.amount_due,
+        f.amount_paid,
+        COALESCE(f.amount_due - f.amount_paid, 0) AS balance
+      FROM students s
+      LEFT JOIN LATERAL (
+        SELECT status, amount_due, amount_paid
+        FROM fees
+        WHERE student_id = s.id
+        ORDER BY due_date DESC
+        LIMIT 1
+      ) f ON true
+      WHERE s.school_id = $1
+      ORDER BY s.class_name, s.name
+      LIMIT 500
+    `, [req.school.id]);
+    json(res, rows.rows);
+  } catch(err) { json(res, { error: err.message }, 500); }
+});
+
 // ── Student bulk import (Excel/CSV) ──────────────────────
 app.post('/api/admin/students/import-bulk', requireSchool, async (req, res) => {
   try {
