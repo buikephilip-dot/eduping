@@ -444,14 +444,16 @@ function demoReply(text, system = '') {
 }
 
 async function buildStudentContext(school, student) {
+  // Each query is wrapped individually so a missing table/column never crashes the whole context
+  const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('[buildStudentContext]', e.message); return { rows: [] }; } };
   const [attendance, scores, fees, homeworks, events, notes, sickbay] = await Promise.all([
-    q('SELECT date,status FROM attendance WHERE school_id=$1 AND student_id=$2 ORDER BY date DESC LIMIT 10', [school.id, student.id]),
-    q('SELECT subject,score,term FROM scores WHERE school_id=$1 AND student_id=$2 ORDER BY uploaded_at DESC LIMIT 10', [school.id, student.id]),
-    q('SELECT term,amount_due,amount_paid,status,due_date FROM fees WHERE school_id=$1 AND student_id=$2 ORDER BY due_date DESC LIMIT 5', [school.id, student.id]),
-    q('SELECT subject,description,due_date FROM homeworks WHERE school_id=$1 AND class_name=$2 ORDER BY created_at DESC LIMIT 5', [school.id, student.class_name]),
-    q('SELECT title,event_date FROM school_events WHERE school_id=$1 ORDER BY event_date ASC LIMIT 5', [school.id]),
-    q('SELECT note,created_at FROM behaviour_notes WHERE school_id=$1 AND student_id=$2 ORDER BY created_at DESC LIMIT 5', [school.id, student.id]),
-    q('SELECT reason,action_taken,visited_at FROM sickbay_log WHERE school_id=$1 AND student_id=$2 ORDER BY visited_at DESC LIMIT 5', [school.id, student.id])
+    safe(() => q('SELECT date,status FROM attendance WHERE school_id=$1 AND student_id=$2 ORDER BY date DESC LIMIT 10', [school.id, student.id])),
+    safe(() => q('SELECT subject,score,term FROM scores WHERE school_id=$1 AND student_id=$2 ORDER BY uploaded_at DESC LIMIT 10', [school.id, student.id])),
+    safe(() => q('SELECT term,amount_due,amount_paid,status FROM fees WHERE school_id=$1 AND student_id=$2 LIMIT 5', [school.id, student.id])),
+    safe(() => q('SELECT subject,description,due_date FROM homeworks WHERE school_id=$1 AND class_name=$2 ORDER BY created_at DESC LIMIT 5', [school.id, student.class_name])),
+    safe(() => q('SELECT title,event_date FROM school_events WHERE school_id=$1 ORDER BY event_date ASC LIMIT 5', [school.id])),
+    safe(() => q('SELECT note,created_at FROM behaviour_notes WHERE school_id=$1 AND student_id=$2 ORDER BY created_at DESC LIMIT 5', [school.id, student.id])),
+    safe(() => q('SELECT reason,action_taken,visited_at FROM sickbay_log WHERE school_id=$1 AND student_id=$2 ORDER BY visited_at DESC LIMIT 5', [school.id, student.id]))
   ]);
   return { school, student, attendance: attendance.rows, scores: scores.rows, fees: fees.rows, homeworks: homeworks.rows, events: events.rows, notes: notes.rows, sickbay: sickbay.rows };
 }
@@ -843,7 +845,9 @@ app.post('/api/chat', async (req, res) => {
     json(res, { ok: true, reply, school_id: school.id, provider: process.env.DEEPSEEK_API_KEY ? 'deepseek' : 'demo' });
   } catch (err) {
     console.error('/api/chat error:', err);
-    json(res, { ok: false, reply: 'EduPing demo mode: I received your message, but the chat service hit a backend error. Check Railway logs for details. EduPing 🏫' }, 500);
+    const errMsg = err?.message || String(err);
+    console.error('[/api/chat] crash detail:', errMsg);
+    json(res, { ok: false, reply: `EduPing: Chat hit an error — ${errMsg}. EduPing 🏫`, error: errMsg }, 500);
   }
 });
 
