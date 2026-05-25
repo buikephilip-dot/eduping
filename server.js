@@ -278,7 +278,6 @@ async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS idx_risk_school ON student_risk_scores(school_id, risk_level);
     CREATE INDEX IF NOT EXISTS idx_intervention_student ON intervention_plans(student_id);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_student_date ON attendance(school_id, student_id, date);
   `);
 }
 
@@ -496,12 +495,11 @@ async function handleIncomingWhatsApp(req, res) {
   if (!school || school.status !== 'active') return res.type('text/xml').send(new twilio.twiml.MessagingResponse().message('School account is not active. Please contact EduPing support.').toString());
 
   let reply = '';
+  // Match staff by exact phone OR last 9 digits (handles +234 vs 0 format differences)
+  const last9 = String(from).replace(/\D/g,'').slice(-9);
   const staffLookup = await q(
-    `SELECT * FROM staff WHERE school_id=$1 AND (
-      phone=$2 OR
-      regexp_replace(phone,'[^0-9]','','g') LIKE '%' || right(regexp_replace($2,'[^0-9]','','g'),9)
-    ) LIMIT 1`,
-    [school.id, from]
+    `SELECT * FROM staff WHERE school_id=$1 AND (phone=$2 OR right(regexp_replace(phone,'[^0-9]','','g'),9)=$3) LIMIT 1`,
+    [school.id, from, last9]
   );
   const staff = staffLookup;
   if (staff.rowCount) reply = await processTeacher(school, staff.rows[0], body, mediaUrl, mediaType);
@@ -597,67 +595,16 @@ async function processTeacher(school, staff, body, mediaUrl, mediaType) {
   // Voice notes arrive as mediaUrl with audio content type — reject before sign-in branch
   const isVoiceNote = mediaUrl && (mediaType || '').includes('audio');
   if (isVoiceNote) {
-    return `🎤 Voice message received, ${staff.name}. Please *type* your message so EduPing can process it correctly.\n\nExamples:\n• "good morning" — sign in\n• "homework: Chapter 3 Q1-5 due Friday" — assign homework\n• "attendance: all present" — mark class present\n• "absent: Emeka, Fatima" — mark specific students absent\n\n${school.name} 🏫`;
+    return `🎤 Voice message received, ${staff.name}. Please *type* your message so EduPing can process it correctly.\n\nExamples:\n• "good morning" — sign in\n• "homework: Chapter 3 Q1-5 due Friday" — assign homework\n\n${school.name} 🏫`;
   }
 
   const isImage = mediaUrl && (mediaType || '').includes('image');
-  if (lower.includes('sign in') || lower.includes('good morning') || (isImage && !lower.includes('attendance') && !lower.includes('absent') && !lower.includes('present'))) {
-    await q(`INSERT INTO signin_log (school_id,staff_id,date,time,status,photo_verified) VALUES ($1,$2,current_date,to_char(now(),'HH24:MI'),$3,$4)`, [school.id, staff.id, 'submitted', Boolean(isImage)]);
-    return `✅ ${staff.name}, your sign in has been recorded at ${new Date().toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit'})}. ${school.name} 🏫`;
+  if (lower.includes('sign in') || lower.includes('good morning') || isImage) {
+    await q(`INSERT INTO signin_log (school_id,staff_id,date,time,status,photo_verified) VALUES ($1,$2,current_date,to_char(now(),\'HH24:MI\'),$3,$4)`, [school.id, staff.id, 'submitted', Boolean(isImage)]);
+    return `✅ ${staff.name}, your sign in has been recorded. ${school.name} 🏫`;
   }
-
-  // ── Attendance via WhatsApp ──────────────────────────────
-  const isAttendanceMsg = lower.includes('attendance') || lower.includes('all present') || lower.includes('everyone present') || lower.includes('absent:') || lower.startsWith('absent ');
-
-  if (isAttendanceMsg && staff.class) {
-    const students = (await q('SELECT * FROM students WHERE school_id=$1 AND class_name=$2', [school.id, staff.class])).rows;
-    if (!students.length) {
-      return `⚠️ No students found for your class (${staff.class}). Please ask the admin to import students first. ${school.name} 🏫`;
-    }
-
-    let absentNames = [];
-    // Parse "absent: Name1, Name2, Name3" or "all present" / "everyone present"
-    const absentMatch = body.match(/absent[:\s]+(.+)/i);
-    if (absentMatch) {
-      absentNames = absentMatch[1].split(/[,;]+/).map(n => n.trim().toLowerCase()).filter(Boolean);
-    }
-
-    const allPresent = lower.includes('all present') || lower.includes('everyone present') || (lower.includes('attendance') && !absentMatch);
-
-    let presentCount = 0, absentCount = 0, notified = 0;
-    const fromNumber = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
-
-    for (const student of students) {
-      const nameMatch = absentNames.some(n => student.name.toLowerCase().includes(n) || n.includes(student.name.toLowerCase().split(' ')[0]));
-      const status = (!allPresent && nameMatch) ? 'absent' : 'present';
-
-      await q(
-        `INSERT INTO attendance (school_id,student_id,date,status) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
-        [school.id, student.id, today, status]
-      ).catch(() =>
-        q('INSERT INTO attendance (school_id,student_id,date,status) VALUES ($1,$2,$3,$4)', [school.id, student.id, today, status])
-      );
-
-      if (status === 'present') presentCount++;
-      else {
-        absentCount++;
-        if (hasTwilio() && student.parent_phone) {
-          const dateStr = new Date().toLocaleDateString('en-NG', { weekday:'long', day:'numeric', month:'long' });
-          const msg = `📋 *Attendance Alert — ${school.name}*\n\nDear ${student.parent_name||'Parent'},\n\n*${student.name}* was marked *absent* today, ${dateStr}.\n\nIf this is an error, please contact the school directly.\n\n${school.name} 🏫`;
-          try { await twilioSend(student.parent_phone, fromNumber, msg); notified++; } catch(e) {}
-        }
-      }
-    }
-
-    // Update staff submissions count
-    await q('UPDATE staff SET attendance_submissions=attendance_submissions+1 WHERE id=$1 AND school_id=$2', [staff.id, school.id]);
-
-    const absentList = absentCount > 0 ? `\n\nAbsent: ${absentNames.join(', ') || absentCount + ' student(s)'}` : '';
-    return `✅ *Attendance recorded for ${staff.class}*\n\n✅ Present: ${presentCount}\n❌ Absent: ${absentCount}${absentList}\n\nParents of absent students have been notified.${notified > 0 ? ' (' + notified + ' WhatsApp messages sent)' : ''}\n\n${school.name} 🏫`;
-  }
-
   if (lower.includes('homework') || lower.includes('assignment')) {
-    await q(`INSERT INTO homeworks (school_id,assigned_by,class_name,subject,description,due_date) VALUES ($1,$2,$3,$4,$5,current_date + interval '3 days')`, [school.id, staff.id, staff.class, staff.subject, body]);
+    await q(`INSERT INTO homeworks (school_id,assigned_by,class_name,subject,description,due_date) VALUES ($1,$2,$3,$4,$5,current_date + interval \'3 days\')`, [school.id, staff.id, staff.class, staff.subject, body]);
     await q(`UPDATE staff SET homework_assigned=homework_assigned+1 WHERE id=$1 AND school_id=$2`, [staff.id, school.id]);
 
     // Notify parents of students in this class
@@ -684,7 +631,7 @@ async function processTeacher(school, staff, body, mediaUrl, mediaType) {
 
     return `✅ Homework saved for ${staff.class || 'your class'}. ${staff.class ? 'Parents have been notified via WhatsApp.' : 'Parents can now ask EduPing for it.'} ${school.name} 🏫`;
   }
-  return await callAI(`You are EduPing assisting teacher ${staff.name} at ${school.name}. Their class is ${staff.class||'unknown'}, subject: ${staff.subject||'unknown'}. Help with attendance, scores, homework, behaviour notes, and sign in workflows. To mark attendance: type "attendance: all present" or "absent: student name(s)". To assign homework: start with "homework:" or "assignment:". To sign in: type "good morning".`, body || 'Hello', null);
+  return await callAI(`You are EduPing assisting teacher ${staff.name} at ${school.name}. Help with attendance, scores, homework, behaviour notes, and sign in workflows.`, body || 'Hello', null);
 }
 
 function requireSuper(req, res, next) {
@@ -969,24 +916,10 @@ for (const [table, fields] of crud) {
 // ── Student list with fee status (used by dashboard student tab) ──
 app.get('/api/admin/students/list', requireSchool, async (req, res) => {
   try {
-    const rows = await q(`
-      SELECT s.*,
-        f.status  AS fee_status,
-        f.amount_due,
-        f.amount_paid,
-        COALESCE(f.amount_due - f.amount_paid, 0) AS balance
-      FROM students s
-      LEFT JOIN LATERAL (
-        SELECT status, amount_due, amount_paid
-        FROM fees
-        WHERE student_id = s.id
-        ORDER BY due_date DESC
-        LIMIT 1
-      ) f ON true
-      WHERE s.school_id = $1
-      ORDER BY s.class_name, s.name
-      LIMIT 500
-    `, [req.school.id]);
+    const rows = await q(
+      `SELECT s.* FROM students s WHERE s.school_id = $1 ORDER BY s.class_name, s.name LIMIT 500`,
+      [req.school.id]
+    );
     json(res, rows.rows);
   } catch(err) { json(res, { error: err.message }, 500); }
 });
@@ -1540,88 +1473,6 @@ app.get('/api/admin/attendance', requireSchool, async (req, res) => {
     if (student_id) { params.push(student_id); sql += ` AND a.student_id = $${params.length}`; }
     sql += ' ORDER BY a.date DESC LIMIT 2000';
     json(res, (await q(sql, params)).rows);
-  } catch(err) { bad(res, err.message, 500); }
-});
-
-// POST /api/admin/attendance/bulk — admin/teacher bulk attendance upload
-app.post('/api/admin/attendance/bulk', requireSchool, async (req, res) => {
-  try {
-    const { class_name, date, records } = req.body;
-    if (!records || !records.length) return bad(res, 'No attendance records provided');
-    const attendanceDate = date || new Date().toISOString().slice(0,10);
-    const school = req.school;
-    let saved = 0, notified = 0;
-
-    for (const r of records) {
-      if (!r.student_id || !r.status) continue;
-      // Upsert attendance
-      await q(
-        `INSERT INTO attendance (school_id, student_id, date, status)
-         VALUES ($1,$2,$3,$4)
-         ON CONFLICT (school_id, student_id, date) DO UPDATE SET status=$4`,
-        [school.id, r.student_id, attendanceDate, r.status]
-      ).catch(() =>
-        // If no unique constraint, just insert
-        q('INSERT INTO attendance (school_id,student_id,date,status) VALUES ($1,$2,$3,$4)', [school.id, r.student_id, attendanceDate, r.status])
-      );
-      saved++;
-
-      // Notify parents of absent students
-      if (r.status === 'absent' && hasTwilio()) {
-        const student = await q('SELECT * FROM students WHERE id=$1 AND school_id=$2 LIMIT 1', [r.student_id, school.id]);
-        const s = student.rows[0];
-        if (s && s.parent_phone) {
-          const dateFormatted = new Date(attendanceDate).toLocaleDateString('en-NG', { weekday:'long', day:'numeric', month:'long' });
-          const msg = `📋 *Attendance Alert — ${school.name}*\n\nDear ${s.parent_name||'Parent'},\n\n*${s.name}* was marked *absent* today, ${dateFormatted}.\n\nIf this is an error or you have notified the school, please disregard.\n\nFor enquiries reply to this number.\n${school.name} 🏫`;
-          try {
-            await twilioSend(s.parent_phone, school.twilio_number || process.env.TWILIO_DEFAULT_FROM, msg);
-            notified++;
-          } catch(e) { console.warn('Attendance notify failed:', s.parent_phone, e.message); }
-        }
-      }
-    }
-
-    // Update staff attendance_submissions counter if submitted by staff
-    if (req.body.staff_id) {
-      await q('UPDATE staff SET attendance_submissions=attendance_submissions+1 WHERE id=$1 AND school_id=$2', [req.body.staff_id, school.id]).catch(() => {});
-    }
-
-    json(res, { ok: true, saved, notified, class_name, date: attendanceDate });
-  } catch(err) { bad(res, err.message, 500); }
-});
-
-// GET /api/admin/chats?type=staff — teacher conversations
-app.get('/api/admin/chats', requireSchool, async (req, res) => {
-  try {
-    const type = req.query.type;
-    let rows;
-    if (type === 'staff') {
-      // Return staff members who have sent messages, grouped by phone
-      rows = await q(`
-        SELECT DISTINCT ON (m.from_number) m.from_number as phone, st.name, m.user_message as last_message, m.created_at as last_time
-        FROM messages m
-        LEFT JOIN staff st ON st.phone = m.from_number AND st.school_id = m.school_id
-        WHERE m.school_id=$1 AND st.id IS NOT NULL
-        ORDER BY m.from_number, m.created_at DESC
-      `, [req.school.id]);
-    } else {
-      rows = await q('SELECT * FROM messages WHERE school_id=$1 ORDER BY created_at DESC LIMIT 100', [req.school.id]);
-    }
-    json(res, rows.rows);
-  } catch(err) { bad(res, err.message, 500); }
-});
-
-// GET /api/admin/chats/:phone/messages — messages for a specific phone
-app.get('/api/admin/chats/:phone/messages', requireSchool, async (req, res) => {
-  try {
-    const phone = decodeURIComponent(req.params.phone);
-    const rows = await q(`
-      SELECT user_message as body, 'inbound' as direction, created_at FROM messages WHERE school_id=$1 AND from_number=$2 AND user_message IS NOT NULL
-      UNION ALL
-      SELECT assistant_reply as body, 'outbound' as direction, created_at FROM messages WHERE school_id=$1 AND from_number=$2 AND assistant_reply IS NOT NULL
-      ORDER BY created_at ASC LIMIT 100
-    `, [req.school.id, phone]);
-    json(res, rows.rows);
   } catch(err) { bad(res, err.message, 500); }
 });
 
