@@ -490,12 +490,20 @@ async function handleIncomingWhatsApp(req, res) {
   const to = normalisePhone(req.body.To);
   const body = req.body.Body || '';
   const mediaUrl = req.body.MediaUrl0;
+  const mediaType = req.body.MediaContentType0 || '';
   const school = await getSchoolByTwilio(to);
   if (!school || school.status !== 'active') return res.type('text/xml').send(new twilio.twiml.MessagingResponse().message('School account is not active. Please contact EduPing support.').toString());
 
   let reply = '';
-  const staff = await q(`SELECT * FROM staff WHERE school_id=$1 AND phone=$2 LIMIT 1`, [school.id, from]);
-  if (staff.rowCount) reply = await processTeacher(school, staff.rows[0], body, mediaUrl);
+  const staffLookup = await q(
+    `SELECT * FROM staff WHERE school_id=$1 AND (
+      phone=$2 OR
+      regexp_replace(phone,'[^0-9]','','g') LIKE '%' || right(regexp_replace($2,'[^0-9]','','g'),9)
+    ) LIMIT 1`,
+    [school.id, from]
+  );
+  const staff = staffLookup;
+  if (staff.rowCount) reply = await processTeacher(school, staff.rows[0], body, mediaUrl, mediaType);
   else {
     const student = await q(`SELECT * FROM students WHERE school_id=$1 AND parent_phone=$2 LIMIT 1`, [school.id, from]);
     if (student.rowCount) {
@@ -581,11 +589,19 @@ ${school.name} 🏫`
   return res.type('text/xml').send(twiml.toString());
 }
 
-async function processTeacher(school, staff, body, mediaUrl) {
+async function processTeacher(school, staff, body, mediaUrl, mediaType) {
   const lower = String(body || '').toLowerCase();
   const today = new Date().toISOString().slice(0,10);
-  if (lower.includes('sign in') || lower.includes('good morning') || mediaUrl) {
-    await q(`INSERT INTO signin_log (school_id,staff_id,date,time,status,photo_verified) VALUES ($1,$2,current_date,to_char(now(),\'HH24:MI\'),$3,$4)`, [school.id, staff.id, 'submitted', Boolean(mediaUrl)]);
+
+  // Voice notes arrive as mediaUrl with audio content type — reject before sign-in branch
+  const isVoiceNote = mediaUrl && (mediaType || '').includes('audio');
+  if (isVoiceNote) {
+    return `🎤 Voice message received, ${staff.name}. Please *type* your message so EduPing can process it correctly.\n\nExamples:\n• "good morning" — sign in\n• "homework: Chapter 3 Q1-5 due Friday" — assign homework\n\n${school.name} 🏫`;
+  }
+
+  const isImage = mediaUrl && (mediaType || '').includes('image');
+  if (lower.includes('sign in') || lower.includes('good morning') || isImage) {
+    await q(`INSERT INTO signin_log (school_id,staff_id,date,time,status,photo_verified) VALUES ($1,$2,current_date,to_char(now(),\'HH24:MI\'),$3,$4)`, [school.id, staff.id, 'submitted', Boolean(isImage)]);
     return `✅ ${staff.name}, your sign in has been recorded. ${school.name} 🏫`;
   }
   if (lower.includes('homework') || lower.includes('assignment')) {
