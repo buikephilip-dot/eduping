@@ -850,13 +850,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         <div class="dash-card full">
           <div class="dash-card-header">
             <div class="dash-card-title">All Students <span id="student-count" style="color:var(--text-muted);font-weight:400;font-size:13px;"></span></div>
-            <input class="search-box" placeholder="🔍 Search students..." oninput="filterStudents(this.value)" style="width:220px;font-size:13px;">
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input class="search-box" placeholder="🔍 Search students..." oninput="filterStudents(this.value)" style="width:220px;font-size:13px;">
+              <button class="qr-btn" onclick="exportStudents()">⬇️ Export</button>
+            </div>
           </div>
-          <div class="dash-card-body" style="padding:0;">
-            <table class="data-table" id="students-table">
-              <thead><tr><th>Student</th><th>Class</th><th>Parent</th><th>Parent Phone</th><th>Perf. Score</th><th>Action</th></tr></thead>
-              <tbody id="students-tbody"><tr><td colspan="6" class="loading">Loading...</td></tr></tbody>
-            </table>
+          <div class="dash-card-body" style="padding:0;overflow-x:auto;">
+            <div id="students-grouped-list"><div class="loading" style="padding:20px;">Loading students...</div></div>
           </div>
         </div>
 
