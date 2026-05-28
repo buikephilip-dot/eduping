@@ -2325,16 +2325,7 @@ const templates = {
 };
 function useTemplate(key) { document.getElementById('broadcast-msg').value = templates[key] || ''; }
 
-async function sendBroadcast() {
-  const msg = document.getElementById('broadcast-msg').value;
-  const target = document.getElementById('broadcast-target').value;
-  if (!msg) { showToast('Please type a message ❌'); return; }
-  try {
-    const res = await api('/api/admin/broadcast', { method: 'POST', body: JSON.stringify({ message: msg, target }) });
-    showToast(`📨 Broadcast queued for ${res.queued} recipients!`);
-    document.getElementById('broadcast-msg').value = '';
-  } catch(e) { showToast('Broadcast failed ❌'); }
-}
+// sendBroadcast defined below
 
 // ── Documents / AI Training ───────────────────────────────
 async function loadDocuments() {
@@ -2639,13 +2630,89 @@ function filterChats() {
 async function sendAdminReply() {
   const msg = document.getElementById('admin-reply-input').value.trim();
   if (!msg || !activePhone) return;
+  // Show the AI refinement modal before sending
+  showAdminRefinementModal(msg);
+}
+
+async function showAdminRefinementModal(rawMsg) {
+  // Build modal
+  const modal = document.createElement('div');
+  modal.id = 'admin-refine-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;';
+  modal.innerHTML = `
+    <div style="background:white;border-radius:16px;padding:24px;max-width:520px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.2);">
+      <div style="font-weight:700;font-size:16px;margin-bottom:4px;">💬 Send Message to Parent</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Review before sending via WhatsApp</div>
+
+      <div style="background:#f8f9fa;border-radius:10px;padding:12px;margin-bottom:12px;">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;font-weight:600;">YOUR DRAFT</div>
+        <div id="refine-original" style="font-size:13px;line-height:1.5;">${rawMsg}</div>
+      </div>
+
+      <div id="refine-ai-section" style="display:none;margin-bottom:12px;">
+        <div style="background:var(--green-pale);border-radius:10px;padding:12px;">
+          <div style="font-size:11px;color:var(--green);margin-bottom:6px;font-weight:600;">✨ AI REFINED VERSION</div>
+          <div id="refine-ai-text" style="font-size:13px;line-height:1.5;"></div>
+        </div>
+      </div>
+
+      <textarea id="refine-editable" style="width:100%;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px;font-size:13px;line-height:1.5;font-family:inherit;resize:vertical;min-height:80px;box-sizing:border-box;margin-bottom:12px;">${rawMsg}</textarea>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="refineAdminMessage()" style="background:var(--green-pale);color:var(--green);border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;flex:1;">✨ AI Refine</button>
+        <button onclick="useRefinedVersion()" id="use-refined-btn" style="display:none;background:#f0fdf4;color:#16a34a;border:1.5px solid #bbf7d0;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;flex:1;">Use Refined ↑</button>
+        <button onclick="sendRefinedMessage()" style="background:var(--green);color:white;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;flex:1;">Send as is ↗</button>
+        <button onclick="document.getElementById('admin-refine-modal').remove()" style="background:#f5f5f5;color:#666;border:none;border-radius:8px;padding:9px 14px;font-size:13px;cursor:pointer;">Cancel</button>
+      </div>
+      <div id="refine-status" style="font-size:12px;color:var(--text-muted);margin-top:8px;min-height:16px;"></div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function refineAdminMessage() {
+  const draft = document.getElementById('refine-editable').value.trim();
+  const statusEl = document.getElementById('refine-status');
+  const aiSection = document.getElementById('refine-ai-section');
+  const aiText = document.getElementById('refine-ai-text');
+  const useBtn = document.getElementById('use-refined-btn');
+  if (!draft) return;
+
+  statusEl.textContent = '✨ Refining with AI...';
+  try {
+    const res = await api('/api/admin/refine-message', {
+      method: 'POST',
+      body: JSON.stringify({ message: draft, phone: activePhone })
+    });
+    aiText.textContent = res.refined;
+    aiSection.style.display = 'block';
+    useBtn.style.display = 'block';
+    statusEl.textContent = 'AI version ready — review and choose which to send.';
+  } catch(e) {
+    statusEl.textContent = 'Could not refine — you can still send your original message.';
+  }
+}
+
+function useRefinedVersion() {
+  const refined = document.getElementById('refine-ai-text').textContent;
+  document.getElementById('refine-editable').value = refined;
+  document.getElementById('refine-status').textContent = 'Refined version loaded — click Send to deliver.';
+}
+
+async function sendRefinedMessage() {
+  const msg = document.getElementById('refine-editable').value.trim();
+  if (!msg || !activePhone) return;
+  const statusEl = document.getElementById('refine-status');
+  statusEl.textContent = 'Sending...';
   try {
     await api('/api/admin/send-message', { method:'POST', body: JSON.stringify({ to: activePhone, message: msg }) });
+    document.getElementById('admin-refine-modal').remove();
     document.getElementById('admin-reply-input').value = '';
-    showToast('Message sent via WhatsApp ✅');
+    showToast('✅ Message sent via WhatsApp');
     await loadChats();
     openChat(activePhone);
-  } catch(e) { showToast('Failed to send: ' + e.message); }
+  } catch(e) {
+    statusEl.textContent = 'Failed to send: ' + (e.message || 'unknown error');
+  }
 }
 
 
