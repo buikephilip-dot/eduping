@@ -1150,11 +1150,55 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
           <div class="stat-card blue"><div class="stat-icon">✅</div><div class="stat-value" id="fees-total-collected">—</div><div class="stat-label">Total Collected</div></div>
           <div class="stat-card red"><div class="stat-icon">⚠️</div><div class="stat-value" id="fees-total-outstanding">—</div><div class="stat-label">Outstanding</div></div>
         </div>
+
+        <!-- Fee Setup Card -->
+        <div class="dash-card full" style="margin-bottom:18px;">
+          <div class="dash-card-header">
+            <div class="dash-card-title">⚙️ Set Fee Amount</div>
+            <div style="font-size:12px;color:var(--text-muted);">Set the fee due for a class or all students this term</div>
+          </div>
+          <div class="dash-card-body" style="padding:16px 18px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:12px;align-items:end;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Class</label>
+                <select class="form-select" id="fee-setup-class">
+                  <option value="all">All Classes</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Term</label>
+                <input class="form-input" id="fee-setup-term" placeholder="e.g. 3rd Term 2025">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Amount Due (₦)</label>
+                <input class="form-input" id="fee-setup-amount" type="number" placeholder="85000">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Due Date</label>
+                <input class="form-input" id="fee-setup-due" type="date">
+              </div>
+              <button class="broadcast-btn" style="white-space:nowrap;padding:10px 18px;" onclick="setupFees()">Apply ✓</button>
+            </div>
+            <div style="margin-top:10px;display:flex;gap:8px;align-items:center;">
+              <button class="export-btn" style="background:var(--danger);color:white;border-color:var(--danger);" onclick="sendFeeReminders()">📲 Send Reminders to Defaulters</button>
+              <span style="font-size:12px;color:var(--text-muted);">WhatsApps all parents with outstanding balance</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fee Records Table -->
         <div class="dash-card full">
           <div class="dash-card-header">
             <div class="dash-card-title">Fee Records</div>
             <div style="display:flex;gap:8px;align-items:center;">
-              <input class="search-box" id="fees-search" placeholder="🔍 Search student..." oninput="filterFees()" style="width:180px;font-size:13px;">
+              <select class="form-select" id="fees-status-filter" onchange="filterFees()" style="font-size:13px;padding:6px 10px;width:130px;">
+                <option value="">All Statuses</option>
+                <option value="unpaid">Unpaid</option>
+                <option value="partial">Partial</option>
+                <option value="paid">Paid</option>
+                <option value="no record">No Record</option>
+              </select>
+              <input class="search-box" id="fees-search" placeholder="🔍 Search student..." oninput="filterFees()" style="width:160px;font-size:13px;">
               <button class="export-btn" onclick="exportFees()">⬇ CSV</button>
             </div>
           </div>
@@ -1507,8 +1551,22 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
       </select>
     </div>
     <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="payment-date" type="date"></div>
-    <button class="broadcast-btn" onclick="submitPayment()" style="margin-bottom:8px;">✅ Save Payment</button>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+      <input type="checkbox" id="payment-send-receipt" checked>
+      <label for="payment-send-receipt" style="font-size:13px;cursor:pointer;">Send WhatsApp receipt to parent</label>
+    </div>
+        <button class="broadcast-btn" onclick="submitPayment()" style="margin-bottom:8px;">✅ Save Payment</button>
     <button class="modal-btn secondary" onclick="closePaymentModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- PAYMENT HISTORY MODAL -->
+<div class="payment-modal" id="payment-history-modal">
+  <div class="payment-modal-box">
+    <div class="modal-title">📋 Payment History</div>
+    <div class="modal-sub" id="payment-history-student" style="margin-bottom:14px;"></div>
+    <div id="payment-history-list"><div class="loading" style="padding:20px;">Loading...</div></div>
+    <button class="modal-btn secondary" style="margin-top:14px;" onclick="document.getElementById('payment-history-modal').classList.remove('show')">Close</button>
   </div>
 </div>
 
@@ -2528,7 +2586,7 @@ let activePhone = null;
 
 async function loadChats() {
   try {
-    const msgs = await api('/api/admin/messages');
+    const msgs = await api('/api/admin/chats');
     allMessages = msgs;
     renderChatList(msgs);
     // Show escalation badge
@@ -2575,7 +2633,7 @@ function renderChatList(msgs) {
     const time = last.created_at ? new Date(last.created_at).toLocaleTimeString('en-NG', {hour:'2-digit',minute:'2-digit'}) : '';
     return '<div onclick="openChat(\'' + phone + '\')" style="padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--border);background:' + (isActive ? 'var(--green-pale)' : 'white') + ';transition:background .15s;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
-      '<span style="font-size:13px;font-weight:600;color:var(--text);">' + phone + '</span>' +
+      '<span style="font-size:13px;font-weight:600;color:var(--text);">' + ((last.parent_name && last.parent_name !== phone) ? last.parent_name + (last.student_name ? ' · ' + last.student_name : '') : phone) + '</span>' +
       '<span style="font-size:11px;color:var(--text-muted);">' + time + '</span>' +
       '</div>' +
       '<div style="display:flex;justify-content:space-between;align-items:center;">' +
@@ -2924,8 +2982,44 @@ function exportSigninLog() {
   downloadCSV(csv, 'signin_log_export.csv');
 }
 
-// ── Fees ──────────────────────────────────────────────────
-let allFees = [];
+async function loadFeeSetupClasses() {
+  const sel = document.getElementById('fee-setup-class');
+  if (!sel || sel.options.length > 1) return;
+  try {
+    const classes = await api('/api/admin/classes');
+    classes.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
+  } catch(e) {}
+  if (schoolData?.current_term) {
+    const termEl = document.getElementById('fee-setup-term');
+    if (termEl && !termEl.value) termEl.value = schoolData.current_term;
+  }
+}
+
+async function setupFees() {
+  const class_name = document.getElementById('fee-setup-class')?.value;
+  const term       = document.getElementById('fee-setup-term')?.value?.trim();
+  const amount_due = document.getElementById('fee-setup-amount')?.value;
+  const due_date   = document.getElementById('fee-setup-due')?.value;
+  if (!amount_due || Number(amount_due) <= 0) { showToast('Enter a valid amount'); return; }
+  if (!term) { showToast('Enter the term name'); return; }
+  const label = class_name === 'all' ? 'all students' : class_name;
+  if (!confirm('Set fee for ' + label + ' - ' + term + '?')) return;
+  try {
+    const r = await api('/api/admin/fees/setup', { method: 'POST', body: JSON.stringify({ class_name, term, amount_due: Number(amount_due), due_date: due_date||null }) });
+    showToast('Fees set for ' + r.total + ' students (' + r.created + ' new, ' + r.updated + ' updated)');
+    loadFees();
+  } catch(e) { showToast('Failed to set fees: ' + (e.message||'')); }
+}
+
+async function sendFeeReminders() {
+  const defaulters = allFees.filter(r => r.fee_status === 'unpaid' || r.fee_status === 'partial');
+  if (!defaulters.length) { showToast('No defaulters found'); return; }
+  if (!confirm('Send WhatsApp reminders to ' + defaulters.length + ' parents with outstanding fees?')) return;
+  try {
+    await api('/api/admin/broadcast', { method: 'POST', body: JSON.stringify({ target: 'fee_defaulters', message: null }) });
+    showToast('Reminders sent to ' + defaulters.length + ' parents');
+  } catch(e) { showToast('Failed to send reminders'); }
+}
 
 async function loadFees() {
   const wrap = document.getElementById('fees-table-wrap');
@@ -2934,46 +3028,68 @@ async function loadFees() {
   try {
     const data = await api('/api/admin/fees/summary');
     allFees = data.students || [];
-    document.getElementById('fees-total-expected').textContent = '₦' + Number(data.totals?.expected||0).toLocaleString();
-    document.getElementById('fees-total-collected').textContent = '₦' + Number(data.totals?.collected||0).toLocaleString();
-    document.getElementById('fees-total-outstanding').textContent = '₦' + Number(data.totals?.outstanding||0).toLocaleString();
+    document.getElementById('fees-total-expected').textContent  = '\u20a6' + Number(data.totals?.expected||0).toLocaleString();
+    document.getElementById('fees-total-collected').textContent = '\u20a6' + Number(data.totals?.collected||0).toLocaleString();
+    document.getElementById('fees-total-outstanding').textContent = '\u20a6' + Number(data.totals?.outstanding||0).toLocaleString();
     renderFeesTable(allFees);
-  } catch(e) { wrap.innerHTML = '<div class="loading">Error loading fees</div>'; }
+  } catch(e) { wrap.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">Error loading fees. Please refresh.</div>'; }
 }
 
 function renderFeesTable(rows) {
   const wrap = document.getElementById('fees-table-wrap');
-  if (!rows.length) { wrap.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No fee records found</div>'; return; }
-  wrap.innerHTML = '<table class="data-table"><thead><tr><th>Student</th><th>Class</th><th>Amount Due</th><th>Amount Paid</th><th>Balance</th><th>Status</th><th>Action</th></tr></thead><tbody>' +
-    rows.map(r => {
-      const status = r.fee_status || 'no record';
-      const pill = status === 'paid' ? 'pill-green' : status === 'partial' ? 'pill-gold' : status === 'unpaid' ? 'pill-red' : 'pill-gray';
-      return '<tr>' +
-        '<td><strong>' + r.name + '</strong></td>' +
-        '<td>' + (r.class_name||'—') + '</td>' +
-        '<td>₦' + Number(r.amount_due||0).toLocaleString() + '</td>' +
-        '<td>₦' + Number(r.amount_paid||0).toLocaleString() + '</td>' +
-        '<td>₦' + Number(r.balance||0).toLocaleString() + '</td>' +
-        '<td><span class="pill ' + pill + '">' + status + '</span></td>' +
-        '<td><button class="action-btn" onclick="openPaymentModal(\'' + r.id + '\',\'' + r.name.replace(/'/g,'') + '\')">💳 Record</button></td>' +
-      '</tr>';
-    }).join('') + '</tbody></table>';
+  if (!rows.length) {
+    wrap.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:13px;">No fee records found.<br><span style="font-size:12px;">Use the Set Fee Amount card above to create records for your students.</span></div>';
+    return;
+  }
+  const paid    = rows.filter(r => r.fee_status === 'paid').length;
+  const partial = rows.filter(r => r.fee_status === 'partial').length;
+  const unpaid  = rows.filter(r => r.fee_status === 'unpaid' || r.fee_status === 'no record').length;
+  let html = '<div style="display:flex;gap:16px;padding:12px 16px;background:var(--gray-bg);border-bottom:1px solid #f0f2f5;font-size:12px;color:var(--text-muted);">';
+  html += '<span>Paid: <strong>' + paid + '</strong></span>';
+  html += '<span>Partial: <strong>' + partial + '</strong></span>';
+  html += '<span>Unpaid: <strong>' + unpaid + '</strong></span>';
+  html += '<span style="margin-left:auto;">' + rows.length + ' students</span></div>';
+  html += '<table class="data-table"><thead><tr><th>Student</th><th>Class</th><th>Amount Due</th><th>Amount Paid</th><th>Balance</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+  rows.forEach(r => {
+    const status = r.fee_status || 'no record';
+    const pill   = status === 'paid' ? 'pill-green' : status === 'partial' ? 'pill-gold' : status === 'unpaid' ? 'pill-red' : 'pill-gray';
+    const bal    = Number(r.balance || 0);
+    const sn     = r.name.replace(/\\/g,'').replace(/'/g,'');
+    html += '<tr>'
+      + '<td><strong>' + r.name + '</strong></td>'
+      + '<td>' + (r.class_name||'-') + '</td>'
+      + '<td>\u20a6' + Number(r.amount_due||0).toLocaleString() + '</td>'
+      + '<td>\u20a6' + Number(r.amount_paid||0).toLocaleString() + '</td>'
+      + '<td style="font-weight:600;color:' + (bal > 0 ? 'var(--danger)' : 'var(--green)') + '">\u20a6' + bal.toLocaleString() + '</td>'
+      + '<td><span class="pill ' + pill + '">' + status + '</span></td>'
+      + '<td style="display:flex;gap:6px;">'
+        + '<button class="action-btn" onclick="openPaymentModal(\'' + r.id + '\',\'' + sn + '\')">Record</button>'
+        + '<button class="action-btn" style="background:#eef4ff;color:#1a73e8;" onclick="viewPaymentHistory(\'' + r.id + '\',\'' + sn + '\')">History</button>'
+      + '</td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
 }
 
 function filterFees() {
-  const q = (document.getElementById('fees-search')?.value || '').toLowerCase();
-  const filtered = allFees.filter(r => r.name.toLowerCase().includes(q) || (r.class_name||'').toLowerCase().includes(q));
+  const q      = (document.getElementById('fees-search')?.value || '').toLowerCase();
+  const status = (document.getElementById('fees-status-filter')?.value || '').toLowerCase();
+  const filtered = allFees.filter(r => {
+    const matchText   = !q || r.name.toLowerCase().includes(q) || (r.class_name||'').toLowerCase().includes(q);
+    const matchStatus = !status || (r.fee_status||'no record').toLowerCase() === status;
+    return matchText && matchStatus;
+  });
   renderFeesTable(filtered);
 }
 
 function exportFees() {
   if (!allFees.length) { showToast('No data to export'); return; }
-  const csv = 'Student,Class,Amount Due,Amount Paid,Balance,Status\n' +
-    allFees.map(r => [r.name, r.class_name||'', r.amount_due||0, r.amount_paid||0, r.balance||0, r.fee_status||''].map(v => '"'+v+'"').join(',')).join('\n');
+  const csv = 'Student,Class,Term,Amount Due,Amount Paid,Balance,Status\n'
+    + allFees.map(r => [r.name, r.class_name||'', r.term||'', r.amount_due||0, r.amount_paid||0, r.balance||0, r.fee_status||''].map(v => '"'+v+'"').join(',')).join('\n');
   downloadCSV(csv, 'fees_export.csv');
 }
 
-// ── Payment Modal ─────────────────────────────────────────
 function openPaymentModal(studentId, studentName) {
   document.getElementById('payment-student-id').value = studentId;
   document.getElementById('payment-modal-student').textContent = 'Recording payment for: ' + studentName;
@@ -2987,20 +3103,53 @@ function closePaymentModal() {
 }
 
 async function submitPayment() {
-  const student_id = document.getElementById('payment-student-id').value;
-  const amount = document.getElementById('payment-amount').value;
+  const student_id     = document.getElementById('payment-student-id').value;
+  const amount         = document.getElementById('payment-amount').value;
   const payment_method = document.getElementById('payment-method').value;
-  const payment_date = document.getElementById('payment-date').value;
-  if (!amount || Number(amount) <= 0) { showToast('Enter a valid amount ❌'); return; }
+  const payment_date   = document.getElementById('payment-date').value;
+  if (!amount || Number(amount) <= 0) { showToast('Enter a valid amount'); return; }
   try {
-    await api('/api/admin/fees/payment', { method: 'POST', body: JSON.stringify({ student_id, amount: Number(amount), payment_method, payment_date }) });
-    showToast('✅ Payment recorded!');
+    const r = await api('/api/admin/fees/payment', { method: 'POST', body: JSON.stringify({ student_id, amount: Number(amount), payment_method, payment_date }) });
+    showToast('Payment recorded! Status: ' + r.status);
     closePaymentModal();
     loadFees();
-    // Reload students to update fee status column
-    if (allStudents.length) loadStudents();
-  } catch(e) { showToast('Failed to save payment ❌'); }
+    if (typeof loadStudents === 'function' && allStudents && allStudents.length) loadStudents();
+  } catch(e) { showToast('Failed to save payment'); }
 }
+
+async function viewPaymentHistory(studentId, studentName) {
+  document.getElementById('payment-history-student').textContent = studentName + ' - payment history';
+  document.getElementById('payment-history-list').innerHTML = '<div class="loading" style="padding:16px;">Loading...</div>';
+  document.getElementById('payment-history-modal').classList.add('show');
+  try {
+    let payments;
+    if (typeof isDemoMode !== 'undefined' && isDemoMode) {
+      payments = [
+        { payment_date: new Date(Date.now()-7*86400000).toISOString().slice(0,10), amount: 42500, payment_method: 'transfer' },
+        { payment_date: new Date(Date.now()-30*86400000).toISOString().slice(0,10), amount: 42500, payment_method: 'cash' },
+      ];
+    } else {
+      payments = await api('/api/admin/fees/payments/' + studentId);
+    }
+    if (!payments.length) {
+      document.getElementById('payment-history-list').innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:13px;text-align:center;">No payments recorded yet</div>';
+      return;
+    }
+    let html = '<table class="data-table"><thead><tr><th>Date</th><th>Amount</th><th>Method</th></tr></thead><tbody>';
+    payments.forEach(p => {
+      html += '<tr>'
+        + '<td>' + new Date(p.payment_date).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'}) + '</td>'
+        + '<td style="font-weight:600;color:var(--green)">\u20a6' + Number(p.amount).toLocaleString() + '</td>'
+        + '<td>' + (p.payment_method||'cash') + '</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('payment-history-list').innerHTML = html;
+  } catch(e) {
+    document.getElementById('payment-history-list').innerHTML = '<div style="padding:16px;color:var(--text-muted);">Could not load history</div>';
+  }
+}
+
 
 // ── Class Summary ─────────────────────────────────────────
 let classSummaryData = [];
