@@ -216,6 +216,21 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS idx_staff_school_phone ON staff(school_id, phone);
     CREATE INDEX IF NOT EXISTS idx_messages_school_from ON messages(school_id, from_number);
     CREATE INDEX IF NOT EXISTS idx_fees_school_status ON fees(school_id, status);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_fees_student_term ON fees(school_id, student_id, term);
+
+    -- Payment ledger (individual payment records, separate from fees balance)
+    CREATE TABLE IF NOT EXISTS fee_payments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+      fee_id UUID REFERENCES fees(id) ON DELETE CASCADE,
+      amount NUMERIC NOT NULL,
+      payment_method TEXT DEFAULT 'cash',
+      payment_date DATE DEFAULT current_date,
+      recorded_by TEXT DEFAULT 'admin',
+      note TEXT,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
 
     -- Scale-ready tables
     CREATE TABLE IF NOT EXISTS bulk_upload_errors (
@@ -279,29 +294,208 @@ async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS idx_risk_school ON student_risk_scores(school_id, risk_level);
     CREATE INDEX IF NOT EXISTS idx_intervention_student ON intervention_plans(student_id);
+
+    -- Sickbay: track whether parent was notified
+    ALTER TABLE sickbay_log ADD COLUMN IF NOT EXISTS parent_notified BOOLEAN DEFAULT false;
+    ALTER TABLE sickbay_log ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ;
+
+    -- Students: birthday for birthday notifications
+    ALTER TABLE students ADD COLUMN IF NOT EXISTS date_of_birth DATE;
+
+    -- Schools: term dates (used by events and term calendar)
+    ALTER TABLE schools ADD COLUMN IF NOT EXISTS term_start DATE;
+    ALTER TABLE schools ADD COLUMN IF NOT EXISTS term_end DATE;
+    ALTER TABLE schools ADD COLUMN IF NOT EXISTS events_enabled BOOLEAN DEFAULT true;
+
+    -- School events: extended columns used by events hub
+    ALTER TABLE school_events ADD COLUMN IF NOT EXISTS name TEXT;
+    ALTER TABLE school_events ADD COLUMN IF NOT EXISTS date DATE;
+    ALTER TABLE school_events ADD COLUMN IF NOT EXISTS time TEXT;
+    ALTER TABLE school_events ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'social';
+    ALTER TABLE school_events ADD COLUMN IF NOT EXISTS description TEXT;
+    ALTER TABLE school_events ADD COLUMN IF NOT EXISTS notify_parents BOOLEAN DEFAULT false;
+
+    -- AI suppression: when admin replies, suppress AI for that thread for 30 mins
+    CREATE TABLE IF NOT EXISTS ai_suppression (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      phone TEXT NOT NULL,
+      suppressed_until TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      UNIQUE(school_id, phone)
+    );
+
+    -- Results portal tables
+    CREATE TABLE IF NOT EXISTS student_results (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+      class_name TEXT, term TEXT NOT NULL,
+      subjects JSONB DEFAULT '{}'::jsonb,
+      position INTEGER, remark TEXT,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS result_pins (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+      student_name TEXT, class_name TEXT, term TEXT NOT NULL,
+      pin TEXT NOT NULL, access_token TEXT,
+      print_limit INTEGER DEFAULT 3, print_count INTEGER DEFAULT 0,
+      accessed BOOLEAN DEFAULT false,
+      expires_at TIMESTAMPTZ, sent_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+
+    -- Event hub tables
+    CREATE TABLE IF NOT EXISTS event_feeds (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      event_id UUID REFERENCES school_events(id) ON DELETE CASCADE,
+      message TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS event_galleries (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      event_id UUID REFERENCES school_events(id) ON DELETE CASCADE,
+      event_name TEXT, share_token TEXT UNIQUE,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS event_photos (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      gallery_id UUID REFERENCES event_galleries(id) ON DELETE CASCADE,
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      event_id UUID REFERENCES school_events(id) ON DELETE CASCADE,
+      url TEXT NOT NULL, public_id TEXT, filename TEXT,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+
+    -- Waitlist for lead capture
+    CREATE TABLE IF NOT EXISTS waitlist (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT, role TEXT, school TEXT, city TEXT,
+      phone TEXT, email TEXT, students TEXT, timeline TEXT,
+      features TEXT, challenge TEXT, submitted_at TIMESTAMPTZ,
+      contacted BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ai_suppression ON ai_suppression(school_id, phone);
+    CREATE INDEX IF NOT EXISTS idx_results_school ON student_results(school_id, term);
+    CREATE INDEX IF NOT EXISTS idx_result_pins_school ON result_pins(school_id);
   `);
 }
 
 async function seedIfEmpty() {
   const existing = await q('SELECT id FROM schools LIMIT 1');
   if (existing.rowCount) return;
+
+  // ── Cradle-style Nigerian school demo data ──────────────
   const school = await q(`INSERT INTO schools
     (name, city, landmark_description, fees, fee_deadline, current_term, whatsapp_number, twilio_number, admin_password, plan, status, billing_start, monthly_retainer, setup_fee)
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,current_date,$12,$13) RETURNING *`,
-    ['Greenfield Academy', 'Abuja', 'Green gate beside the assembly hall', '85000 per term', '15th of each term month', '2nd Term 2024/2025', '+2347015255068', '+14155238886', 'admin123', 'starter', 'active', 50000, 100000]);
-  const schoolId = school.rows[0].id;
-  const students = [
-    ['Emeka Okonkwo','JSS2A','Mrs Adaeze Okonkwo','+2348031111111',82],
-    ['Fatima Hassan','SS1B','Mr Babatunde Hassan','+2348032222222',88],
-    ['Chidi Eze','JSS1C','Dr Ngozi Eze','+2348033333333',91]
+    ['Greenfield Academy', 'Abuja', 'Green gate beside the assembly hall, Maitama', '120000 per term', '15th January', '2nd Term 2024/2025',
+     '+2347015255068', process.env.TWILIO_DEFAULT_FROM || '+14155238886', 'admin123', 'pro', 'active', 80000, 150000]);
+  const sid = school.rows[0].id;
+
+  // Students — rich, realistic Nigerian names with varying performance
+  const studentData = [
+    // name, class, parent_name, parent_phone, dob, scores {subj:score}, fee_paid, fee_due
+    ['Adaeze Josephine Obi',   'JSS3A', 'Mrs Josephine Obi',      '+2348069956420', '2012-03-14',
+     {Mathematics:72, English:85, Science:68, Social_Studies:79, Basic_Technology:71}, 120000, 120000],
+    ['Tobiloba Adeyemi',       'JSS2A', 'Mr Samuel Adeyemi',      '+2348031111111', '2013-07-22',
+     {Mathematics:88, English:91, Science:84, Social_Studies:90, Basic_Technology:86}, 120000, 120000],
+    ['Chukwuemeka Eze Jr',     'JSS2A', 'Chief Emmanuel Eze',     '+2348032222222', '2013-04-05',
+     {Mathematics:55, English:61, Science:48, Social_Studies:57, Basic_Technology:43}, 120000, 60000],
+    ['Fatima Bello',           'SS1B',  'Alhaji Musa Bello',      '+2348033333333', '2011-11-30',
+     {Mathematics:41, English:55, Physics:38, Chemistry:44, Economics:50},             120000, 0],
+    ['Oluwaseun Adesanya',     'JSS1C', 'Mrs Bunmi Adesanya',     '+2348034444444', '2014-01-18',
+     {Mathematics:93, English:89, Science:91, Social_Studies:95, Basic_Technology:90}, 120000, 120000],
+    ['Amara Okafor',           'JSS3A', 'Dr Patricia Okafor',     '+2348035555555', '2012-06-09',
+     {Mathematics:78, English:82, Science:76, Social_Studies:80, Basic_Technology:74}, 120000, 120000],
+    ['Yusuf Ibrahim Garba',    'SS2A',  'Alhaji Ibrahim Garba',   '+2348036666666', '2010-08-25',
+     {Mathematics:65, English:70, Physics:60, Chemistry:58, Economics:72},             120000, 120000],
+    ['Ngozi Adeyinka',         'JSS1C', 'Mrs Folake Adeyinka',    '+2348037777777', '2014-09-12',
+     {Mathematics:36, English:48, Science:31, Social_Studies:44, Basic_Technology:38}, 120000, 0],
+    ['David Okoye Nnamdi',     'SS1B',  'Dr Emeka Okoye',         '+2348038888888', '2011-12-03',
+     {Mathematics:82, English:88, Physics:79, Chemistry:85, Economics:77},             120000, 120000],
+    ['Blessing Adeyemi',       'JSS2A', 'Pastor Gbenga Adeyemi',  '+2348039999999', '2013-05-20',
+     {Mathematics:47, English:59, Science:42, Social_Studies:51, Basic_Technology:45}, 120000, 40000],
   ];
-  for (const s of students) {
-    const st = await q(`INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`, [schoolId, ...s]);
-    await q(`INSERT INTO fees (school_id,student_id,term,amount_due,amount_paid,status,due_date) VALUES ($1,$2,$3,$4,$5,$6,current_date + interval \'7 days\')`, [schoolId, st.rows[0].id, '2nd Term', 85000, s[0].startsWith('Fatima') ? 42500 : 85000, s[0].startsWith('Fatima') ? 'partial' : 'paid']);
-    await q(`INSERT INTO scores (school_id,student_id,subject,score,term) VALUES ($1,$2,$3,$4,$5),($1,$2,$6,$7,$5)`, [schoolId, st.rows[0].id, 'Mathematics', s[4], '2nd Term', 'English', s[4] + 4]);
+
+  for (const [name, cls, parentName, parentPhone, dob, scores, amountDue, amountPaid] of studentData) {
+    const status = amountPaid >= amountDue ? 'paid' : amountPaid > 0 ? 'partial' : 'unpaid';
+    const st = await q(
+      `INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,date_of_birth,weekly_performance_score)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      [sid, name, cls, parentName, parentPhone, dob,
+       Math.round(Object.values(scores).reduce((a,b)=>a+b,0)/Object.values(scores).length)]
+    );
+    const studentId = st.rows[0].id;
+    await q(`INSERT INTO fees (school_id,student_id,term,amount_due,amount_paid,status,due_date)
+             VALUES ($1,$2,$3,$4,$5,$6,current_date + interval '30 days')`,
+      [sid, studentId, '2nd Term 2024/2025', amountDue, amountPaid, status]);
+    for (const [subject, score] of Object.entries(scores)) {
+      await q(`INSERT INTO scores (school_id,student_id,subject,score,term) VALUES ($1,$2,$3,$4,$5)`,
+        [sid, studentId, subject.replace(/_/g,' '), score, '2nd Term 2024/2025']);
+    }
+    // Attendance — realistic pattern
+    for (let i = 1; i <= 20; i++) {
+      const absent = (name.includes('Fatima') && i % 4 === 0) || (name.includes('Ngozi') && i % 3 === 0);
+      const d = new Date(); d.setDate(d.getDate() - i);
+      if (d.getDay() >= 1 && d.getDay() <= 5) {
+        await q(`INSERT INTO attendance (school_id,student_id,date,status) VALUES ($1,$2,$3,$4)
+                 ON CONFLICT DO NOTHING`,
+          [sid, studentId, d.toISOString().slice(0,10), absent ? 'absent' : 'present']);
+      }
+    }
   }
-  await q(`INSERT INTO staff (school_id,name,role,subject,class,phone,performance_score) VALUES ($1,$2,$3,$4,$5,$6,$7)`, [schoolId,'Mr John Musa','teacher','Mathematics','JSS2A','+2348061111111',86]);
-  await q(`INSERT INTO school_events (school_id,title,event_date) VALUES ($1,$2,current_date + interval \'14 days\'),($1,$3,current_date + interval \'21 days\')`, [schoolId,'Sports Day','PTA Meeting']);
+
+  // Staff
+  const staffData = [
+    ['Mrs Grace Okonkwo',  'teacher',   'Mathematics',    'JSS2A',  '+2348061111111', 88],
+    ['Mr Tunde Adeyemi',   'teacher',   'English',        'JSS3A',  '+2348062222222', 85],
+    ['Mrs Chioma Eze',     'teacher',   'Science',        'JSS1C',  '+2348063333333', 90],
+    ['Mr Bala Musa',       'teacher',   'Physics',        'SS1B',   '+2348064444444', 82],
+    ['Mrs Folake Bakare',  'teacher',   'Chemistry',      'SS2A',   '+2348065555555', 87],
+    ['Mr James Obi',       'principal', 'Administration', '',       '+2348066666666', 95],
+  ];
+  for (const [name, role, subject, cls, phone, score] of staffData) {
+    await q(`INSERT INTO staff (school_id,name,role,subject,class,phone,performance_score) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [sid, name, role, subject, cls, phone, score]);
+  }
+
+  // Sickbay records — including Josephine's daughter (Adaeze Josephine Obi)
+  const adaezeRes = await q(`SELECT id FROM students WHERE school_id=$1 AND name LIKE '%Adaeze%' LIMIT 1`, [sid]);
+  if (adaezeRes.rows.length) {
+    await q(`INSERT INTO sickbay_log (school_id,student_id,reason,action_taken,parent_notified,visited_at)
+             VALUES ($1,$2,$3,$4,$5,now() - interval '2 hours')`,
+      [sid, adaezeRes.rows[0].id, 'Headache and mild fever', 'Temperature taken (37.8°C). Paracetamol administered. Resting in sickbay.', false]);
+    await q(`INSERT INTO sickbay_log (school_id,student_id,reason,action_taken,parent_notified,visited_at)
+             VALUES ($1,$2,$3,$4,$5,current_date - interval '5 days')`,
+      [sid, adaezeRes.rows[0].id, 'Stomach pain', 'Observed for 30 minutes. Felt better after rest. Returned to class.', true]);
+  }
+  // Sickbay for another student
+  const ngoziRes = await q(`SELECT id FROM students WHERE school_id=$1 AND name LIKE '%Ngozi%' LIMIT 1`, [sid]);
+  if (ngoziRes.rows.length) {
+    await q(`INSERT INTO sickbay_log (school_id,student_id,reason,action_taken,parent_notified,visited_at)
+             VALUES ($1,$2,$3,$4,$5,current_date - interval '2 days')`,
+      [sid, ngoziRes.rows[0].id, 'Scraped knee from playground', 'Wound cleaned and dressed. No stitches needed.', true]);
+  }
+
+  // Events
+  await q(`INSERT INTO school_events (school_id,title,name,event_date,date,type,description)
+           VALUES ($1,$2,$2,$3,$3,'social',$4),($1,$5,$5,$6,$6,'academic',$7),($1,$8,$8,$9,$9,'social',$10)`,
+    [sid,
+     'Inter-House Sports Day', new Date(Date.now() + 7*86400000).toISOString().slice(0,10),
+     'Annual inter-house sports competition. All parents welcome.',
+     'PTA Meeting', new Date(Date.now() + 14*86400000).toISOString().slice(0,10),
+     'Parent-Teacher Association meeting. Progress reports will be shared.',
+     'Cultural Day & Prize Giving', new Date(Date.now() + 21*86400000).toISOString().slice(0,10),
+     'End-of-term cultural celebration and prize giving ceremony.'
+    ]);
+
+  console.log('✅ Demo data seeded — school: Greenfield Academy');
 }
 
 async function getSchoolByTwilio(to) {
@@ -627,6 +821,15 @@ How can I help you today? You can ask about attendance, results, fees, homework,
       }
       // ── Normal parent query ──────────────────────────────
       else {
+        // Check if admin has replied recently (AI suppressed for 30 mins)
+        const suppressed = await isAiSuppressed(school.id, from);
+        if (suppressed) {
+          // Still log the message but don't send an AI reply
+          await q(`INSERT INTO messages (school_id,from_number,student_id,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)`,
+            [school.id, from, student.rows[0].id, body, '[AI suppressed — admin active in thread]']);
+          const twiml = new twilio.twiml.MessagingResponse();
+          return res.type('text/xml').send(twiml.toString()); // empty response — no AI reply
+        }
         const ctx = await buildStudentContext(school, student.rows[0], from);
         reply = await callAI(parentPrompt(ctx, first), body || 'Hello', null, ctx.history);
       }
@@ -874,10 +1077,25 @@ app.post('/api/onboarding', async (req, res) => {
 });
 app.get('/health', async (req, res) => { await q('SELECT 1'); json(res, { ok: true, db: true, ai: hasAi(), text_ai: hasTextAi(), vision_ai: hasVisionAi(), provider: process.env.DEEPSEEK_API_KEY ? 'deepseek' : (process.env.OPENAI_API_KEY ? 'openai' : (process.env.ANTHROPIC_API_KEY ? 'anthropic-vision-only' : 'demo')), twilio: hasTwilio() }); });
 
+// ── AI suppression helpers (FIX 4) ───────────────────────
+async function isAiSuppressed(schoolId, phone) {
+  try {
+    const r = await q(`SELECT suppressed_until FROM ai_suppression WHERE school_id=$1 AND phone=$2`, [schoolId, phone]);
+    if (!r.rows.length) return false;
+    return new Date(r.rows[0].suppressed_until) > new Date();
+  } catch(e) { return false; }
+}
+async function suppressAiForThread(schoolId, phone, minutes = 30) {
+  const until = new Date(Date.now() + minutes * 60000).toISOString();
+  await q(`INSERT INTO ai_suppression (school_id,phone,suppressed_until)
+           VALUES ($1,$2,$3)
+           ON CONFLICT (school_id,phone) DO UPDATE SET suppressed_until=$3`,
+    [schoolId, phone, until]);
+}
+
 // Browser/admin demo chat endpoint.
 // The school admin UI posts here when testing the Parent Chat tab.
-// It deliberately uses school_id from the UI, and falls back to the first active school
-// so demo mode still works immediately after onboarding.
+// Supports admin_mode flag: when true, acts as general school assistant (not parent proxy).
 app.post('/api/chat', async (req, res) => {
   try {
     const message = String(req.body.message || req.body.user_message || '').trim();
@@ -891,7 +1109,14 @@ app.post('/api/chat', async (req, res) => {
     }
     if (!school) return bad(res, 'No active school found. Add a school first from Super Admin.', 404);
 
-    // Prefer an explicit parent_phone or selected conversation phone if the frontend later sends one.
+    // ── ADMIN MODE: admin is testing the AI, not simulating a parent ──
+    if (req.body.admin_mode) {
+      const system = `You are EduPing's school AI assistant for ${school.name}. The school administrator is testing the AI. Answer school management questions, demo parent scenarios, explain features, or respond as if you are the parent-facing bot. Be helpful and specific. End with ${school.name} 🏫 when appropriate.`;
+      const reply = await callAI(system, message, null);
+      return json(res, { ok: true, reply, school_id: school.id, mode: 'admin', provider: process.env.DEEPSEEK_API_KEY ? 'deepseek' : 'demo' });
+    }
+
+    // ── PARENT PROXY MODE: admin is viewing a parent's conversation thread ──
     const fromNumber = normalisePhone(req.body.from_number || req.body.parent_phone || 'web-demo');
     let student = null;
     if (req.body.student_id) {
@@ -923,9 +1148,25 @@ app.post('/api/chat', async (req, res) => {
   } catch (err) {
     console.error('/api/chat error:', err);
     const errMsg = err?.message || String(err);
-    console.error('[/api/chat] crash detail:', errMsg);
     json(res, { ok: false, reply: `EduPing: Chat hit an error — ${errMsg}. EduPing 🏫`, error: errMsg }, 500);
   }
+});
+
+// POST /api/admin/reply — admin replies from dashboard chat thread (suppresses AI 30 min)
+app.post('/api/admin/reply', requireSchool, async (req, res) => {
+  try {
+    const { to, message } = req.body;
+    if (!to || !message) return bad(res, 'to and message required');
+    const school = req.school;
+    const from = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
+    if (!from) return bad(res, 'Twilio not configured');
+    const normTo = normalisePhone(to);
+    await twilioSend(normTo, from, message);
+    await suppressAiForThread(school.id, normTo, 30);
+    await q(`INSERT INTO messages (school_id,from_number,channel,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)`,
+      [school.id, normTo, 'admin-reply', '[Admin reply]', message]);
+    json(res, { ok: true, suppressed_until: new Date(Date.now() + 30*60000).toISOString() });
+  } catch(err) { bad(res, err.message, 500); }
 });
 
 app.post('/webhook/whatsapp', (req, res, next) => handleIncomingWhatsApp(req, res).catch(next));
@@ -972,10 +1213,59 @@ app.get('/api/admin/dashboard', requireSchool, async (req, res) => {
   json(res, { school: req.school, students: students.rows[0].total, staff: staff.rows[0].total, conversations: messages.rows[0].total, outstanding_fees: fees.rows[0].outstanding, new_admissions: admissions.rows[0].total, signin: signin.rows });
 });
 const crud = [
-  ['students','name,class_name,parent_name,parent_phone,weekly_performance_score'], ['staff','name,role,subject,class,phone,performance_score'], ['admission_inquiries','parent_name,phone,child_name,class_applying,status'], ['sickbay_log','student_id,reason,action_taken'], ['school_events','title,event_date']
+  ['students','name,class_name,parent_name,parent_phone,weekly_performance_score'], ['staff','name,role,subject,class,phone,performance_score'], ['admission_inquiries','parent_name,phone,child_name,class_applying,status'], ['school_events','title,event_date']
 ];
+// sickbay_log POST is handled by dedicated route above (fires WhatsApp to parent)
+// sickbay_log GET is registered separately below
+app.get('/api/admin/sickbay_log', requireSchool, async (req, res) => {
+  try {
+    json(res, (await q(`SELECT * FROM sickbay_log WHERE school_id=$1 ORDER BY visited_at DESC LIMIT 200`, [req.school.id])).rows);
+  } catch(err) { bad(res, err.message, 500); }
+});
 
-// Messages route — not in crud because it needs custom ordering
+// ── Sickbay POST override — fires WhatsApp to parent ────────
+// Must be defined BEFORE the generic crud loop below
+app.post('/api/admin/sickbay_log', requireSchool, async (req, res) => {
+  try {
+    const { student_id, reason, action_taken } = req.body;
+    if (!student_id) return bad(res, 'student_id required');
+    const school = req.school;
+
+    const r = await q(
+      `INSERT INTO sickbay_log (school_id,student_id,reason,action_taken) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [school.id, student_id, reason || '', action_taken || '']
+    );
+    const entry = r.rows[0];
+
+    // Look up student + parent details
+    const stuRes = await q(`SELECT name, class_name, parent_phone, parent_name FROM students WHERE id=$1 AND school_id=$2 LIMIT 1`, [student_id, school.id]);
+    if (stuRes.rows.length && stuRes.rows[0].parent_phone && hasTwilio()) {
+      const s = stuRes.rows[0];
+      const fromNumber = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
+      const time = new Date().toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', hour12: true });
+      const msg =
+        `🏥 *Sickbay Visit — ${school.name}*\n\n` +
+        `Dear ${s.parent_name || 'Parent'}, we want to let you know that *${s.name}* visited the sickbay today at *${time}*.\n\n` +
+        `📋 *Reason:* ${reason || 'Not specified'}\n` +
+        `✅ *Action taken:* ${action_taken || 'Child is being cared for'}\n\n` +
+        `${s.name} is currently in the care of our school nurse. ` +
+        `Please reply to this message or call the school if you have any concerns.\n\n` +
+        `${school.name} 🏫`;
+
+      try {
+        await twilioSend(s.parent_phone, fromNumber, msg);
+        await q(`UPDATE sickbay_log SET parent_notified=true, notified_at=now() WHERE id=$1`, [entry.id]);
+        console.log(`🏥 Sickbay notification sent to parent of ${s.name} (${s.parent_phone})`);
+      } catch(e) {
+        console.warn(`⚠️ Sickbay WhatsApp failed for ${s.name}: ${e.message}`);
+      }
+    }
+
+    json(res, entry, 201);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+
 app.get('/api/admin/messages', requireSchool, async (req, res) => {
   try {
     const rows = await q(`SELECT * FROM messages WHERE school_id=$1 ORDER BY created_at DESC LIMIT 100`, [req.school.id]);
@@ -998,7 +1288,16 @@ for (const [table, fields] of crud) {
 app.get('/api/admin/students/list', requireSchool, async (req, res) => {
   try {
     const rows = await q(
-      `SELECT s.* FROM students s WHERE s.school_id = $1 ORDER BY s.class_name, s.name LIMIT 500`,
+      `SELECT s.*,
+        COALESCE(f.status, 'no record') as fee_status,
+        COALESCE(f.amount_due, 0) as amount_due,
+        COALESCE(f.amount_paid, 0) as amount_paid,
+        GREATEST(COALESCE(f.amount_due,0) - COALESCE(f.amount_paid,0), 0) as balance,
+        f.term as fee_term
+       FROM students s
+       LEFT JOIN fees f ON f.student_id = s.id AND f.school_id = s.school_id
+       WHERE s.school_id = $1
+       ORDER BY s.class_name, s.name LIMIT 500`,
       [req.school.id]
     );
     json(res, rows.rows);
@@ -1498,9 +1797,66 @@ async function dailyFeeReminders() {
     WHERE f.status <> 'paid' AND f.due_date <= current_date AND s.status='active'`)).rows;
   for (const r of rows) await twilioSend(r.parent_phone, r.twilio_number || process.env.TWILIO_DEFAULT_FROM, `Reminder: ${r.student_name} has outstanding fees of ₦${Number(r.amount_due - r.amount_paid).toLocaleString()}. ${r.school_name} 🏫`);
 }
+
+// ── Birthday notifications — runs daily at 7am ───────────
+async function dailyBirthdayNotifications() {
+  try {
+    const today = new Date();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const rows = (await q(`
+      SELECT st.name, st.parent_phone, st.parent_name, s.name school_name, s.twilio_number
+      FROM students st JOIN schools s ON s.id=st.school_id
+      WHERE s.status='active'
+        AND st.date_of_birth IS NOT NULL
+        AND to_char(st.date_of_birth,'MM-DD') = $1
+        AND st.parent_phone IS NOT NULL AND st.parent_phone != ''
+    `, [`${mm}-${dd}`])).rows;
+    for (const r of rows) {
+      const from = r.twilio_number || process.env.TWILIO_DEFAULT_FROM;
+      if (!from) continue;
+      const msg =
+        `🎂 *Happy Birthday, ${r.name}!*\n\n` +
+        `Dear ${r.parent_name || 'Parent'}, today is ${r.name}'s special day! 🎉\n\n` +
+        `The entire ${r.school_name} family wishes ${r.name} a wonderful birthday filled with joy and success.\n\n` +
+        `May this new year of life bring great achievement! 🌟\n\n${r.school_name} 🏫`;
+      try { await twilioSend(r.parent_phone, from, msg); } catch(e) { console.warn('Birthday msg failed:', e.message); }
+    }
+    if (rows.length) console.log(`🎂 Birthday messages sent: ${rows.length}`);
+  } catch(e) { console.error('Birthday notification error:', e.message); }
+}
+
 // Weekly report cron handled by reporting.js (Fri 3pm generate, Fri 4pm send, Sat 8am retry)
 cron.schedule('0 9 * * *', dailyFeeReminders, { timezone: 'Africa/Lagos' });
+cron.schedule('0 7 * * *', dailyBirthdayNotifications, { timezone: 'Africa/Lagos' });
 cron.schedule('0 17 * * 5', async () => console.log('Award calculation job placeholder ran'), { timezone: 'Africa/Lagos' });
+
+// ── POST /api/admin/notify/fee-receipt — send payment confirmation to parent ──
+app.post('/api/admin/notify/fee-receipt', requireSchool, async (req, res) => {
+  try {
+    const { student_id, amount_paid, payment_method, receipt_number } = req.body;
+    if (!student_id || !amount_paid) return bad(res, 'student_id and amount_paid required');
+    const school = req.school;
+    const stuRes = await q(`SELECT name, parent_name, parent_phone FROM students WHERE id=$1 AND school_id=$2 LIMIT 1`, [student_id, school.id]);
+    if (!stuRes.rows.length) return bad(res, 'Student not found', 404);
+    const s = stuRes.rows[0];
+    if (!s.parent_phone) return bad(res, 'No parent phone on file for this student');
+    const from = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
+    if (!from) return bad(res, 'Twilio not configured');
+    const date = new Date().toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' });
+    const msg =
+      `✅ *Payment Received — ${school.name}*\n\n` +
+      `Dear ${s.parent_name || 'Parent'},\n\n` +
+      `We confirm receipt of your payment for *${s.name}*.\n\n` +
+      `💰 *Amount:* ₦${Number(amount_paid).toLocaleString()}\n` +
+      `📅 *Date:* ${date}\n` +
+      (payment_method ? `💳 *Method:* ${payment_method}\n` : '') +
+      (receipt_number ? `🧾 *Receipt No:* ${receipt_number}\n` : '') +
+      `\nThank you for your prompt payment.\n\n${school.name} 🏫`;
+    await twilioSend(s.parent_phone, from, msg);
+    json(res, { ok: true });
+  } catch(err) { bad(res, err.message, 500); }
+});
 
 // ── Weekly risk assessment — every Monday at 6am ──────────
 cron.schedule('0 6 * * 1', async () => {
@@ -1532,6 +1888,7 @@ app.get('/api/admin/homeworks', requireSchool, async (req, res) => {
 });
 
 // POST /api/admin/message/send — admin sends direct WhatsApp to parent
+// Also suppresses AI for that thread for 30 minutes (FIX 4)
 app.post('/api/admin/message/send', requireSchool, async (req, res) => {
   try {
     const { to, message } = req.body;
@@ -1540,7 +1897,53 @@ app.post('/api/admin/message/send', requireSchool, async (req, res) => {
     const fromNumber = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
     if (!fromNumber) return bad(res, 'No Twilio number configured');
     await twilioSend(to, fromNumber, message);
+    // Suppress AI for this thread for 30 minutes
+    await suppressAiForThread(school.id, normalisePhone(to), 30);
+    // Log the outbound admin message
+    await q(`INSERT INTO messages (school_id,from_number,channel,user_message,assistant_reply)
+             VALUES ($1,$2,$3,$4,$5)`,
+      [school.id, normalisePhone(to), 'admin', '[Admin direct message]', message]);
     json(res, { ok: true });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// ── Student profile route (FIX 5) ────────────────────────
+// GET /api/admin/students/:id/profile
+app.get('/api/admin/students/:id/profile', requireSchool, async (req, res) => {
+  try {
+    const sid = req.school.id;
+    const studentId = req.params.id;
+    const stuRes = await q(`SELECT * FROM students WHERE id=$1 AND school_id=$2 LIMIT 1`, [studentId, sid]);
+    if (!stuRes.rows.length) return bad(res, 'Student not found', 404);
+    const s = stuRes.rows[0];
+
+    const [scores, fees, attendance, sickbay, homeworks, behaviour, risk, results] = await Promise.all([
+      q(`SELECT subject, score, term, uploaded_at FROM scores WHERE student_id=$1 AND school_id=$2 ORDER BY uploaded_at DESC LIMIT 20`, [studentId, sid]),
+      q(`SELECT * FROM fees WHERE student_id=$1 AND school_id=$2 ORDER BY created_at DESC LIMIT 5`, [studentId, sid]),
+      q(`SELECT date, status FROM attendance WHERE student_id=$1 AND school_id=$2 ORDER BY date DESC LIMIT 30`, [studentId, sid]),
+      q(`SELECT reason, action_taken, parent_notified, visited_at FROM sickbay_log WHERE student_id=$1 AND school_id=$2 ORDER BY visited_at DESC LIMIT 10`, [studentId, sid]),
+      q(`SELECT subject, description, due_date FROM homeworks WHERE school_id=$1 AND class_name=$2 ORDER BY created_at DESC LIMIT 5`, [sid, s.class_name]),
+      q(`SELECT note, created_at FROM behaviour_notes WHERE student_id=$1 AND school_id=$2 ORDER BY created_at DESC LIMIT 5`, [studentId, sid]),
+      q(`SELECT risk_level, avg_score, attendance_pct, weak_subjects, trajectory, assessed_at FROM student_risk_scores WHERE student_id=$1 LIMIT 1`, [studentId]),
+      q(`SELECT term, subjects, position, remark FROM student_results WHERE student_id=$1 AND school_id=$2 ORDER BY created_at DESC LIMIT 3`, [studentId, sid]),
+    ]);
+
+    const attendanceArr = attendance.rows;
+    const presentCount = attendanceArr.filter(a => a.status === 'present').length;
+    const attendancePct = attendanceArr.length ? Math.round((presentCount / attendanceArr.length) * 100) : null;
+
+    json(res, {
+      ...s,
+      scores: scores.rows,
+      fees: fees.rows,
+      attendance: attendanceArr,
+      attendance_pct: attendancePct,
+      sickbay: sickbay.rows,
+      homeworks: homeworks.rows,
+      behaviour: behaviour.rows,
+      risk: risk.rows[0] || null,
+      results: results.rows,
+    });
   } catch(err) { bad(res, err.message, 500); }
 });
 
@@ -1844,14 +2247,6 @@ app.patch('/api/admin/waitlist/:id/contacted', requireSchool, async (req, res) =
   } catch(err) { bad(res, err.message, 500); }
 });
 
-// Serve landing page at root for non-admin users
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'landing.html'));
-});
-
-// /admin route handled above
-
-
 // ══════════════════════════════════════════════════════════
 // NEW ADMIN ENDPOINTS
 // ══════════════════════════════════════════════════════════
@@ -1861,21 +2256,30 @@ app.get('/api/admin/chats', requireSchool, async (req, res) => {
   try {
     const sid = req.school.id;
     const type = req.query.type || 'parent';
-    let sql, rows;
     if (type === 'staff') {
-      // Get staff phones then their messages
       const staff = await q(`SELECT phone, name FROM staff WHERE school_id=$1 AND phone IS NOT NULL AND phone != ''`, [sid]);
       const result = [];
       for (const s of staff.rows) {
-        const last = await q(`SELECT body, created_at, direction FROM messages WHERE school_id=$1 AND from_number LIKE $2 OR (school_id=$1 AND to_number LIKE $2) ORDER BY created_at DESC LIMIT 1`,
+        const last = await q(`SELECT user_message, created_at FROM messages WHERE school_id=$1 AND from_number LIKE $2 ORDER BY created_at DESC LIMIT 1`,
           [sid, '%' + s.phone.replace('+','').slice(-9) + '%']);
-        result.push({ phone: s.phone, name: s.name, last_message: last.rows[0]?.body?.slice(0,60) || '—', last_time: last.rows[0]?.created_at });
+        result.push({ phone: s.phone, name: s.name, last_message: last.rows[0]?.user_message?.slice(0,60) || '—', last_time: last.rows[0]?.created_at });
       }
       return json(res, result);
     }
-    // Parent chats (existing)
-    rows = await q(`SELECT DISTINCT ON (from_number) from_number as phone, body as last_message, created_at as last_time
-      FROM messages WHERE school_id=$1 AND direction='inbound' ORDER BY from_number, created_at DESC`, [sid]);
+    // Parent chats — join to students to get parent name + student name
+    const rows = await q(`
+      SELECT DISTINCT ON (m.from_number)
+        m.from_number as phone,
+        m.user_message as last_message,
+        m.created_at as last_time,
+        COALESCE(s.parent_name, m.from_number) as parent_name,
+        s.name as student_name,
+        s.class_name
+      FROM messages m
+      LEFT JOIN students s ON s.school_id = m.school_id AND s.parent_phone = m.from_number
+      WHERE m.school_id=$1
+      ORDER BY m.from_number, m.created_at DESC
+    `, [sid]);
     json(res, rows.rows);
   } catch(err) { bad(res, err.message, 500); }
 });
@@ -2318,3 +2722,146 @@ app.use((err, req, res, next) => { console.error(err); res.status(500).json({ er
     if (!process.env.DEEPSEEK_API_KEY && !process.env.OPENAI_API_KEY) console.warn(`⚠️  WARNING: No AI key found — running in demo mode`);
   });
 })();
+
+
+// GET /api/admin/fees/summary — full fee status per student + school totals
+app.get('/api/admin/fees/summary', requireSchool, async (req, res) => {
+  try {
+    const sid = req.school.id;
+    const rows = await q(`
+      SELECT s.id, s.name, s.class_name,
+             COALESCE(f.id, NULL) as fee_id,
+             COALESCE(f.term, $2) as term,
+             COALESCE(f.amount_due, 0)::numeric as amount_due,
+             COALESCE(f.amount_paid, 0)::numeric as amount_paid,
+             COALESCE(f.amount_due, 0) - COALESCE(f.amount_paid, 0) as balance,
+             COALESCE(f.status, 'unpaid') as fee_status,
+             f.due_date
+      FROM students s
+      LEFT JOIN fees f ON f.student_id = s.id AND f.school_id = s.school_id
+      WHERE s.school_id = $1
+      ORDER BY s.class_name, s.name
+    `, [sid, req.school.current_term || 'Current Term']);
+
+    const students = rows.rows;
+    const totals = {
+      expected:    students.reduce((a, r) => a + Number(r.amount_due  || 0), 0),
+      collected:   students.reduce((a, r) => a + Number(r.amount_paid || 0), 0),
+      outstanding: students.reduce((a, r) => a + Number(r.balance     || 0), 0),
+    };
+    json(res, { students, totals });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// POST /api/admin/fees/payment — record a payment for a student
+app.post('/api/admin/fees/payment', requireSchool, async (req, res) => {
+  try {
+    const { student_id, amount, payment_method, payment_date, note } = req.body;
+    if (!student_id) return bad(res, 'student_id required');
+    if (!amount || Number(amount) <= 0) return bad(res, 'Valid amount required');
+    const sid = req.school.id;
+    const term = req.school.current_term || 'Current Term';
+
+    // Ensure fee record exists
+    await q(`INSERT INTO fees (school_id,student_id,term,amount_due,amount_paid,status)
+             VALUES ($1,$2,$3,0,0,'unpaid')
+             ON CONFLICT (school_id,student_id,term) DO NOTHING`,
+      [sid, student_id, term]).catch(() => {});
+
+    // Get current fee record
+    const feeRec = await q(`SELECT * FROM fees WHERE school_id=$1 AND student_id=$2 AND term=$3 LIMIT 1`,
+      [sid, student_id, term]);
+
+    let fee = feeRec.rows[0];
+    if (!fee) {
+      // Fallback: create and fetch
+      await q(`INSERT INTO fees (school_id,student_id,term,amount_due,amount_paid,status) VALUES ($1,$2,$3,0,0,'unpaid')`,
+        [sid, student_id, term]);
+      fee = (await q(`SELECT * FROM fees WHERE school_id=$1 AND student_id=$2 AND term=$3 LIMIT 1`, [sid, student_id, term])).rows[0];
+    }
+
+    const newPaid = Number(fee.amount_paid || 0) + Number(amount);
+    const newStatus = newPaid <= 0 ? 'unpaid'
+      : newPaid >= Number(fee.amount_due || 0) && Number(fee.amount_due || 0) > 0 ? 'paid'
+      : 'partial';
+
+    // Update fee record
+    await q(`UPDATE fees SET amount_paid=$1, status=$2, updated_at=now() WHERE id=$3`,
+      [newPaid, newStatus, fee.id]);
+
+    // Log the individual payment
+    await q(`INSERT INTO fee_payments (school_id,student_id,fee_id,amount,payment_method,payment_date,note)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [sid, student_id, fee.id, Number(amount), payment_method || 'cash',
+       payment_date || new Date().toISOString().slice(0,10), note || null]);
+
+    json(res, { ok: true, amount_paid: newPaid, status: newStatus });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// POST /api/admin/fees/setup — bulk set fee amount for a class or all students
+app.post('/api/admin/fees/setup', requireSchool, async (req, res) => {
+  try {
+    const { class_name, term, amount_due, due_date } = req.body;
+    if (!amount_due || Number(amount_due) <= 0) return bad(res, 'amount_due required');
+    const sid = req.school.id;
+    const feeTerm = term || req.school.current_term || 'Current Term';
+    const feeDate = due_date || null;
+
+    // Get students — all or filtered by class
+    const studentQ = class_name && class_name !== 'all'
+      ? await q('SELECT id FROM students WHERE school_id=$1 AND class_name=$2', [sid, class_name])
+      : await q('SELECT id FROM students WHERE school_id=$1', [sid]);
+
+    let created = 0, updated = 0;
+    for (const s of studentQ.rows) {
+      const existing = await q('SELECT id, amount_paid FROM fees WHERE school_id=$1 AND student_id=$2 AND term=$3', [sid, s.id, feeTerm]);
+      if (existing.rows.length) {
+        // Update amount_due, recalculate status
+        const paid = Number(existing.rows[0].amount_paid || 0);
+        const newStatus = paid <= 0 ? 'unpaid' : paid >= Number(amount_due) ? 'paid' : 'partial';
+        await q('UPDATE fees SET amount_due=$1, due_date=$2, status=$3, updated_at=now() WHERE id=$4',
+          [Number(amount_due), feeDate, newStatus, existing.rows[0].id]);
+        updated++;
+      } else {
+        await q(`INSERT INTO fees (school_id,student_id,term,amount_due,amount_paid,status,due_date)
+                 VALUES ($1,$2,$3,$4,0,'unpaid',$5)`,
+          [sid, s.id, feeTerm, Number(amount_due), feeDate]);
+        created++;
+      }
+    }
+    json(res, { ok: true, created, updated, total: studentQ.rows.length });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// GET /api/admin/fees/payments/:student_id — payment history for one student
+app.get('/api/admin/fees/payments/:student_id', requireSchool, async (req, res) => {
+  try {
+    const rows = await q(`SELECT fp.*, s.name as student_name FROM fee_payments fp
+                          JOIN students s ON s.id=fp.student_id
+                          WHERE fp.school_id=$1 AND fp.student_id=$2
+                          ORDER BY fp.payment_date DESC LIMIT 50`,
+      [req.school.id, req.params.student_id]);
+    json(res, rows.rows);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// PATCH /api/admin/fees/:student_id — manually set amount_due (single student)
+app.patch('/api/admin/fees/:student_id', requireSchool, async (req, res) => {
+  try {
+    const { amount_due, term, due_date } = req.body;
+    const sid = req.school.id;
+    const feeTerm = term || req.school.current_term || 'Current Term';
+    const existing = await q('SELECT id, amount_paid FROM fees WHERE school_id=$1 AND student_id=$2 AND term=$3', [sid, req.params.student_id, feeTerm]);
+    if (existing.rows.length) {
+      const paid = Number(existing.rows[0].amount_paid || 0);
+      const newStatus = paid <= 0 ? 'unpaid' : paid >= Number(amount_due) ? 'paid' : 'partial';
+      await q('UPDATE fees SET amount_due=$1, due_date=$2, status=$3, updated_at=now() WHERE id=$4',
+        [Number(amount_due), due_date||null, newStatus, existing.rows[0].id]);
+    } else {
+      await q(`INSERT INTO fees (school_id,student_id,term,amount_due,amount_paid,status,due_date) VALUES ($1,$2,$3,$4,0,'unpaid',$5)`,
+        [sid, req.params.student_id, feeTerm, Number(amount_due), due_date||null]);
+    }
+    json(res, { ok: true });
+  } catch(err) { bad(res, err.message, 500); }
+});
