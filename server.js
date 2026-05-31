@@ -789,13 +789,18 @@ async function handleIncomingWhatsApp(req, res) {
   const mediaType = req.body.MediaContentType0 || '';
   const school = await getSchoolByTwilio(to);
   if (!school || school.status !== 'active') return res.type('text/xml').send(new twilio.twiml.MessagingResponse().message('School account is not active. Please contact EduPing support.').toString());
-  // Guard: if school has no dedicated twilio_number, it is using a shared fallback number.
-  // In that case, check no OTHER active school is also using this number — prevents cross-school routing.
-  if (!school.twilio_number || school.twilio_number === process.env.TWILIO_DEFAULT_FROM) {
-    const sharedRisk = await q(`SELECT COUNT(*) FROM schools WHERE status='active' AND (twilio_number IS NULL OR twilio_number=$1)`, [process.env.TWILIO_DEFAULT_FROM || '']);
-    if (Number(sharedRisk.rows[0].count) > 1) {
-      console.error('[MULTITENANCY] Multiple schools sharing fallback Twilio number — message routing is ambiguous. Assign dedicated twilio_number to each school.');
-      return res.type('text/xml').send(new twilio.twiml.MessagingResponse().toString()); // silent drop — better than wrong school response
+  // Guard: only block if MULTIPLE DIFFERENT schools are sharing the exact same number.
+  // A single school using the fallback is fine — that is the standard single-tenant setup.
+  // Only fire when count of OTHER active schools on the same number is > 0.
+  const effectiveTwilioNumber = school.twilio_number || process.env.TWILIO_DEFAULT_FROM || '';
+  if (effectiveTwilioNumber) {
+    const sharedRisk = await q(
+      `SELECT COUNT(*) FROM schools WHERE status='active' AND id != $1 AND (twilio_number=$2 OR (twilio_number IS NULL AND $2=$3))`,
+      [school.id, effectiveTwilioNumber, process.env.TWILIO_DEFAULT_FROM || '']
+    );
+    if (Number(sharedRisk.rows[0].count) > 0) {
+      console.error('[MULTITENANCY] School', school.name, '— twilio_number', effectiveTwilioNumber, 'is shared with', sharedRisk.rows[0].count, 'other active school(s). Assign dedicated twilio_number to each school to resolve.');
+      return res.type('text/xml').send(new twilio.twiml.MessagingResponse().toString());
     }
   }
 
