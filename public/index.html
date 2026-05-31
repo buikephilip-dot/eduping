@@ -579,6 +579,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         <button class="subnav-btn active" onclick="switchSection('overview',this)">📊 Overview</button>
         <button class="subnav-btn" onclick="switchSection('staff',this)">👩‍🏫 Staff Audit</button>
         <button class="subnav-btn" onclick="switchSection('students',this)">🎓 Students</button>
+        <button class="subnav-btn" onclick="switchSection('promotion',this)">🔼 Promotion</button>
         <button class="subnav-btn" onclick="switchSection('awards',this)">🏆 Awards</button>
         <button class="subnav-btn" onclick="switchSection('admissions',this)">📋 Admissions</button>
         <button class="subnav-btn" onclick="switchSection('sickbay',this)">🏥 Sick Bay</button>
@@ -782,6 +783,40 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
             </div>
           </div>
 
+          <!-- Fee settings for import — set once, applies to all imports below -->
+          <div class="dash-card full" style="margin-bottom:0;">
+            <div class="dash-card-header" style="background:linear-gradient(135deg,var(--green-pale),#f0fdf4);">
+              <div class="dash-card-title">💰 Term Fee Settings <span style="font-weight:400;font-size:12px;color:var(--text-muted);margin-left:8px;">— set once before importing, applies to all students</span></div>
+              <div id="fee-settings-status" style="font-size:12px;color:var(--green);font-weight:500;"></div>
+            </div>
+            <div class="dash-card-body" style="padding:14px 18px;">
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:end;">
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Term Name *</label>
+                  <input class="form-input" id="import-fee-term" placeholder="e.g. 2nd Term 2024/2025">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Fee Amount (₦) *</label>
+                  <input class="form-input" id="import-fee-amount" type="number" placeholder="e.g. 120000" oninput="updateFeeSettingsStatus()">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Due Date (optional)</label>
+                  <input class="form-input" id="import-fee-due" type="date">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">Create fee records?</label>
+                  <select class="form-select" id="import-fee-create" onchange="updateFeeSettingsStatus()">
+                    <option value="yes">Yes — create for all imported students</option>
+                    <option value="no">No — import students only</option>
+                  </select>
+                </div>
+              </div>
+              <div style="margin-top:10px;font-size:12px;color:var(--text-muted);">
+                📌 If you leave fee amount blank, students will be imported with <strong>no record</strong> status — you can bulk-set fees later in the Fees section.
+              </div>
+            </div>
+          </div>
+
           <!-- Excel import -->
           <div class="dash-card">
             <div class="dash-card-header"><div class="dash-card-title">📊 Import from Excel / CSV</div></div>
@@ -842,6 +877,19 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
               <div class="form-group"><label class="form-label">Parent Name</label><input class="form-input" id="st-parent" placeholder="Mrs Adaeze Okonkwo"></div>
               <div class="form-group"><label class="form-label">Parent WhatsApp *</label><input class="form-input" id="st-phone" placeholder="+2348010000001"></div>
             </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-top:10px;padding-top:10px;border-top:1px dashed #e9edef;">
+              <div class="form-group"><label class="form-label">Term (optional)</label><input class="form-input" id="st-fee-term" placeholder="Leave blank to use settings above"></div>
+              <div class="form-group"><label class="form-label">Fee Amount ₦ (optional)</label><input class="form-input" id="st-fee-amount" type="number" placeholder="e.g. 120000"></div>
+              <div class="form-group"><label class="form-label">Amount Paid ₦ (optional)</label><input class="form-input" id="st-fee-paid" type="number" placeholder="0"></div>
+              <div class="form-group"><label class="form-label">Payment Status</label>
+                <select class="form-select" id="st-fee-status">
+                  <option value="">Auto (based on amounts)</option>
+                  <option value="paid">Paid</option>
+                  <option value="partial">Partial</option>
+                  <option value="unpaid">Unpaid</option>
+                </select>
+              </div>
+            </div>
             <button class="broadcast-btn" style="margin-top:14px;max-width:200px;" onclick="addStudentManual()">➕ Add Student</button>
           </div>
         </div>
@@ -851,7 +899,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
           <div class="dash-card-header">
             <div class="dash-card-title">All Students <span id="student-count" style="color:var(--text-muted);font-weight:400;font-size:13px;"></span></div>
             <div style="display:flex;gap:8px;align-items:center;">
-              <input class="search-box" placeholder="🔍 Search students..." oninput="filterStudents(this.value)" style="width:220px;font-size:13px;">
+              <input class="search-box" id="students-search" placeholder="🔍 Search students..." oninput="filterStudents(this.value)" style="width:220px;font-size:13px;">
               <button class="qr-btn" onclick="exportStudents()">⬇️ Export</button>
             </div>
           </div>
@@ -1102,7 +1150,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
       </div>
 
       <!-- MESSAGE USAGE -->
-      <div id="section-usage" class="dash-section">
+      <div id="section-usage" class="dash-section"><div id="usage-stats-grid" class="stats-grid" style="margin-bottom:18px;"></div>
         <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
           <div class="stat-card blue">
             <div class="stat-icon">💬</div>
@@ -1206,6 +1254,87 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
             <div class="loading">Loading...</div>
           </div>
         </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- PROMOTION SECTION                                          -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <div id="section-promotion" class="dash-section">
+
+        <!-- Stats row -->
+        <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:18px;">
+          <div class="stat-card green"><div class="stat-icon">🔼</div><div class="stat-value" id="promo-count-promote">—</div><div class="stat-label">To Promote</div></div>
+          <div class="stat-card blue"><div class="stat-icon">🎓</div><div class="stat-value" id="promo-count-graduate">—</div><div class="stat-label">Graduating</div></div>
+          <div class="stat-card"><div class="stat-icon">🔁</div><div class="stat-value" id="promo-count-repeat">0</div><div class="stat-label">Repeating</div></div>
+          <div class="stat-card red"><div class="stat-icon">⚠️</div><div class="stat-value" id="promo-count-unknown">—</div><div class="stat-label">Class Unknown</div></div>
+          <div class="stat-card red"><div class="stat-icon">💰</div><div class="stat-value" id="promo-count-unpaid">—</div><div class="stat-label">Unpaid Fees</div></div>
+        </div>
+
+        <!-- Promotion settings -->
+        <div class="dash-card full" style="margin-bottom:18px;">
+          <div class="dash-card-header" style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);">
+            <div class="dash-card-title">⚙️ Promotion Settings</div>
+          </div>
+          <div class="dash-card-body" style="padding:16px 18px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:end;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">New Academic Session *</label>
+                <input class="form-input" id="promo-session" placeholder="e.g. 2025/2026">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">New Term Name</label>
+                <input class="form-input" id="promo-new-term" placeholder="e.g. 1st Term 2025/2026">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">New Term Fee ₦ (optional)</label>
+                <input class="form-input" id="promo-fee-amount" type="number" placeholder="Creates fee records">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Notify Parents via WhatsApp?</label>
+                <select class="form-select" id="promo-notify">
+                  <option value="yes">Yes — send promotion message</option>
+                  <option value="no">No — promote silently</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:14px;">
+              <button class="broadcast-btn" onclick="loadPromotionPreview()" style="background:var(--info);">🔍 Preview Promotions</button>
+              <button class="broadcast-btn" id="promo-confirm-btn" onclick="confirmPromotion()" style="display:none;">✅ Confirm & Promote All</button>
+              <button class="export-btn" onclick="loadPromotionHistory()">📋 View History</button>
+              <button class="export-btn" onclick="loadAlumni()">🎓 Alumni</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Preview table -->
+        <div class="dash-card full" id="promo-preview-card" style="display:none;margin-bottom:18px;">
+          <div class="dash-card-header">
+            <div class="dash-card-title">📋 Promotion Preview <span id="promo-preview-subtitle" style="font-weight:400;font-size:12px;color:var(--text-muted);margin-left:8px;"></span></div>
+            <div style="display:flex;gap:8px;">
+              <input class="search-box" id="promo-search" placeholder="🔍 Search student..." oninput="filterPromoPreview()" style="width:180px;font-size:13px;">
+              <select class="form-select" id="promo-filter-action" onchange="filterPromoPreview()" style="font-size:13px;width:140px;">
+                <option value="">All</option>
+                <option value="promote">Promoting</option>
+                <option value="graduate">Graduating</option>
+                <option value="repeat">Repeating</option>
+                <option value="unknown">Unknown class</option>
+              </select>
+            </div>
+          </div>
+          <div class="dash-card-body" style="padding:0;" id="promo-preview-table"></div>
+        </div>
+
+        <!-- History / Alumni panels -->
+        <div class="dash-card full" id="promo-history-card" style="display:none;margin-bottom:18px;">
+          <div class="dash-card-header"><div class="dash-card-title">📋 Promotion History</div></div>
+          <div class="dash-card-body" style="padding:0;" id="promo-history-table"><div class="loading">Loading...</div></div>
+        </div>
+
+        <div class="dash-card full" id="promo-alumni-card" style="display:none;">
+          <div class="dash-card-header"><div class="dash-card-title">🎓 Alumni</div></div>
+          <div class="dash-card-body" style="padding:0;" id="promo-alumni-table"><div class="loading">Loading...</div></div>
+        </div>
+
       </div>
 
       <!-- CLASS SUMMARY -->
@@ -1585,6 +1714,20 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
   </div>
 </div>
 
+
+<!-- ADMIN REFINE MODAL -->
+<div class="payment-modal" id="admin-refine-modal">
+  <div class="payment-modal-box" style="width:520px;">
+    <div class="modal-title">✏️ Refine Message with AI</div>
+    <div class="modal-sub" style="margin-bottom:12px;color:var(--text-muted);font-size:13px;">Improve your broadcast message using AI before sending</div>
+    <textarea class="form-textarea" id="admin-refine-input" style="height:120px;margin-bottom:10px;" placeholder="Paste your message here..."></textarea>
+    <div id="admin-refine-output" style="display:none;background:var(--gray-bg);border-radius:8px;padding:12px;font-size:13px;margin-bottom:12px;line-height:1.6;"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="broadcast-btn" onclick="submitRefineMessage()" style="flex:1;">✨ Improve with AI</button>
+      <button class="modal-btn secondary" onclick="document.getElementById('admin-refine-modal').classList.remove('show')" style="flex:0 0 auto;">Close</button>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1717,6 +1860,22 @@ const DEMO_ROUTES = {
   '/api/admin/results/stats': () => ({ uploaded: 12, pins: 8, accessed: 6, fee_pending: 3 }),
   '/api/admin/results/pins': () => [],
   '/api/admin/waitlist': () => ({ ok: true }),
+  '/api/admin/students/promotion-preview': () => ({
+    students: DEMO_STUDENTS.map(s => {
+      const map = {'JSS1A':'JSS2A','JSS1B':'JSS2B','JSS2A':'JSS3A','JSS2B':'JSS3B','JSS3A':'SS1A','JSS3B':'SS1B','SS1A':'SS2A','SS1B':'SS2B','SS2A':'SS3A','SS2B':'SS3B','SS3A':'GRADUATED','SS3B':'GRADUATED'};
+      const next = map[s.class_name] || null;
+      return { ...s, next_class: next, action: next === 'GRADUATED' ? 'graduate' : next ? 'promote' : 'unknown', can_promote: !!next, fee_status: s.fee_status||'paid', amount_due: s.amount_due||120000, amount_paid: s.amount_paid||120000 };
+    }),
+    counts: { total: DEMO_STUDENTS.length, promote: DEMO_STUDENTS.length - 1, graduate: 1, unknown: 0, unpaid_fees: 2 }
+  }),
+  '/api/admin/students/promote': () => ({ ok: true, promoted: DEMO_STUDENTS.length - 1, graduated: 1, repeated: 0, withdrawn: 0, errors: [] }),
+  '/api/admin/students/promotion-history': () => DEMO_STUDENTS.slice(0,3).map((s,i) => ({
+    student_name: s.name, from_class: s.class_name,
+    to_class: s.class_name.replace('JSS2','JSS3').replace('JSS1','JSS2').replace('SS1','SS2'),
+    academic_session: '2024/2025', promotion_type: 'promoted', notes: null,
+    promoted_at: new Date(Date.now() - i*86400000).toISOString(), notified_parent: true
+  })),
+  '/api/admin/students/alumni': () => [],
 };
 
 // Student profile demo data
@@ -1860,6 +2019,11 @@ function onLoggedIn() {
   document.getElementById('dash-greeting').textContent = 'Good morning, Admin 👋';
   document.getElementById('dash-school-sub').textContent = schoolData.name;
   document.getElementById('dash-date').textContent = new Date().toLocaleDateString('en-NG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  // Pre-fill fee import settings from school data
+  if (schoolData?.current_term) {
+    const termEl = document.getElementById('import-fee-term');
+    if (termEl && !termEl.value) termEl.value = schoolData.current_term;
+  }
   switchView('dashboard', document.querySelectorAll('.tab-btn')[1]);
 }
 
@@ -1890,6 +2054,7 @@ const switchSection = function(name, btn) {
     }
     if (btn) btn.classList.add('active');
     if (name === 'students') loadStudents();
+    if (name === 'promotion') { /* preview loaded on demand via button */ }
     if (name === 'staff') { loadStaff(); loadSigninLog(); }
     if (name === 'admissions') loadAdmissions();
     if (name === 'sickbay') loadSickbay();
@@ -2032,10 +2197,18 @@ async function addStudentManual() {
   const phone = document.getElementById('st-phone').value.trim();
   if (!name || !cls || !phone) { showToast('Name, class and parent phone required ❌'); return; }
   try {
+    const feeAmt = document.getElementById('st-fee-amount')?.value;
+    const feePaid = document.getElementById('st-fee-paid')?.value;
+    const feeTerm = document.getElementById('st-fee-term')?.value.trim() || document.getElementById('import-fee-term')?.value.trim() || schoolData?.current_term;
+    const feeStatus = document.getElementById('st-fee-status')?.value;
     await api('/api/admin/students', { method:'POST', body:JSON.stringify({
       name, class_name: cls,
       parent_name: document.getElementById('st-parent').value.trim(),
-      parent_phone: phone.startsWith('+') ? phone : '+234' + phone.replace(/^0/, '')
+      parent_phone: phone.startsWith('+') ? phone : '+234' + phone.replace(/^0/, ''),
+      fee_amount: feeAmt ? Number(feeAmt) : null,
+      fee_paid: feePaid ? Number(feePaid) : null,
+      fee_term: feeTerm || null,
+      fee_status: feeStatus || null
     })});
     showToast('✅ ' + name + ' added!');
     document.getElementById('st-name').value = '';
@@ -2159,14 +2332,18 @@ function handleExcelFile(file) {
         name: r.name || r.studentname || r.fullname || '',
         class_name: r.class || r.classname || r.form || r.grade || '',
         parent_name: r.parentname || r.parent || r.guardian || r.guardianname || '',
-        parent_phone: r.parentphone || r.phone || r.parentcontact || r.contact || r.mobile || ''
+        parent_phone: r.parentphone || r.phone || r.parentcontact || r.contact || r.mobile || '',
+        amount_due: r.feeamount || r.amountdue || r.fee || r.fees || '',
+        amount_paid: r.amountpaid || r.paid || '',
+        date_of_birth: r.dateofbirth || r.dob || r.birthday || ''
       })).filter(r => r.name);
 
       // Show preview
+      const hasFees = excelData.some(r => r.amount_due);
       const preview = document.getElementById('excel-preview-table');
-      preview.innerHTML = '<table class="data-table"><thead><tr><th>Name</th><th>Class</th><th>Parent</th><th>Phone</th></tr></thead><tbody>' +
-        excelData.slice(0,5).map(r => '<tr><td>' + r.name + '</td><td>' + (r.class_name||'—') + '</td><td>' + (r.parent_name||'—') + '</td><td>' + (r.parent_phone||'—') + '</td></tr>').join('') +
-        (excelData.length > 5 ? '<tr><td colspan="4" style="color:var(--text-muted);font-size:12px;">...and ' + (excelData.length-5) + ' more students</td></tr>' : '') +
+      preview.innerHTML = '<table class="data-table"><thead><tr><th>Name</th><th>Class</th><th>Parent</th><th>Phone</th>' + (hasFees ? '<th>Fee Due</th><th>Paid</th>' : '') + '</tr></thead><tbody>' +
+        excelData.slice(0,5).map(r => '<tr><td>' + r.name + '</td><td>' + (r.class_name||'—') + '</td><td>' + (r.parent_name||'—') + '</td><td>' + (r.parent_phone||'—') + '</td>' + (hasFees ? '<td>' + (r.amount_due ? '₦'+Number(r.amount_due).toLocaleString() : '—') + '</td><td>' + (r.amount_paid ? '₦'+Number(r.amount_paid).toLocaleString() : '₦0') + '</td>' : '') + '</tr>').join('') +
+        (excelData.length > 5 ? '<tr><td colspan="' + (hasFees ? 6 : 4) + '" style="color:var(--text-muted);font-size:12px;">...and ' + (excelData.length-5) + ' more students</td></tr>' : '') +
         '</tbody></table>';
       document.getElementById('excel-preview').style.display = 'block';
       document.getElementById('excel-drop-zone').style.borderColor = 'var(--green)';
@@ -2186,9 +2363,10 @@ async function importFromExcel() {
   btn.textContent = '⬆️ Importing...';
   btn.disabled = true;
   try {
+    const feeSettings = getFeeImportSettings();
     const result = await api('/api/admin/students/import-bulk', {
       method: 'POST',
-      body: JSON.stringify({ students: excelData })
+      body: JSON.stringify({ students: excelData, fee_settings: feeSettings })
     });
     const el = document.getElementById('excel-import-result');
     el.style.display = 'block';
@@ -2201,7 +2379,7 @@ async function importFromExcel() {
 }
 
 function downloadTemplate() {
-  const csv = 'Name,Class,Parent Name,Parent Phone\nEmeka Okonkwo,JSS2A,Mrs Adaeze Okonkwo,+2348010000001\nBlessing Adeyemi,JSS2A,Mrs Tope Adeyemi,+2348010000002';
+  const csv = 'Name,Class,Parent Name,Parent Phone,Fee Amount,Amount Paid,Date of Birth\nEmeka Okonkwo,JSS2A,Mrs Adaeze Okonkwo,+2348010000001,120000,120000,2012-05-14\nBlessing Adeyemi,JSS2A,Mrs Tope Adeyemi,+2348010000002,120000,0,2013-09-22\nFatima Hassan,SS1B,Alhaji Hassan,+2348010000003,120000,60000,2011-03-08';
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -2512,9 +2690,6 @@ async function loadUsage() {
   } catch(e) { console.log('Usage error:', e); }
 }
 
-// ── Update switchSection to load data ─────────────────────
-const _origSwitchSection = switchSection;
-
 // ── PDF import ────────────────────────────────────────────
 async function importFromPDF() {
   const pdfText = document.getElementById('pdf-text-input').value.trim();
@@ -2527,7 +2702,7 @@ async function importFromPDF() {
   try {
     const result = await api('/api/admin/students/import-pdf', {
       method: 'POST',
-      body: JSON.stringify({ pdfText })
+      body: JSON.stringify({ pdfText, fee_settings: getFeeImportSettings() })
     });
     resultEl.style.display = 'block';
     resultEl.style.background = 'var(--green-pale)';
@@ -2558,9 +2733,10 @@ async function importFromText() {
   const resultEl = document.getElementById('text-import-result');
   resultEl.style.display = 'none';
   try {
+    const feeSettings = getFeeImportSettings();
     const result = await api('/api/admin/students/import-text', {
       method: 'POST',
-      body: JSON.stringify({ text, class_name })
+      body: JSON.stringify({ text, class_name, fee_settings: feeSettings })
     });
     resultEl.style.display = 'block';
     resultEl.style.background = 'var(--green-pale)';
@@ -2584,6 +2760,400 @@ async function importFromText() {
 let allMessages = [];
 let activePhone = null;
 
+// ── Fee import settings helper ───────────────────────────
+function getFeeImportSettings() {
+  const amount = document.getElementById('import-fee-amount')?.value;
+  const term = document.getElementById('import-fee-term')?.value.trim();
+  const due = document.getElementById('import-fee-due')?.value;
+  const create = document.getElementById('import-fee-create')?.value;
+  if (create === 'no' || !amount || Number(amount) <= 0) return null;
+  return {
+    amount_due: Number(amount),
+    term: term || schoolData?.current_term || null,
+    due_date: due || null
+  };
+}
+
+function updateFeeSettingsStatus() {
+  const amount = document.getElementById('import-fee-amount')?.value;
+  const create = document.getElementById('import-fee-create')?.value;
+  const status = document.getElementById('fee-settings-status');
+  if (!status) return;
+  if (create === 'no' || !amount || Number(amount) <= 0) {
+    status.textContent = '⬜ No fee records will be created';
+    status.style.color = 'var(--text-muted)';
+  } else {
+    status.textContent = '✅ ₦' + Number(amount).toLocaleString() + ' fee record will be created per student';
+    status.style.color = 'var(--green)';
+  }
+}
+
+function toggleAiComposer(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const showing = el.classList.contains('show');
+  el.classList.toggle('show', !showing);
+  // Focus the prompt input when opening
+  if (!showing) {
+    const inp = el.querySelector('.ai-composer-input');
+    if (inp) setTimeout(() => inp.focus(), 50);
+  }
+}
+
+async function aiCompose(context) {
+  // context = 'broadcast' | 'direct' | 'chat' | 'teacher'
+  const config = {
+    broadcast: {
+      promptId:   'broadcast-ai-prompt',
+      outputId:   'broadcast-msg',
+      loadingId:  'broadcast-ai-loading',
+      btnId:      'broadcast-ai-btn',
+      composerId: 'broadcast-ai-composer',
+      audience:   document.getElementById('broadcast-target')?.value?.includes('staff') ? 'staff' : 'parents',
+      extraCtx:   () => {
+        const target = document.getElementById('broadcast-target')?.value;
+        const cls    = document.getElementById('broadcast-class')?.value;
+        return target === 'class' && cls ? 'This message is for ' + cls + ' parents only.' : '';
+      },
+    },
+    direct: {
+      promptId:   'direct-ai-prompt',
+      outputId:   'msg-content',
+      loadingId:  'direct-ai-loading',
+      btnId:      'direct-ai-btn',
+      composerId: 'direct-ai-composer',
+      audience:   'parents',
+      extraCtx:   () => {
+        const recipient = document.getElementById('msg-modal-recipient')?.textContent || '';
+        return recipient ? 'Recipient context: ' + recipient : '';
+      },
+      phone: () => document.getElementById('msg-parent-phone')?.value || '',
+    },
+    chat: {
+      promptId:   'chat-ai-prompt',
+      outputId:   'admin-reply-input',
+      loadingId:  'chat-ai-loading',
+      btnId:      'chat-ai-btn',
+      composerId: 'chat-ai-composer',
+      audience:   'parents',
+      extraCtx:   () => {
+        const name = document.querySelector('#contacts-list .contact-item.active .contact-name')?.textContent || '';
+        return name ? 'You are replying to: ' + name : '';
+      },
+      phone: () => activeParentPhone || '',
+    },
+    teacher: {
+      promptId:   'teacher-ai-prompt',
+      outputId:   'teacher-reply-input',
+      loadingId:  'teacher-ai-loading',
+      btnId:      'teacher-ai-btn',
+      composerId: 'teacher-ai-composer',
+      audience:   'teacher',
+      extraCtx:   () => {
+        const name = document.querySelector('#teacher-chat-list .contact-item.active .contact-name')?.textContent || '';
+        return name ? 'You are messaging teacher: ' + name : 'You are messaging a teacher.';
+      },
+      phone: () => (typeof activeTeacherPhone !== 'undefined' ? activeTeacherPhone : '') || '',
+    },
+  };
+
+  const cfg = config[context];
+  if (!cfg) return;
+
+  const promptEl  = document.getElementById(cfg.promptId);
+  const outputEl  = document.getElementById(cfg.outputId);
+  const loadingEl = document.getElementById(cfg.loadingId);
+  const btnEl     = document.getElementById(cfg.btnId);
+
+  const prompt = promptEl?.value?.trim();
+  if (!prompt) {
+    promptEl?.focus();
+    showToast('Describe what you want to say first');
+    return;
+  }
+
+  // Show loading state
+  if (btnEl)     { btnEl.disabled = true; btnEl.textContent = '...'; }
+  if (loadingEl) loadingEl.classList.add('show');
+
+  try {
+    const phone    = typeof cfg.phone === 'function' ? cfg.phone() : '';
+    const extraCtx = typeof cfg.extraCtx === 'function' ? cfg.extraCtx() : '';
+
+    const result = await api('/api/admin/refine-message', {
+      method: 'POST',
+      body: JSON.stringify({
+        message:  prompt,
+        mode:     'compose',
+        audience: cfg.audience,
+        phone:    phone || undefined,
+        context:  extraCtx || undefined,
+      }),
+    });
+
+    if (result?.refined) {
+      // Write into the output textarea/input
+      if (outputEl) {
+        outputEl.value = result.refined;
+        // Trigger oninput if it exists (e.g. updateCharCount)
+        outputEl.dispatchEvent(new Event('input'));
+        // Briefly highlight the output
+        outputEl.style.transition = 'background .3s';
+        outputEl.style.background = 'var(--green-pale,#f0fdf4)';
+        setTimeout(() => { outputEl.style.background = ''; }, 1200);
+      }
+      // Clear the prompt and collapse composer
+      if (promptEl) promptEl.value = '';
+      const composerEl = document.getElementById(cfg.composerId);
+      if (composerEl) {
+        setTimeout(() => composerEl.classList.remove('show'), 400);
+      }
+      showToast('✨ Message written — review and send');
+    } else {
+      showToast('AI could not generate — try rephrasing your prompt');
+    }
+  } catch(e) {
+    showToast('Could not reach AI — check your connection');
+    console.error('aiCompose error:', e);
+  } finally {
+    if (btnEl)     { btnEl.disabled = false; btnEl.textContent = context === 'broadcast' ? '✨ Write' : 'Write'; }
+    if (loadingEl) loadingEl.classList.remove('show');
+  }
+}
+
+// Allow pressing Enter (without Shift) in the prompt textarea to trigger compose
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey && e.target.classList.contains('ai-composer-input')) {
+    e.preventDefault();
+    const composer = e.target.closest('.ai-composer');
+    if (!composer) return;
+    const id = composer.id;
+    const ctx = id.replace('-ai-composer','');
+    if (['broadcast','direct','chat','teacher'].includes(ctx)) aiCompose(ctx);
+  }
+});
+
+function useTemplate(key) { document.getElementById('broadcast-msg').value = templates[key] || ''; }
+
+// sendBroadcast defined below
+
+// ── Documents / AI Training ───────────────────────────────
+async function loadDocuments() {
+  const el = document.getElementById('documents-list');
+  try {
+    const docs = await api('/api/admin/documents');
+    if (!docs.length) {
+      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">No documents uploaded yet.<br>Upload your school handbook to make EduPing smarter.</div>';
+      return;
+    }
+    el.innerHTML = docs.map(d => `
+      <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid #f5f5f5;">
+        <div style="width:36px;height:36px;background:var(--green-pale);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">
+          ${{handbook:'📖',calendar:'📅',fees:'💰',admission:'📋',rules:'⚖️',other:'📄'}[d.doc_type]||'📄'}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:13px;">${d.name}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${d.doc_type} · Uploaded ${new Date(d.uploaded_at).toLocaleDateString()}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.preview}...</div>
+        </div>
+        <button class="action-btn" onclick="deleteDocument('${d.id}','${d.name}')" style="flex-shrink:0;color:var(--danger);border-color:var(--danger);">Delete</button>
+      </div>`).join('');
+  } catch(e) { el.innerHTML = '<div class="loading">Could not load documents</div>'; }
+}
+
+async function uploadDocument() {
+  const name = document.getElementById('doc-name').value.trim();
+  const content = document.getElementById('doc-content').value.trim();
+  const doc_type = document.getElementById('doc-type').value;
+  if (!name || !content) { showToast('Please fill document name and content ❌'); return; }
+  try {
+    await api('/api/admin/documents', { method:'POST', body:JSON.stringify({ name, content, doc_type }) });
+    showToast('✅ Document uploaded! EduPing is now trained on ' + name);
+    document.getElementById('doc-name').value = '';
+    document.getElementById('doc-content').value = '';
+    loadDocuments();
+  } catch(e) { showToast('Upload failed ❌'); }
+}
+
+async function deleteDocument(id, name) {
+  if (!confirm('Delete "' + name + '"? EduPing will no longer use this document.')) return;
+  try {
+    await api('/api/admin/documents/' + id, { method:'DELETE' });
+    showToast(name + ' deleted');
+    loadDocuments();
+  } catch(e) { showToast('Error deleting ❌'); }
+}
+
+// ── Appraisal ─────────────────────────────────────────────
+async function loadAppraisal() {
+  const el = document.getElementById('appraisal-content');
+  const weightsEl = document.getElementById('appraisal-weights');
+  try {
+    const data = await api('/api/admin/appraisal');
+    if (!data.staff || !data.staff.length) {
+      el.innerHTML = '<div class="loading">No staff data yet. Add staff and their activity will be tracked automatically.</div>';
+      return;
+    }
+
+    // Weights display
+    const w = data.weights;
+    weightsEl.innerHTML = Object.entries(w).map(([k, v]) => `
+      <div style="background:var(--gray-bg);border-radius:8px;padding:10px 16px;text-align:center;">
+        <div style="font-size:20px;font-weight:700;color:var(--green);">${v}%</div>
+        <div style="font-size:11px;color:var(--text-muted);text-transform:capitalize;">${k.replace('_',' ')}</div>
+      </div>`).join('');
+
+    // Staff table
+    el.innerHTML = `<table class="data-table">
+      <thead><tr>
+        <th>Staff Member</th><th>Role</th>
+        <th>Punctuality</th><th>Attendance Sub.</th>
+        <th>Scores Uploaded</th><th>Homework Set</th>
+        <th>Overall Score</th><th>Grade</th>
+      </tr></thead>
+      <tbody>${data.staff.map(s => {
+        const scoreColor = s.overall_score >= 85 ? 'var(--green)' : s.overall_score >= 70 ? 'var(--info)' : s.overall_score >= 55 ? 'var(--warning)' : 'var(--danger)';
+        const gradeColor = s.grade === 'Excellent' ? 'pill-green' : s.grade === 'Good' ? 'pill-blue' : s.grade === 'Satisfactory' ? 'pill-gold' : 'pill-red';
+        return `<tr>
+          <td><strong>${s.name}</strong></td>
+          <td>${s.role}${s.subject?' — '+s.subject:''}</td>
+          <td>${s.punctuality.on_time}/${s.punctuality.total} days (${s.punctuality.percent}%)</td>
+          <td>${s.submissions.attendance}</td>
+          <td>${s.submissions.scores}</td>
+          <td>${s.submissions.homework}</td>
+          <td><strong style="color:${scoreColor};font-size:16px;">${s.overall_score}/100</strong></td>
+          <td><span class="pill ${gradeColor}">${s.grade}</span></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+    <div style="margin-top:14px;font-size:12px;color:var(--text-muted);">
+      Generated: ${new Date(data.generated_at).toLocaleString('en-NG')} · Scores are weighted based on your appraisal configuration set during onboarding.
+    </div>`;
+  } catch(e) { el.innerHTML = '<div class="loading">Could not load appraisal data</div>'; }
+}
+
+// ── Message Usage ─────────────────────────────────────────
+async function loadUsage() {
+  try {
+    const data = await api('/api/admin/usage');
+    // Server returns: { messages_chart: [{day, count}], totals: {students, staff, signins_30d, homeworks_30d, attendance_30d} }
+    const t = data.totals || {};
+    const chart = data.messages_chart || [];
+
+    // Safely update stat cards — guard every element with ?. and || 0
+    const totalMsgs = chart.reduce((a, r) => a + Number(r.count || 0), 0);
+    const safeSet = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+    safeSet('usage-used',      totalMsgs.toLocaleString());
+    safeSet('usage-limit',     '—');
+    safeSet('usage-remaining', '—');
+    safeSet('usage-label',     totalMsgs + ' messages in last 30 days');
+    safeSet('usage-pct',       '');
+
+    const bar = document.getElementById('usage-bar');
+    if (bar) { bar.style.width = '60%'; bar.style.background = 'var(--green)'; }
+
+    // Stats grid — students / staff / signins / homework / attendance
+    const statsEl = document.getElementById('usage-stats-grid');
+    if (statsEl) {
+      statsEl.innerHTML =
+        '<div class="stat-card green"><div class="stat-icon">👨‍🎓</div><div class="stat-value">' + (t.students||0).toLocaleString() + '</div><div class="stat-label">Students</div></div>' +
+        '<div class="stat-card blue"><div class="stat-icon">👩‍🏫</div><div class="stat-value">' + (t.staff||0).toLocaleString() + '</div><div class="stat-label">Active Staff</div></div>' +
+        '<div class="stat-card green"><div class="stat-icon">✅</div><div class="stat-value">' + (t.signins_30d||0).toLocaleString() + '</div><div class="stat-label">Sign-ins (30d)</div></div>' +
+        '<div class="stat-card blue"><div class="stat-icon">📚</div><div class="stat-value">' + (t.homeworks_30d||0).toLocaleString() + '</div><div class="stat-label">Homework (30d)</div></div>' +
+        '<div class="stat-card green"><div class="stat-icon">📋</div><div class="stat-value">' + (t.attendance_30d||0).toLocaleString() + '</div><div class="stat-label">Attendance records (30d)</div></div>' +
+        '<div class="stat-card blue"><div class="stat-icon">💬</div><div class="stat-value">' + totalMsgs.toLocaleString() + '</div><div class="stat-label">Messages (30d)</div></div>';
+    }
+
+    // Message activity chart
+    const histEl = document.getElementById('usage-history');
+    if (histEl && chart.length) {
+      const max = Math.max(...chart.map(h => Number(h.count||0)), 1);
+      histEl.innerHTML = chart.map(h => {
+        const pct = Math.round((Number(h.count||0) / max) * 100);
+        const label = h.day ? h.day.slice(5) : (h.month ? h.month.slice(5) : '');
+        return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end;">'
+          + '<div style="font-size:10px;color:var(--green);font-weight:600;">' + (h.count||0) + '</div>'
+          + '<div style="width:100%;background:var(--green-pale);border-radius:4px 4px 0 0;position:relative;height:90px;">'
+          + '<div style="position:absolute;bottom:0;left:0;right:0;background:var(--green);border-radius:4px 4px 0 0;height:' + pct + '%;"></div>'
+          + '</div>'
+          + '<div style="font-size:10px;color:var(--text-muted);">' + label + '</div>'
+          + '</div>';
+      }).join('');
+    } else if (histEl) {
+      histEl.innerHTML = '<div class="loading">No message activity yet</div>';
+    }
+  } catch(e) { console.error('Usage error:', e); }
+}
+
+// ── Update switchSection to load data ─────────────────────
+const _origSwitchSection = switchSection;
+
+// ── PDF import ────────────────────────────────────────────
+async function importFromPDF() {
+  const pdfText = document.getElementById('pdf-text-input').value.trim();
+  if (!pdfText || pdfText.length < 20) { showToast('Please paste PDF text first ❌'); return; }
+  const btn = event.target;
+  btn.textContent = '🔍 Extracting students...';
+  btn.disabled = true;
+  const resultEl = document.getElementById('pdf-import-result');
+  resultEl.style.display = 'none';
+  try {
+    const result = await api('/api/admin/students/import-pdf', {
+      method: 'POST',
+      body: JSON.stringify({ pdfText, fee_settings: getFeeImportSettings() })
+    });
+    resultEl.style.display = 'block';
+    resultEl.style.background = 'var(--green-pale)';
+    resultEl.style.color = 'var(--green)';
+    resultEl.innerHTML = '✅ <strong>' + result.imported + ' students imported</strong> from PDF!' +
+      (result.skipped ? ' ' + result.skipped + ' rows skipped.' : '') +
+      (result.total ? ' (' + result.total + ' total detected)' : '');
+    document.getElementById('pdf-text-input').value = '';
+    loadStudents();
+  } catch(e) {
+    resultEl.style.display = 'block';
+    resultEl.style.background = '#fee2e2';
+    resultEl.style.color = 'var(--danger)';
+    resultEl.textContent = '❌ ' + (e.message || 'Could not import. Try the text paste method instead.');
+  }
+  btn.textContent = '📄 Extract & Import Students';
+  btn.disabled = false;
+}
+
+// ── Text paste import ──────────────────────────────────────
+async function importFromText() {
+  const text = document.getElementById('text-import-input').value.trim();
+  const class_name = document.getElementById('text-import-class').value.trim();
+  if (!text || text.length < 2) { showToast('Please type or paste student names first ❌'); return; }
+  const btn = event.target;
+  btn.textContent = '⏳ Importing...';
+  btn.disabled = true;
+  const resultEl = document.getElementById('text-import-result');
+  resultEl.style.display = 'none';
+  try {
+    const feeSettings = getFeeImportSettings();
+    const result = await api('/api/admin/students/import-text', {
+      method: 'POST',
+      body: JSON.stringify({ text, class_name, fee_settings: feeSettings })
+    });
+    resultEl.style.display = 'block';
+    resultEl.style.background = 'var(--green-pale)';
+    resultEl.style.color = 'var(--green)';
+    resultEl.innerHTML = '✅ <strong>' + result.imported + ' students imported</strong>!' +
+      (result.skipped ? ' ' + result.skipped + ' skipped (duplicates or blank lines).' : '') +
+      (result.errors && result.errors.length ? '<br>⚠️ Could not parse: ' + result.errors.join(', ') : '');
+    document.getElementById('text-import-input').value = '';
+    loadStudents();
+  } catch(e) {
+    resultEl.style.display = 'block';
+    resultEl.style.background = '#fee2e2';
+    resultEl.style.color = 'var(--danger)';
+    resultEl.textContent = '❌ ' + (e.message || 'Import failed. Please check your format.');
+  }
+  btn.textContent = '➕ Import Students';
+  btn.disabled = false;
+}
 async function loadChats() {
   try {
     const msgs = await api('/api/admin/chats');
@@ -4371,6 +4941,14 @@ function togglePassword() {
 let resultStudents = [];
 let allPINLogs = [];
 
+function openSubjectModal(studentId, studentName) {
+  // Show a modal to add extra subjects for this student
+  const subjects = ['Further Mathematics','Technical Drawing','Agricultural Science','Home Economics','Civic Education','Christian/Islamic Studies','French','Yoruba','Igbo','Hausa','Music','Fine Art','Physical Education'];
+  const existing = document.querySelectorAll('[id^="res-"][id$="-' + studentId + '"]');
+  const msg = 'Additional subjects for ' + studentName + ':\n\n' + subjects.join('\n') + '\n\nThis feature allows adding extra subjects outside the standard set. Contact support to enable per-school subject configuration.';
+  alert(msg);
+}
+
 async function loadResults() {
   // Load classes
   try {
@@ -4717,7 +5295,7 @@ document.addEventListener('mouseover', e => {
   tip.style.display = 'block';
 });
 document.addEventListener('mousemove', e => {
-  const tip = document.getElementById('trend-tooltip');
+  let tip = document.getElementById('trend-tooltip'); if (!tip) { tip = document.createElement('div'); tip.id = 'trend-tooltip'; tip.style.cssText = 'position:fixed;background:#1a2820;color:white;padding:8px 12px;border-radius:8px;font-size:12px;pointer-events:none;z-index:9999;display:none;'; document.body.appendChild(tip); }
   if (tip && tip.style.display === 'block') {
     tip.style.left = (e.clientX + 10) + 'px';
     tip.style.top = (e.clientY - 28) + 'px';
@@ -4725,7 +5303,7 @@ document.addEventListener('mousemove', e => {
 });
 document.addEventListener('mouseout', e => {
   if (!e.target.closest('.trend-bar')) {
-    const tip = document.getElementById('trend-tooltip');
+    let tip = document.getElementById('trend-tooltip'); if (!tip) { tip = document.createElement('div'); tip.id = 'trend-tooltip'; tip.style.cssText = 'position:fixed;background:#1a2820;color:white;padding:8px 12px;border-radius:8px;font-size:12px;pointer-events:none;z-index:9999;display:none;'; document.body.appendChild(tip); }
     if (tip) tip.style.display = 'none';
   }
 });
@@ -4780,6 +5358,228 @@ function showToast(msg) {
   t.textContent = msg; t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 3000);
 }
+
+// ══════════════════════════════════════════════════════════
+// PROMOTION SYSTEM
+// ══════════════════════════════════════════════════════════
+
+let promoData = [];      // full preview data from server
+let promoOverrides = {}; // { [student_id]: { action, next_class, notes } }
+
+// Load promotion section
+if (typeof _origSwitchSection !== 'undefined') {
+  const _promoOrig = switchSection;
+  // handled via the main switchSection override below
+}
+
+async function loadPromotionPreview() {
+  const session = document.getElementById('promo-session').value.trim();
+  if (!session) { showToast('Enter the new academic session first (e.g. 2025/2026)'); return; }
+
+  const card = document.getElementById('promo-preview-card');
+  const tableWrap = document.getElementById('promo-preview-table');
+  card.style.display = 'block';
+  tableWrap.innerHTML = '<div class="loading" style="padding:20px;">Loading promotion preview...</div>';
+  promoOverrides = {};
+
+  try {
+    const data = await api('/api/admin/students/promotion-preview');
+    promoData = data.students || [];
+
+    // Update stat cards
+    document.getElementById('promo-count-promote').textContent = data.counts.promote;
+    document.getElementById('promo-count-graduate').textContent = data.counts.graduate;
+    document.getElementById('promo-count-unknown').textContent = data.counts.unknown;
+    document.getElementById('promo-count-unpaid').textContent = data.counts.unpaid_fees;
+
+    document.getElementById('promo-preview-subtitle').textContent =
+      data.counts.total + ' students · ' + data.counts.promote + ' promoting · ' +
+      data.counts.graduate + ' graduating' +
+      (data.counts.unknown > 0 ? ' · ⚠️ ' + data.counts.unknown + ' need manual class entry' : '');
+
+    renderPromoPreview(promoData);
+    document.getElementById('promo-confirm-btn').style.display = 'inline-block';
+  } catch(e) {
+    tableWrap.innerHTML = '<div class="loading">Error loading preview: ' + (e.message||'unknown') + '</div>';
+  }
+}
+
+function filterPromoPreview() {
+  const q = (document.getElementById('promo-search')?.value || '').toLowerCase();
+  const action = document.getElementById('promo-filter-action')?.value || '';
+  const filtered = promoData.filter(s => {
+    const matchText = s.name.toLowerCase().includes(q) || (s.class_name||'').toLowerCase().includes(q);
+    const ov = promoOverrides[s.id];
+    const effectiveAction = ov?.action || s.action;
+    const matchAction = !action || effectiveAction === action;
+    return matchText && matchAction;
+  });
+  renderPromoPreview(filtered);
+}
+
+function renderPromoPreview(rows) {
+  const wrap = document.getElementById('promo-preview-table');
+  if (!rows.length) { wrap.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">No students found</div>'; return; }
+
+  wrap.innerHTML = '<table class="data-table"><thead><tr>' +
+    '<th>Student</th><th>Current Class</th><th>Next Class</th><th>Action</th><th>Fee Status</th><th>Notes</th>' +
+    '</tr></thead><tbody>' +
+    rows.map(s => {
+      const ov = promoOverrides[s.id] || {};
+      const action = ov.action || s.action;
+      const nextClass = ov.next_class !== undefined ? ov.next_class : (s.next_class || '');
+      const actionColor = action === 'promote' ? 'var(--green)' : action === 'graduate' ? 'var(--info)' : action === 'repeat' ? '#f59e0b' : 'var(--danger)';
+      const actionLabel = action === 'promote' ? '🔼 Promote' : action === 'graduate' ? '🎓 Graduate' : action === 'repeat' ? '🔁 Repeat' : action === 'withdraw' ? '❌ Withdraw' : '❓ Unknown';
+      const feeColor = s.fee_status === 'paid' ? 'var(--green)' : s.fee_status === 'partial' ? '#f59e0b' : s.fee_status === 'unpaid' ? 'var(--danger)' : 'var(--text-muted)';
+
+      return '<tr>' +
+        '<td><strong>' + s.name + '</strong>' +
+          (s.parent_name ? '<div style="font-size:10px;color:var(--text-muted);">' + s.parent_name + '</div>' : '') +
+        '</td>' +
+        '<td><span class="pill pill-gray">' + (s.class_name||'—') + '</span></td>' +
+        '<td>' +
+          (action === 'graduate' ? '<span style="color:var(--info);font-weight:600;">🎓 Graduated</span>' :
+           action === 'withdraw' ? '<span style="color:var(--danger);">—</span>' :
+           '<input class="form-input" style="width:90px;padding:4px 8px;font-size:12px;" ' +
+           'value="' + nextClass + '" ' +
+           'onchange="setPromoOverride(\'' + s.id + '\', \'next_class\', this.value)" ' +
+           'placeholder="Class">') +
+        '</td>' +
+        '<td>' +
+          '<select class="form-select" style="font-size:12px;padding:4px 8px;" onchange="setPromoOverride(\'' + s.id + '\', \'action\', this.value)">' +
+            '<option value="promote"' + (action==='promote'?' selected':'') + '>🔼 Promote</option>' +
+            '<option value="graduate"' + (action==='graduate'?' selected':'') + '>🎓 Graduate</option>' +
+            '<option value="repeat"' + (action==='repeat'?' selected':'') + '>🔁 Repeat year</option>' +
+            '<option value="withdraw"' + (action==='withdraw'?' selected':'') + '>❌ Withdraw</option>' +
+          '</select>' +
+        '</td>' +
+        '<td><span style="font-size:12px;color:' + feeColor + ';font-weight:500;">' + s.fee_status + '</span>' +
+          (s.amount_due > 0 ? '<div style="font-size:10px;color:var(--text-muted);">₦' + Number(s.amount_due - s.amount_paid).toLocaleString() + ' balance</div>' : '') +
+        '</td>' +
+        '<td><input class="form-input" style="width:120px;padding:4px 8px;font-size:12px;" placeholder="Notes" ' +
+          'onchange="setPromoOverride(\'' + s.id + '\', \'notes\', this.value)"></td>' +
+      '</tr>';
+    }).join('') +
+    '</tbody></table>';
+}
+
+function setPromoOverride(studentId, field, value) {
+  if (!promoOverrides[studentId]) promoOverrides[studentId] = {};
+  promoOverrides[studentId][field] = value;
+  // Re-render just the count badge
+  const repeatCount = Object.values(promoOverrides).filter(o => o.action === 'repeat').length;
+  document.getElementById('promo-count-repeat').textContent = repeatCount;
+}
+
+async function confirmPromotion() {
+  const session = document.getElementById('promo-session').value.trim();
+  const newTerm = document.getElementById('promo-new-term').value.trim();
+  const feeAmount = document.getElementById('promo-fee-amount').value;
+  const notifyParents = document.getElementById('promo-notify').value === 'yes';
+
+  if (!session) { showToast('Enter the new academic session'); return; }
+
+  // Build summary for confirm dialog
+  const counts = { promote: 0, graduate: 0, repeat: 0, withdraw: 0 };
+  promoData.forEach(s => {
+    const action = promoOverrides[s.id]?.action || s.action;
+    if (counts[action] !== undefined) counts[action]++;
+    else counts.promote++;
+  });
+
+  const summary = `Promote ${counts.promote} students, graduate ${counts.graduate}, repeat ${counts.repeat}, withdraw ${counts.withdraw}.
+
+` +
+    (notifyParents ? 'WhatsApp notifications will be sent to all promoted students\' parents. ' : '') +
+    (feeAmount ? `Fee records of ₦${Number(feeAmount).toLocaleString()} will be created for ${newTerm || 'new term'}.
+
+` : '') +
+    'This cannot be undone. Confirm?';
+
+  if (!confirm(summary)) return;
+
+  const btn = document.getElementById('promo-confirm-btn');
+  btn.textContent = '⏳ Promoting...';
+  btn.disabled = true;
+
+  try {
+    const result = await api('/api/admin/students/promote', {
+      method: 'POST',
+      body: JSON.stringify({
+        overrides: promoOverrides,
+        academic_session: session,
+        new_term: newTerm || null,
+        fee_amount: feeAmount ? Number(feeAmount) : null,
+        notify_parents: notifyParents,
+      })
+    });
+
+    btn.style.display = 'none';
+    showToast(
+      'Done! ' + result.promoted + ' promoted, ' + result.graduated + ' graduated' +
+      (result.repeated ? ', ' + result.repeated + ' repeating' : '') +
+      (result.withdrawn ? ', ' + result.withdrawn + ' withdrawn' : '') +
+      (result.errors?.length ? ' (' + result.errors.length + ' errors)' : '')
+    );
+
+    // Refresh preview and students list
+    promoOverrides = {};
+    await loadPromotionPreview();
+    if (typeof loadStudents === 'function') loadStudents();
+
+  } catch(e) {
+    btn.textContent = '✅ Confirm & Promote All';
+    btn.disabled = false;
+    showToast('Promotion failed: ' + (e.message||'unknown error'));
+  }
+}
+
+async function loadPromotionHistory() {
+  document.getElementById('promo-history-card').style.display = 'block';
+  document.getElementById('promo-alumni-card').style.display = 'none';
+  const wrap = document.getElementById('promo-history-table');
+  wrap.innerHTML = '<div class="loading" style="padding:20px;">Loading...</div>';
+  try {
+    const rows = await api('/api/admin/students/promotion-history');
+    if (!rows.length) { wrap.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">No promotion history yet</div>'; return; }
+    wrap.innerHTML = '<table class="data-table"><thead><tr><th>Student</th><th>From</th><th>To</th><th>Session</th><th>Type</th><th>Notes</th><th>Date</th><th>Parent notified</th></tr></thead><tbody>' +
+      rows.map(r => {
+        const typeColor = r.promotion_type === 'promoted' ? 'pill-green' : r.promotion_type === 'graduated' ? 'pill-blue' : r.promotion_type === 'repeated' ? 'pill-gold' : 'pill-red';
+        return '<tr>' +
+          '<td><strong>' + r.student_name + '</strong></td>' +
+          '<td>' + r.from_class + '</td>' +
+          '<td>' + (r.to_class === 'GRADUATED' ? '🎓 Graduated' : r.to_class) + '</td>' +
+          '<td>' + (r.academic_session||'—') + '</td>' +
+          '<td><span class="pill ' + typeColor + '">' + r.promotion_type + '</span></td>' +
+          '<td style="font-size:12px;color:var(--text-muted);">' + (r.notes||'—') + '</td>' +
+          '<td style="font-size:12px;">' + new Date(r.promoted_at).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'}) + '</td>' +
+          '<td style="text-align:center;">' + (r.notified_parent ? '✅' : '—') + '</td>' +
+        '</tr>';
+      }).join('') + '</tbody></table>';
+  } catch(e) { wrap.innerHTML = '<div class="loading">Error: ' + e.message + '</div>'; }
+}
+
+async function loadAlumni() {
+  document.getElementById('promo-alumni-card').style.display = 'block';
+  document.getElementById('promo-history-card').style.display = 'none';
+  const wrap = document.getElementById('promo-alumni-table');
+  wrap.innerHTML = '<div class="loading" style="padding:20px;">Loading...</div>';
+  try {
+    const rows = await api('/api/admin/students/alumni');
+    if (!rows.length) { wrap.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">No alumni yet</div>'; return; }
+    wrap.innerHTML = '<table class="data-table"><thead><tr><th>Name</th><th>Previous Class</th><th>Graduation Year</th><th>Session</th><th>Parent</th><th>Phone</th></tr></thead><tbody>' +
+      rows.map(r => '<tr>' +
+        '<td><strong>' + r.name + '</strong></td>' +
+        '<td>' + (r.previous_class||'SS3') + '</td>' +
+        '<td>' + (r.graduation_year||'—') + '</td>' +
+        '<td>' + (r.graduation_session||'—') + '</td>' +
+        '<td>' + (r.parent_name||'—') + '</td>' +
+        '<td style="font-size:12px;">' + (r.parent_phone||'—') + '</td>' +
+      '</tr>').join('') + '</tbody></table>';
+  } catch(e) { wrap.innerHTML = '<div class="loading">Error: ' + e.message + '</div>'; }
+}
+
+
 </script>
 </body>
 </html>
