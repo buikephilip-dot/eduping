@@ -215,8 +215,31 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS idx_students_phone ON students(parent_phone);
     CREATE INDEX IF NOT EXISTS idx_staff_school_phone ON staff(school_id, phone);
     CREATE INDEX IF NOT EXISTS idx_messages_school_from ON messages(school_id, from_number);
+    CREATE INDEX IF NOT EXISTS idx_messages_school_time ON messages(school_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_fees_school_status ON fees(school_id, status);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_fees_student_term ON fees(school_id, student_id, term);
+
+    -- Student promotion tracking
+    ALTER TABLE students ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+    ALTER TABLE students ADD COLUMN IF NOT EXISTS graduation_year INTEGER;
+    ALTER TABLE students ADD COLUMN IF NOT EXISTS previous_class TEXT;
+
+    CREATE TABLE IF NOT EXISTS promotion_history (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+      student_name TEXT,
+      from_class TEXT NOT NULL,
+      to_class TEXT NOT NULL,
+      academic_session TEXT,
+      promotion_type TEXT DEFAULT 'promoted',
+      promoted_by TEXT DEFAULT 'admin',
+      notes TEXT,
+      notified_parent BOOLEAN DEFAULT false,
+      promoted_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_promotion_school ON promotion_history(school_id, promoted_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_promotion_student ON promotion_history(student_id);
 
     -- Payment ledger (individual payment records, separate from fees balance)
     CREATE TABLE IF NOT EXISTS fee_payments (
@@ -766,6 +789,15 @@ async function handleIncomingWhatsApp(req, res) {
   const mediaType = req.body.MediaContentType0 || '';
   const school = await getSchoolByTwilio(to);
   if (!school || school.status !== 'active') return res.type('text/xml').send(new twilio.twiml.MessagingResponse().message('School account is not active. Please contact EduPing support.').toString());
+  // Guard: if school has no dedicated twilio_number, it is using a shared fallback number.
+  // In that case, check no OTHER active school is also using this number — prevents cross-school routing.
+  if (!school.twilio_number || school.twilio_number === process.env.TWILIO_DEFAULT_FROM) {
+    const sharedRisk = await q(`SELECT COUNT(*) FROM schools WHERE status='active' AND (twilio_number IS NULL OR twilio_number=$1)`, [process.env.TWILIO_DEFAULT_FROM || '']);
+    if (Number(sharedRisk.rows[0].count) > 1) {
+      console.error('[MULTITENANCY] Multiple schools sharing fallback Twilio number — message routing is ambiguous. Assign dedicated twilio_number to each school.');
+      return res.type('text/xml').send(new twilio.twiml.MessagingResponse().toString()); // silent drop — better than wrong school response
+    }
+  }
 
   let reply = '';
   // Match staff by exact phone OR last 9 digits (handles +234 vs 0 format differences)
@@ -803,14 +835,14 @@ How can I help you today? You can ask about attendance, results, fees, homework,
 
       // ── TUTOR keyword — parent wants tutor connection ────
       if (lower === 'tutor' || lower === 'i want a tutor' || lower === 'get tutor') {
-        const riskRow = await q(`SELECT weak_subjects FROM student_risk_scores WHERE student_id=$1`, [student.rows[0].id]);
+        const riskRow = await q(`SELECT weak_subjects FROM student_risk_scores WHERE student_id=$1 AND school_id=$2`, [student.rows[0].id, school.id]);
         const enriched = { ...student.rows[0], weak_subjects: riskRow.rows[0]?.weak_subjects || [] };
         reply = await handleTutorRequest(school, enriched, from);
         await q(`UPDATE intervention_plans SET tutor_requested=true WHERE student_id=$1 AND tutor_requested=false`, [student.rows[0].id]);
       }
       // ── YES to intervention plan ─────────────────────────
       else if (lower === 'yes' || lower === 'ok' || lower === 'okay' || lower === 'sure') {
-        const pending = await q(`SELECT ip.*, s.name student_name FROM intervention_plans ip JOIN students s ON s.id=ip.student_id WHERE ip.student_id=$1 AND ip.parent_acknowledged=false ORDER BY ip.created_at DESC LIMIT 1`, [student.rows[0].id]);
+        const pending = await q(`SELECT ip.*, s.name student_name FROM intervention_plans ip JOIN students s ON s.id=ip.student_id WHERE ip.student_id=$1 AND s.school_id=$2 AND ip.parent_acknowledged=false ORDER BY ip.created_at DESC LIMIT 1`, [student.rows[0].id, school.id]);
         if (pending.rowCount) {
           await q(`UPDATE intervention_plans SET parent_acknowledged=true WHERE id=$1`, [pending.rows[0].id]);
           reply = `✅ Great! We've noted that you're on board with ${pending.rows[0].student_name}'s study plan.\n\nReply *TUTOR* anytime if you'd like us to connect you with a private tutor.\n\n${school.name} 🏫`;
@@ -924,7 +956,7 @@ function requireSuper(req, res, next) {
 async function requireSchool(req, res, next) {
   try { rateLimitDB(req.headers['x-school-id']); } catch(e) { return res.status(429).json({ error: e.message }); }
   const schoolId = req.headers['x-school-id'] || req.query.school_id || req.body.school_id;
-  const password = req.headers['x-admin-password'] || req.body.admin_password || req.query.admin_password;
+  const password = req.headers['x-admin-password'] || req.body.admin_password; // never from query params — would appear in logs
   if (!schoolId || !password) return bad(res, 'Missing school_id or admin password', 401);
   const school = await getSchool(schoolId);
   if (!school || school.admin_password !== password) return bad(res, 'Unauthorized school admin', 401);
@@ -1184,6 +1216,11 @@ app.get('/api/super/overview', requireSuper, async (req, res) => {
 app.get('/api/super/schools', requireSuper, async (req, res) => json(res, (await q('SELECT * FROM schools ORDER BY created_at DESC')).rows));
 app.post('/api/super/schools', requireSuper, async (req, res) => {
   const b = req.body;
+  // Warn if twilio_number is already assigned to another school
+  if (b.twilio_number) {
+    const conflict = await q(`SELECT name FROM schools WHERE twilio_number=$1 AND status='active' LIMIT 1`, [b.twilio_number]);
+    if (conflict.rows.length) console.warn(`[MULTITENANCY] twilio_number ${b.twilio_number} already assigned to ${conflict.rows[0].name} — WhatsApp routing will be ambiguous`);
+  }
   const r = await q(`INSERT INTO schools (name,city,landmark_description,fees,fee_deadline,current_term,whatsapp_number,twilio_number,admin_password,plan,status,billing_start,monthly_retainer,setup_fee)
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'active',$11,$12,$13) RETURNING *`,
     [b.name,b.city,b.landmark_description||'',b.fees||'',b.fee_deadline||'',b.current_term||'',b.whatsapp_number||'',b.twilio_number||null,b.admin_password || uuid().slice(0,8),b.plan || 'starter',b.billing_start || new Date(),b.monthly_retainer || 0,b.setup_fee || 0]);
@@ -1284,6 +1321,32 @@ for (const [table, fields] of crud) {
     json(res, (await q(sql, [req.school.id, ...vals])).rows[0], 201);
   });
 }
+// ── Override students POST — handles fee_amount from manual add ──
+app.post('/api/admin/students', requireSchool, async (req, res) => {
+  try {
+    const { name, class_name, parent_name, parent_phone,
+            fee_amount, fee_paid, fee_term, fee_status, date_of_birth } = req.body;
+    if (!name) return bad(res, 'name required');
+    const sid = req.school.id;
+    const phone = parent_phone ? (parent_phone.startsWith('+') ? parent_phone : '+234' + String(parent_phone).replace(/^0/, '')) : '';
+    const st = await q(
+      `INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,date_of_birth,weekly_performance_score)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [sid, name.trim(), class_name||'', parent_name||'', phone, date_of_birth||null, 0]
+    );
+    const student = st.rows[0];
+    // Create fee record if fee amount provided
+    if (fee_amount && Number(fee_amount) > 0) {
+      const term = fee_term || req.school.current_term || 'Current Term';
+      await createFeeRecord(sid, student.id, { amount_due: Number(fee_amount), term }, {
+        amount_paid: fee_paid ? Number(fee_paid) : 0,
+        fee_status: fee_status || null
+      });
+    }
+    json(res, student, 201);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
 // ── Student list with fee status (used by dashboard student tab) ──
 app.get('/api/admin/students/list', requireSchool, async (req, res) => {
   try {
@@ -1305,18 +1368,46 @@ app.get('/api/admin/students/list', requireSchool, async (req, res) => {
 });
 
 // ── Student bulk import (Excel/CSV) ──────────────────────
+
+// ── Fee record helper — called after student is created ──────
+async function createFeeRecord(schoolId, studentId, feeSettings, perStudentFee) {
+  // perStudentFee: {amount_due, amount_paid, status} from Excel columns
+  // feeSettings: {amount_due, term, due_date} from the import panel
+  const term = (perStudentFee?.term) || (feeSettings?.term) || null;
+  const amountDue = Number(perStudentFee?.amount_due || feeSettings?.amount_due || 0);
+  if (amountDue <= 0 || !term) return; // nothing to create
+  const amountPaid = Number(perStudentFee?.amount_paid || 0);
+  const status = perStudentFee?.fee_status ||
+    (amountPaid >= amountDue ? 'paid' : amountPaid > 0 ? 'partial' : 'unpaid');
+  const dueDate = feeSettings?.due_date || null;
+  await q(`INSERT INTO fees (school_id,student_id,term,amount_due,amount_paid,status,due_date)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)
+           ON CONFLICT (school_id,student_id,term)
+           DO UPDATE SET amount_due=$4, amount_paid=$5, status=$6, due_date=$7, updated_at=now()`,
+    [schoolId, studentId, term, amountDue, amountPaid, status, dueDate]);
+}
+
 app.post('/api/admin/students/import-bulk', requireSchool, async (req, res) => {
   try {
-    const { students } = req.body;
+    const { students, fee_settings } = req.body;
     if (!students || !students.length) return res.status(400).json({ error: 'No students provided' });
     const sid = req.school.id;
+    const term = fee_settings?.term || req.school.current_term;
+    const feeSettingsWithTerm = fee_settings ? { ...fee_settings, term } : null;
     let imported = 0, skipped = 0;
     for (const s of students) {
-      if (!s.name || !s.parent_phone) { skipped++; continue; }
-      const phone = s.parent_phone.startsWith('+') ? s.parent_phone : '+234' + s.parent_phone.replace(/^0/, '');
-      const existing = await q(`SELECT id FROM students WHERE school_id=$1 AND parent_phone=$2 AND name=$3 LIMIT 1`, [sid, phone, s.name]);
-      if (existing.rows.length) { skipped++; continue; }
-      await q(`INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6)`, [sid, s.name, s.class_name||'', s.parent_name||'', phone, 0]);
+      if (!s.name) { skipped++; continue; }
+      const phone = s.parent_phone ? (s.parent_phone.startsWith('+') ? s.parent_phone : '+234' + String(s.parent_phone).replace(/^0/, '')) : '';
+      const existing = await q(`SELECT id FROM students WHERE school_id=$1 AND name=$2 AND class_name=$3 LIMIT 1`, [sid, s.name, s.class_name||'']);
+      if (existing.rows.length) {
+        // Update if fee columns present
+        if (s.amount_due) await createFeeRecord(sid, existing.rows[0].id, feeSettingsWithTerm, s);
+        skipped++; continue;
+      }
+      const dob = s.date_of_birth || null;
+      const st = await q(`INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,date_of_birth,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+        [sid, s.name, s.class_name||'', s.parent_name||'', phone, dob, 0]);
+      await createFeeRecord(sid, st.rows[0].id, feeSettingsWithTerm, s);
       imported++;
     }
     res.json({ imported, skipped });
@@ -1380,7 +1471,10 @@ app.post('/api/admin/students/import-pdf', requireSchool, async (req, res) => {
     } catch(e) {
       return res.status(400).json({ error: 'Could not parse student data from PDF. Try manual entry instead.' });
     }
+    const { fee_settings } = req.body;
     const sid = req.school.id;
+    const term = fee_settings?.term || req.school.current_term;
+    const feeSettingsWithTerm = fee_settings ? { ...fee_settings, term } : null;
     let imported = 0, skipped = 0;
     for (const s of students) {
       if (!s.name || s.name.length < 2) { skipped++; continue; }
@@ -1388,8 +1482,11 @@ app.post('/api/admin/students/import-pdf', requireSchool, async (req, res) => {
         let phone = s.parent_phone ? String(s.parent_phone).trim() : '';
         if (phone.startsWith('0')) phone = '+234' + phone.slice(1);
         else if (phone.startsWith('234')) phone = '+' + phone;
-        await q(`INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
+        const existing = await q(`SELECT id FROM students WHERE school_id=$1 AND name=$2 LIMIT 1`, [sid, s.name.trim()]);
+        if (existing.rows.length) { skipped++; continue; }
+        const st = await q(`INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
           [sid, s.name.trim(), s.class_name||'', s.parent_name||'', phone, 0]);
+        await createFeeRecord(sid, st.rows[0].id, feeSettingsWithTerm, null);
         imported++;
       } catch(e) { skipped++; }
     }
@@ -1423,7 +1520,7 @@ app.post('/api/admin/students/add-manual', requireSchool, async (req, res) => {
 // ── Bulk text paste import (Name, ParentName, Phone per line) ─
 app.post('/api/admin/students/import-text', requireSchool, async (req, res) => {
   try {
-    const { text, class_name } = req.body;
+    const { text, class_name, fee_settings } = req.body;
     if (!text || text.trim().length < 2) return res.status(400).json({ error: 'No text provided' });
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 1);
     const sid = req.school.id;
@@ -1440,8 +1537,10 @@ app.post('/api/admin/students/import-text', requireSchool, async (req, res) => {
         else if (parent_phone && !parent_phone.startsWith('+')) parent_phone = '+234' + parent_phone;
         const existing = await q(`SELECT id FROM students WHERE school_id=$1 AND name=$2 LIMIT 1`, [sid, name]);
         if (existing.rows.length) { skipped++; continue; }
-        await q(`INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6)`,
+        const st2 = await q(`INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
           [sid, name, class_name||'', parent_name, parent_phone, 0]);
+        const fsTerm = fee_settings?.term || req.school.current_term;
+        await createFeeRecord(sid, st2.rows[0].id, fee_settings ? {...fee_settings, term: fsTerm} : null, null);
         imported++;
       } catch(e) { errors.push(line); skipped++; }
     }
@@ -1790,6 +1889,327 @@ app.get('/api/super/tutors', requireSuper, async (req, res) => {
   json(res, (await q('SELECT * FROM tutors ORDER BY created_at DESC')).rows);
 });
 
+app.get('/api/admin/documents', requireSchool, async (req, res) => {
+  try {
+    const rows = await q(
+      `SELECT d.*, s.name as student_name, s.class_name
+       FROM documents d LEFT JOIN students s ON s.id=d.student_id
+       WHERE d.school_id=$1 ORDER BY d.created_at DESC LIMIT 200`,
+      [req.school.id]
+    ).catch(() => ({ rows: [] }));
+    // If documents table doesn't exist yet, return empty
+    json(res, rows.rows || []);
+  } catch(err) { json(res, []); }
+});
+
+// POST /api/admin/documents
+app.post('/api/admin/documents', requireSchool, async (req, res) => {
+  try {
+    const { student_id, type, title, file_url, notes } = req.body;
+    await q(`CREATE TABLE IF NOT EXISTS documents (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      student_id UUID REFERENCES students(id) ON DELETE CASCADE,
+      type TEXT, title TEXT, file_url TEXT, notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )`);
+    const r = await q(
+      `INSERT INTO documents (school_id,student_id,type,title,file_url,notes) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [req.school.id, student_id||null, type||'general', title||'', file_url||'', notes||'']
+    );
+    json(res, r.rows[0]);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// GET /api/admin/appraisal — staff appraisal records
+app.get('/api/admin/appraisal', requireSchool, async (req, res) => {
+  try {
+    const rows = await q(
+      `SELECT st.id, st.name, st.role, st.subject, st.class,
+              COALESCE(st.performance_score, 0) as performance_score,
+              COALESCE(st.attendance_submissions, 0) as attendance_submissions,
+              COALESCE(st.homework_assigned, 0) as homework_assigned,
+              (SELECT COUNT(*) FROM signin_log sl WHERE sl.staff_id=st.id AND sl.date >= current_date - interval '30 days') as signins_30d
+       FROM staff st WHERE st.school_id=$1 AND st.status != 'inactive' ORDER BY st.name`,
+      [req.school.id]
+    );
+    json(res, rows.rows);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// PATCH /api/admin/appraisal/:staff_id — update performance score
+app.patch('/api/admin/appraisal/:staff_id', requireSchool, async (req, res) => {
+  try {
+    const { performance_score, notes } = req.body;
+    await q(`UPDATE staff SET performance_score=$1 WHERE id=$2 AND school_id=$3`,
+      [performance_score, req.params.staff_id, req.school.id]);
+    json(res, { ok: true });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// GET /api/admin/usage — platform usage stats
+app.get('/api/admin/usage', requireSchool, async (req, res) => {
+  try {
+    const sid = req.school.id;
+    const [msgs, students, staff, signins, homeworks, attendance] = await Promise.all([
+      q(`SELECT DATE_TRUNC('day', created_at) as day, COUNT(*) as count FROM messages WHERE school_id=$1 AND created_at >= now() - interval '30 days' GROUP BY 1 ORDER BY 1`, [sid]),
+      q(`SELECT COUNT(*) as total FROM students WHERE school_id=$1`, [sid]),
+      q(`SELECT COUNT(*) as total FROM staff WHERE school_id=$1 AND status='active'`, [sid]),
+      q(`SELECT COUNT(*) as total FROM signin_log WHERE school_id=$1 AND date >= current_date - interval '30 days'`, [sid]),
+      q(`SELECT COUNT(*) as total FROM homeworks WHERE school_id=$1 AND created_at >= now() - interval '30 days'`, [sid]),
+      q(`SELECT COUNT(*) as total FROM attendance WHERE school_id=$1 AND date >= current_date - interval '30 days'`, [sid]),
+    ]);
+    json(res, {
+      messages_chart: msgs.rows,
+      totals: {
+        students: Number(students.rows[0]?.total||0),
+        staff: Number(staff.rows[0]?.total||0),
+        signins_30d: Number(signins.rows[0]?.total||0),
+        homeworks_30d: Number(homeworks.rows[0]?.total||0),
+        attendance_30d: Number(attendance.rows[0]?.total||0),
+      }
+    });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// GET /api/admin/admission_inquiries — admissions list
+app.get('/api/admin/admission_inquiries', requireSchool, async (req, res) => {
+  try {
+    const rows = await q(
+      `SELECT * FROM admission_inquiries WHERE school_id=$1 ORDER BY created_at DESC LIMIT 200`,
+      [req.school.id]
+    );
+    json(res, rows.rows);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// PATCH /api/admin/admission_inquiries/:id — update status
+app.patch('/api/admin/admission_inquiries/:id', requireSchool, async (req, res) => {
+  try {
+    const { status } = req.body;
+    await q(`UPDATE admission_inquiries SET status=$1 WHERE id=$2 AND school_id=$3`, [status, req.params.id, req.school.id]);
+    json(res, { ok: true });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// GET /api/admin/class-summary/:class_name — attendance + scores for a class
+app.get('/api/admin/class-summary/:class_name', requireSchool, async (req, res) => {
+  try {
+    const sid = req.school.id;
+    const cls = decodeURIComponent(req.params.class_name);
+    const [students, attendance, scores, homeworks] = await Promise.all([
+      q(`SELECT id, name, parent_name, parent_phone FROM students WHERE school_id=$1 AND class_name=$2 ORDER BY name`, [sid, cls]),
+      q(`SELECT student_id, status, date FROM attendance WHERE school_id=$1 AND date >= current_date - interval '14 days'
+         AND student_id IN (SELECT id FROM students WHERE school_id=$1 AND class_name=$2)`, [sid, cls]),
+      q(`SELECT student_id, subject, score FROM scores WHERE school_id=$1
+         AND student_id IN (SELECT id FROM students WHERE school_id=$1 AND class_name=$2) ORDER BY uploaded_at DESC`, [sid, cls]),
+      q(`SELECT subject, description, due_date, created_at FROM homeworks WHERE school_id=$1 AND class_name=$2 ORDER BY created_at DESC LIMIT 5`, [sid, cls]),
+    ]);
+    json(res, {
+      class_name: cls,
+      students: students.rows,
+      attendance: attendance.rows,
+      scores: scores.rows,
+      homeworks: homeworks.rows,
+    });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+
+// ══════════════════════════════════════════════════════════
+// STUDENT PROMOTION ROUTES
+// ══════════════════════════════════════════════════════════
+
+// Class progression map — Nigerian school system
+const CLASS_PROGRESSION = {
+  // Nursery / Primary (if school uses them)
+  'Nursery 1': 'Nursery 2', 'Nursery 2': 'Nursery 3',
+  'Nursery 3': 'Primary 1', 'Primary 1': 'Primary 2',
+  'Primary 2': 'Primary 3', 'Primary 3': 'Primary 4',
+  'Primary 4': 'Primary 5', 'Primary 5': 'Primary 6',
+  'Primary 6': 'JSS1',
+  // JSS
+  'JSS1': 'JSS2', 'JSS1A': 'JSS2A', 'JSS1B': 'JSS2B', 'JSS1C': 'JSS2C',
+  'JSS2': 'JSS3', 'JSS2A': 'JSS3A', 'JSS2B': 'JSS3B', 'JSS2C': 'JSS3C',
+  'JSS3': 'SS1',  'JSS3A': 'SS1A',  'JSS3B': 'SS1B',  'JSS3C': 'SS1C',
+  // SSS
+  'SS1':  'SS2',  'SS1A':  'SS2A',  'SS1B':  'SS2B',  'SS1C':  'SS2C',
+  'SS2':  'SS3',  'SS2A':  'SS3A',  'SS2B':  'SS3B',  'SS2C':  'SS3C',
+  // Graduating
+  'SS3': 'GRADUATED', 'SS3A': 'GRADUATED', 'SS3B': 'GRADUATED', 'SS3C': 'GRADUATED',
+  // Alternative naming
+  'SSS1': 'SSS2', 'SSS1A': 'SSS2A', 'SSS1B': 'SSS2B',
+  'SSS2': 'SSS3', 'SSS2A': 'SSS3A', 'SSS2B': 'SSS3B',
+  'SSS3': 'GRADUATED', 'SSS3A': 'GRADUATED', 'SSS3B': 'GRADUATED',
+};
+
+function getNextClass(currentClass) {
+  if (!currentClass) return null;
+  const trimmed = currentClass.trim();
+  return CLASS_PROGRESSION[trimmed] || null;
+}
+
+// GET /api/admin/students/promotion-preview
+// Returns every active student with their proposed next class
+app.get('/api/admin/students/promotion-preview', requireSchool, async (req, res) => {
+  try {
+    const sid = req.school.id;
+    const students = await q(`
+      SELECT s.id, s.name, s.class_name, s.status, s.parent_phone, s.parent_name,
+             COALESCE(f.status,'no record') as fee_status,
+             COALESCE(f.amount_due,0)::numeric as amount_due,
+             COALESCE(f.amount_paid,0)::numeric as amount_paid
+      FROM students s
+      LEFT JOIN fees f ON f.student_id = s.id AND f.school_id = s.school_id
+      WHERE s.school_id = $1 AND COALESCE(s.status,'active') = 'active'
+      ORDER BY s.class_name, s.name
+    `, [sid]);
+
+    const preview = students.rows.map(s => {
+      const nextClass = getNextClass(s.class_name);
+      return {
+        ...s,
+        next_class: nextClass,
+        action: nextClass === 'GRADUATED' ? 'graduate'
+               : nextClass ? 'promote'
+               : 'unknown', // unrecognised class — admin must set manually
+        can_promote: nextClass !== null,
+      };
+    });
+
+    // Summary counts
+    const counts = {
+      total: preview.length,
+      promote: preview.filter(s => s.action === 'promote').length,
+      graduate: preview.filter(s => s.action === 'graduate').length,
+      unknown: preview.filter(s => s.action === 'unknown').length,
+      unpaid_fees: preview.filter(s => s.fee_status === 'unpaid' || s.fee_status === 'partial').length,
+    };
+
+    json(res, { students: preview, counts });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// POST /api/admin/students/promote
+// Executes promotion — accepts admin overrides per student
+app.post('/api/admin/students/promote', requireSchool, async (req, res) => {
+  try {
+    const { overrides = {}, academic_session, new_term, fee_amount, notify_parents } = req.body;
+    // overrides: { [student_id]: { action: 'promote'|'graduate'|'repeat'|'withdraw', next_class: 'JSS3A', notes: '' } }
+    if (!academic_session) return bad(res, 'academic_session is required (e.g. 2025/2026)');
+
+    const sid = req.school.id;
+    const school = req.school;
+
+    const students = await q(`
+      SELECT id, name, class_name, parent_phone, parent_name
+      FROM students WHERE school_id=$1 AND COALESCE(status,'active')='active'
+    `, [sid]);
+
+    let promoted = 0, graduated = 0, repeated = 0, withdrawn = 0, skipped = 0;
+    const errors = [];
+
+    for (const s of students.rows) {
+      const override = overrides[s.id] || {};
+      const action = override.action || (getNextClass(s.class_name) === 'GRADUATED' ? 'graduate' : 'promote');
+      const nextClass = override.next_class || getNextClass(s.class_name);
+
+      try {
+        if (action === 'withdraw') {
+          await q(`UPDATE students SET status='withdrawn', previous_class=$1 WHERE id=$2`, [s.class_name, s.id]);
+          await q(`INSERT INTO promotion_history (school_id,student_id,student_name,from_class,to_class,academic_session,promotion_type,notes)
+                   VALUES ($1,$2,$3,$4,$5,$6,'withdrawn',$7)`,
+            [sid, s.id, s.name, s.class_name, s.class_name, academic_session, override.notes||null]);
+          withdrawn++;
+
+        } else if (action === 'graduate') {
+          const yr = new Date().getFullYear();
+          await q(`UPDATE students SET status='graduated', graduation_year=$1, previous_class=$2, class_name='Graduated' WHERE id=$3`,
+            [yr, s.class_name, s.id]);
+          await q(`INSERT INTO promotion_history (school_id,student_id,student_name,from_class,to_class,academic_session,promotion_type,notes)
+                   VALUES ($1,$2,$3,$4,$5,$6,'graduated',$7)`,
+            [sid, s.id, s.name, s.class_name, 'GRADUATED', academic_session, override.notes||null]);
+          graduated++;
+
+        } else if (action === 'repeat') {
+          // Student stays in same class
+          await q(`INSERT INTO promotion_history (school_id,student_id,student_name,from_class,to_class,academic_session,promotion_type,notes)
+                   VALUES ($1,$2,$3,$4,$5,$6,'repeated',$7)`,
+            [sid, s.id, s.name, s.class_name, s.class_name, academic_session, override.notes||null]);
+          repeated++;
+
+        } else if (action === 'promote' && nextClass && nextClass !== 'GRADUATED') {
+          await q(`UPDATE students SET class_name=$1, previous_class=$2 WHERE id=$3`,
+            [nextClass, s.class_name, s.id]);
+          await q(`INSERT INTO promotion_history (school_id,student_id,student_name,from_class,to_class,academic_session,promotion_type,notes)
+                   VALUES ($1,$2,$3,$4,$5,$6,'promoted',$7)`,
+            [sid, s.id, s.name, s.class_name, nextClass, academic_session, override.notes||null]);
+
+          // Create new term fee record if fee_amount provided
+          if (fee_amount && Number(fee_amount) > 0 && new_term) {
+            await createFeeRecord(sid, s.id, { amount_due: Number(fee_amount), term: new_term }, null);
+          }
+
+          // WhatsApp notification to parent
+          if (notify_parents && s.parent_phone && hasTwilio()) {
+            const from = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
+            const msg =
+              `🎉 *Congratulations, ${s.parent_name || 'Parent'}!*\n\n` +
+              `We are pleased to inform you that *${s.name}* has been promoted to *${nextClass}* ` +
+              `for the *${academic_session} Academic Session*.\n\n` +
+              `We look forward to another great year with ${s.name.split(' ')[0]}! ` +
+              `Please ensure all ${new_term || 'new term'} fees are settled before resumption.\n\n` +
+              `${school.name} 🏫`;
+            try {
+              await twilioSend(s.parent_phone, from, msg);
+              await q(`UPDATE promotion_history SET notified_parent=true WHERE student_id=$1 AND academic_session=$2`, [s.id, academic_session]);
+            } catch(e) { console.warn(`Promotion WhatsApp failed for ${s.name}: ${e.message}`); }
+          }
+          promoted++;
+
+        } else {
+          skipped++;
+        }
+      } catch(e) {
+        errors.push(`${s.name}: ${e.message}`);
+      }
+    }
+
+    json(res, { ok: true, promoted, graduated, repeated, withdrawn, skipped, errors });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// GET /api/admin/students/promotion-history
+// Returns the log of all past promotions
+app.get('/api/admin/students/promotion-history', requireSchool, async (req, res) => {
+  try {
+    const rows = await q(`
+      SELECT ph.*, s.parent_name, s.parent_phone
+      FROM promotion_history ph
+      LEFT JOIN students s ON s.id = ph.student_id
+      WHERE ph.school_id = $1
+      ORDER BY ph.promoted_at DESC LIMIT 200
+    `, [req.school.id]);
+    json(res, rows.rows);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// GET /api/admin/students/alumni
+// Returns graduated students
+app.get('/api/admin/students/alumni', requireSchool, async (req, res) => {
+  try {
+    const rows = await q(`
+      SELECT s.*, ph.academic_session as graduation_session, ph.promoted_at as graduated_at
+      FROM students s
+      LEFT JOIN promotion_history ph ON ph.student_id = s.id AND ph.promotion_type = 'graduated'
+      WHERE s.school_id = $1 AND s.status = 'graduated'
+      ORDER BY s.graduation_year DESC, s.name
+    `, [req.school.id]);
+    json(res, rows.rows);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+
 // weeklyReports replaced by reporting.js — see initReporting() below
 async function dailyFeeReminders() {
   const rows = (await q(`SELECT s.name school_name, s.twilio_number, st.name student_name, st.parent_phone, f.amount_due, f.amount_paid
@@ -1924,7 +2344,7 @@ app.get('/api/admin/students/:id/profile', requireSchool, async (req, res) => {
       q(`SELECT reason, action_taken, parent_notified, visited_at FROM sickbay_log WHERE student_id=$1 AND school_id=$2 ORDER BY visited_at DESC LIMIT 10`, [studentId, sid]),
       q(`SELECT subject, description, due_date FROM homeworks WHERE school_id=$1 AND class_name=$2 ORDER BY created_at DESC LIMIT 5`, [sid, s.class_name]),
       q(`SELECT note, created_at FROM behaviour_notes WHERE student_id=$1 AND school_id=$2 ORDER BY created_at DESC LIMIT 5`, [studentId, sid]),
-      q(`SELECT risk_level, avg_score, attendance_pct, weak_subjects, trajectory, assessed_at FROM student_risk_scores WHERE student_id=$1 LIMIT 1`, [studentId]),
+      q(`SELECT risk_level, avg_score, attendance_pct, weak_subjects, trajectory, assessed_at FROM student_risk_scores WHERE student_id=$1 AND school_id=$2 LIMIT 1`, [studentId, sid]),
       q(`SELECT term, subjects, position, remark FROM student_results WHERE student_id=$1 AND school_id=$2 ORDER BY created_at DESC LIMIT 3`, [studentId, sid]),
     ]);
 
