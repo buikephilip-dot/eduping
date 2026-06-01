@@ -219,6 +219,20 @@ async function generateWeeklyReportForSchool(schoolId, { q, callAI, twilioSend }
         };
       }));
 
+      // ── Baseline + exceptions model ────────────────────────
+      // Count how many students have actual data this week
+      const studentsWithData = studentInputs.filter(s =>
+        s.scores.length > 0 ||
+        s.behaviour_notes.length > 0 ||
+        s.sickbay_visits.length > 0 ||
+        s.attendance.some(a => a.status === 'absent')
+      ).length;
+
+      const isBaselineWeek = studentsWithData === 0;
+      const baselineNote = isBaselineWeek
+        ? 'NOTE: No exceptions were logged this week. Generate positive baseline reports for all students — assume normal attendance, steady progress, and good behaviour unless data says otherwise.'
+        : `${studentsWithData} of ${classStudents.length} students have logged data this week. For students with no data, generate a positive baseline report.`;
+
       // Build the user message — one AI call covers the whole class
       const userPrompt = `School: ${school.name}, ${school.city || 'Nigeria'}
 Term: ${school.current_term || 'Current Term'}
@@ -226,6 +240,7 @@ Week number: ${weekNumber}
 Week starting: ${weekStart}
 Class: ${classId}
 Total students: ${classStudents.length}
+${baselineNote}
 
 Student data:
 ${JSON.stringify(studentInputs, null, 2)}`;

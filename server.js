@@ -217,6 +217,12 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS idx_messages_school_from ON messages(school_id, from_number);
     CREATE INDEX IF NOT EXISTS idx_messages_school_time ON messages(school_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_fees_school_status ON fees(school_id, status);
+
+    -- Scores unique index — needed for ON CONFLICT upsert from teacher CA updates
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_scores_student_subject_term
+      ON scores(school_id, student_id, subject, term);
+    CREATE INDEX IF NOT EXISTS idx_scores_school_week
+      ON scores(school_id, uploaded_at DESC);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_fees_student_term ON fees(school_id, student_id, term);
 
     -- Student promotion tracking
@@ -418,7 +424,8 @@ async function seedIfEmpty() {
     (name, city, landmark_description, fees, fee_deadline, current_term, whatsapp_number, twilio_number, admin_password, plan, status, billing_start, monthly_retainer, setup_fee)
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,current_date,$12,$13) RETURNING *`,
     ['Greenfield Academy', 'Abuja', 'Green gate beside the assembly hall, Maitama', '120000 per term', '15th January', '2nd Term 2024/2025',
-     '+2347015255068', process.env.TWILIO_DEFAULT_FROM || '+14155238886', 'admin123', 'pro', 'active', 80000, 150000]);
+     '+2347015255068', null, 'admin123', 'pro', 'active', 80000, 150000]); // twilio_number intentionally null — real schools claim their own number
+
   const sid = school.rows[0].id;
 
   // Students — rich, realistic Nigerian names with varying performance
@@ -523,8 +530,27 @@ async function seedIfEmpty() {
 
 async function getSchoolByTwilio(to) {
   const n = normalisePhone(to);
-  const result = await q(`SELECT * FROM schools WHERE twilio_number = $1 OR twilio_number = $2 LIMIT 1`, [n, `whatsapp:${n}`]);
-  return result.rows[0];
+  // First: exact match on the incoming number
+  const result = await q(
+    `SELECT * FROM schools WHERE (twilio_number = $1 OR twilio_number = $2) AND status='active' LIMIT 1`,
+    [n, `whatsapp:${n}`]
+  );
+  if (result.rows[0]) return result.rows[0];
+  // Fallback: if only ONE active school exists and it has no dedicated number,
+  // assume the message is for that school (safe for single-school or demo setups)
+  const fallback = await q(
+    `SELECT * FROM schools WHERE status='active' AND (twilio_number IS NULL OR twilio_number=$1) LIMIT 1`,
+    [process.env.TWILIO_DEFAULT_FROM || '']
+  );
+  const fallbackSchool = fallback.rows[0];
+  if (!fallbackSchool) return null;
+  // Only use fallback if it's the ONLY active school with no dedicated number
+  const otherSchools = await q(
+    `SELECT COUNT(*) FROM schools WHERE status='active' AND (twilio_number IS NULL OR twilio_number=$1) AND id != $2`,
+    [process.env.TWILIO_DEFAULT_FROM || '', fallbackSchool.id]
+  );
+  if (Number(otherSchools.rows[0].count) === 0) return fallbackSchool;
+  return null; // Multiple schools, ambiguous — reject
 }
 async function getSchool(id) { const r = await q(`SELECT * FROM schools WHERE id=$1`, [id]); return r.rows[0]; }
 
@@ -789,17 +815,15 @@ async function handleIncomingWhatsApp(req, res) {
   const mediaType = req.body.MediaContentType0 || '';
   const school = await getSchoolByTwilio(to);
   if (!school || school.status !== 'active') return res.type('text/xml').send(new twilio.twiml.MessagingResponse().message('School account is not active. Please contact EduPing support.').toString());
-  // Guard: only block if MULTIPLE DIFFERENT schools are sharing the exact same number.
-  // A single school using the fallback is fine — that is the standard single-tenant setup.
-  // Only fire when count of OTHER active schools on the same number is > 0.
-  const effectiveTwilioNumber = school.twilio_number || process.env.TWILIO_DEFAULT_FROM || '';
-  if (effectiveTwilioNumber) {
+  // Guard: check if multiple DIFFERENT schools share this exact incoming Twilio number
+  // Only a problem if 2+ schools have the same twilio_number — one school using the default is fine
+  if (school.twilio_number) {
     const sharedRisk = await q(
-      `SELECT COUNT(*) FROM schools WHERE status='active' AND id != $1 AND (twilio_number=$2 OR (twilio_number IS NULL AND $2=$3))`,
-      [school.id, effectiveTwilioNumber, process.env.TWILIO_DEFAULT_FROM || '']
+      `SELECT COUNT(*) FROM schools WHERE status='active' AND twilio_number=$1 AND id != $2`,
+      [school.twilio_number, school.id]
     );
     if (Number(sharedRisk.rows[0].count) > 0) {
-      console.error('[MULTITENANCY] School', school.name, '— twilio_number', effectiveTwilioNumber, 'is shared with', sharedRisk.rows[0].count, 'other active school(s). Assign dedicated twilio_number to each school to resolve.');
+      console.error(`[MULTITENANCY] twilio_number ${school.twilio_number} shared by multiple schools — message routing ambiguous`);
       return res.type('text/xml').send(new twilio.twiml.MessagingResponse().toString());
     }
   }
@@ -950,7 +974,94 @@ async function processTeacher(school, staff, body, mediaUrl, mediaType) {
 
     return `✅ Homework saved for ${staff.class || 'your class'}. ${staff.class ? 'Parents have been notified via WhatsApp.' : 'Parents can now ask EduPing for it.'} ${school.name} 🏫`;
   }
-  return await callAI(`You are EduPing assisting teacher ${staff.name} at ${school.name}. Help with attendance, scores, homework, behaviour notes, and sign in workflows.`, body || 'Hello', null);
+  // ── CA/Score update — writes to scores table so Friday report picks it up ──
+  // Supports: "Amina scored 95 in Maths"
+  //           "Amina 95, Tobiloba 88, Chidi 72"  (bulk)
+  //           "CA update: Amina 95 Maths, Tobiloba 88 English"
+  //           "test result: ..." / "ca:" / "scores:"
+  const isScoreMsg = lower.includes('scored') || lower.includes('ca update') ||
+    lower.includes('test result') || lower.includes('exam result') ||
+    lower.includes('ca:') || lower.includes('scores:') || /\d+\s*\/\s*\d+/.test(body);
+
+  if (isScoreMsg) {
+    const term = school.current_term || 'Current Term';
+    const defaultSubject = staff.subject || 'General';
+    let saved = 0;
+    const failed = [];
+
+    // Pattern A: "Name scored N [in Subject]"
+    const singleRx = /([A-Za-z][\w\s]{1,25?})\s+scored\s+(\d{1,3})(?:\/\d+)?(?:\s+in\s+([A-Za-z\s]+))?/i;
+    const singleM = body.match(singleRx);
+
+    // Pattern B: bulk "Name N Subject, Name N"
+    const bulkRx = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(\d{1,3})(?:\s+([A-Za-z]+))?/g;
+    const bulkMatches = [...body.matchAll(bulkRx)].filter(m => parseInt(m[2]) <= 100);
+
+    const toProcess = [];
+    if (singleM) {
+      toProcess.push({ name: singleM[1].trim(), score: parseInt(singleM[2]), subject: (singleM[3] || defaultSubject).trim() });
+    } else {
+      for (const m of bulkMatches) {
+        toProcess.push({ name: m[1].trim(), score: parseInt(m[2]), subject: (m[3] || defaultSubject).trim() });
+      }
+    }
+
+    for (const entry of toProcess) {
+      const studentRes = await q(
+        `SELECT id, name FROM students
+          WHERE school_id=$1
+            AND (name ILIKE $2 OR split_part(name,' ',1) ILIKE $3)
+            AND (class_name=$4 OR $4='')
+          LIMIT 1`,
+        [school.id, `%${entry.name}%`, entry.name, staff.class || '']
+      );
+      if (studentRes.rows.length) {
+        try {
+          await q(`
+            INSERT INTO scores (school_id, student_id, subject, score, term, uploaded_at)
+            VALUES ($1,$2,$3,$4,$5,now())
+            ON CONFLICT (school_id, student_id, subject, term)
+            DO UPDATE SET score=$4, uploaded_at=now()
+          `, [school.id, studentRes.rows[0].id, entry.subject, entry.score, term]);
+          await q(`UPDATE students SET weekly_performance_score=$1 WHERE id=$2`, [entry.score, studentRes.rows[0].id]);
+          saved++;
+        } catch(e) { failed.push(entry.name); }
+      } else {
+        failed.push(entry.name + ' (not found in class)');
+      }
+    }
+
+    if (toProcess.length === 0) {
+      // Can't parse — ask for proper format
+      return `📊 Got it, ${staff.name.split(' ')[0]}! To save scores for Friday's report, use:\n\n*"Amina scored 95 in Maths"*\nor bulk: *"Amina 95, Tobiloba 88, Chidi 72"*\n\n${school.name} 🏫`;
+    }
+
+    const failNote = failed.length ? `\n⚠️ Could not find: ${failed.join(', ')}` : '';
+    return `✅ ${saved} score${saved !== 1 ? 's' : ''} saved for ${term}.${failNote}\n\n📊 These will appear in *Friday's weekly report* to parents.\n\n${school.name} 🏫`;
+  }
+
+  // ── Behaviour note: "Chidi was disruptive today" ────────
+  if (lower.includes('behaviour') || lower.includes('behavior') || lower.includes('disrupt') || lower.includes('absent') || lower.includes('late') || lower.includes('noted')) {
+    return `📝 Noted, ${staff.name.split(' ')[0]}. Log detailed behaviour notes from the dashboard under the student's profile.
+
+${school.name} 🏫`;
+  }
+
+  // ── Attendance: "class attendance done" ─────────────────
+  if (lower.includes('attendance') || lower.includes('present') || lower.includes('roll call')) {
+    return `✅ Attendance noted, ${staff.name.split(' ')[0]}. Please update class attendance from the dashboard to keep records accurate.
+
+${school.name} 🏫`;
+  }
+
+  // ── General teacher AI — clearly staff-facing ────────────
+  const teacherSystem = `You are EduPing, a school management assistant for ${school.name}. 
+You are speaking with ${staff.name}, a ${staff.role || 'teacher'}${staff.subject ? ' who teaches ' + staff.subject : ''}${staff.class ? ' for class ' + staff.class : ''}.
+Help them with: logging scores, assigning homework, recording attendance, behaviour notes, or general school queries.
+Keep responses SHORT (under 100 words), practical, and clearly directed at the teacher — not a parent.
+Never send parent-style responses. End with ${school.name} 🏫`;
+
+  return await callAI(teacherSystem, body || 'Hello', null);
 }
 
 function requireSuper(req, res, next) {
