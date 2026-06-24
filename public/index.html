@@ -3212,42 +3212,81 @@ function renderChatList(msgs) {
       '</div>';
   }).join('');
 }
-
-function openChat(phone) {
+  
+async function openChat(phone) {
   activePhone = phone;
-  const msgs = allMessages.filter(m => m.from_number === phone);
-  const header = document.getElementById('chat-window-header');
-  header.innerHTML = '<div class="dash-card-title">💬 ' + phone + '</div><span style="font-size:12px;color:var(--text-muted);">' + msgs.length + ' messages</span>';
-  const body = document.getElementById('chat-window-body');
-  body.innerHTML = msgs.map(m => {
-    const time = m.created_at ? new Date(m.created_at).toLocaleString('en-NG') : '';
-    const needsReview = m.assistant_reply && (
-      m.assistant_reply.includes('pass your question') ||
-      m.assistant_reply.includes('contact the school') ||
-      m.assistant_reply.includes('reach out directly')
-    );
-    return '<div style="display:flex;flex-direction:column;gap:6px;">' +
-      '<div style="align-self:flex-start;max-width:75%;">' +
-      '<div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">Parent · ' + time + '</div>' +
-      '<div style="background:#f0f2f5;padding:10px 12px;border-radius:0 12px 12px 12px;font-size:13px;line-height:1.5;">' + (m.user_message||'') + '</div>' +
-      '</div>' +
-      '<div style="align-self:flex-end;max-width:75%;">' +
-      '<div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;text-align:right;">EduPing AI</div>' +
-      '<div style="background:' + (needsReview ? '#fef2f2;border:1px solid #fecaca' : 'var(--green);color:white') + ';padding:10px 12px;border-radius:12px 0 12px 12px;font-size:13px;line-height:1.5;">' +
-      (m.assistant_reply||'') +
-      (needsReview ? '<div style="margin-top:6px;font-size:11px;color:#ef4444;font-weight:600;">⚠️ Admin follow-up needed</div>' : '') +
-      '</div>' +
-      '</div>' +
-      '</div>';
-  }).join('');
-  body.scrollTop = body.scrollHeight;
-  // Show reply bar
-  const replyBar = document.getElementById('chat-reply-bar');
-  replyBar.style.display = 'flex';
-  // Highlight active in list
-  renderChatList(allMessages);
-}
+  renderChatList(allMessages); // highlight active in list
 
+  const header = document.getElementById('chat-window-header');
+  const body = document.getElementById('chat-window-body');
+  const replyBar = document.getElementById('chat-reply-bar');
+
+  const overview = allMessages.find(m => m.phone === phone);
+  const displayName = (overview && (overview.parent_name || overview.student_name)) || phone;
+  header.innerHTML = '<div class="dash-card-title">💬 ' + displayName + '</div>';
+  body.innerHTML = '<div class="loading" style="padding:20px;">Loading messages...</div>';
+
+  try {
+    const msgs = await api('/api/admin/chats/' + encodeURIComponent(phone) + '/messages');
+
+    if (!msgs || !msgs.length) {
+      body.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px;">No messages yet in this conversation</div>';
+      if (replyBar) replyBar.style.display = 'flex';
+      return;
+    }
+
+    body.innerHTML = msgs.map(m => {
+      const time = m.created_at
+        ? new Date(m.created_at).toLocaleString('en-NG', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })
+        : '';
+      const needsReview = m.assistant_reply && (
+        m.assistant_reply.includes('pass your question') ||
+        m.assistant_reply.includes('contact the school') ||
+        m.assistant_reply.includes('reach out directly')
+      );
+      const isAdminMsg = m.channel === 'admin' || m.channel === 'admin-reply';
+
+      let html = '';
+
+      if (m.user_message &&
+          m.user_message !== '[Admin reply]' &&
+          m.user_message !== '[Admin direct message]') {
+        html += '<div style="display:flex;justify-content:flex-start;margin-bottom:6px;">' +
+          '<div style="max-width:75%;">' +
+          '<div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">Parent · ' + time + '</div>' +
+          '<div style="background:white;padding:10px 14px;border-radius:0 12px 12px 12px;font-size:13px;line-height:1.5;box-shadow:0 1px 2px rgba(0,0,0,.06);">' +
+          m.user_message +
+          '</div></div></div>';
+      }
+
+      if (m.assistant_reply &&
+          m.assistant_reply !== '[AI suppressed — admin active in thread]') {
+        const bubbleBg = needsReview
+          ? '#fef2f2;border:1px solid #fecaca'
+          : isAdminMsg ? '#dbeafe' : 'var(--green-bubble)';
+        html += '<div style="display:flex;justify-content:flex-end;margin-bottom:12px;">' +
+          '<div style="max-width:75%;">' +
+          '<div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;text-align:right;">' +
+          (isAdminMsg ? '👤 Admin' : '🤖 EduPing AI') +
+          '</div>' +
+          '<div style="background:' + bubbleBg + ';padding:10px 14px;border-radius:12px 0 12px 12px;font-size:13px;line-height:1.5;box-shadow:0 1px 2px rgba(0,0,0,.06);">' +
+          m.assistant_reply +
+          (needsReview ? '<div style="margin-top:6px;font-size:11px;color:#ef4444;font-weight:600;">⚠️ Needs your follow-up — reply below</div>' : '') +
+          '</div></div></div>';
+      }
+
+      return html;
+    }).join('');
+
+    body.scrollTop = body.scrollHeight;
+    if (replyBar) replyBar.style.display = 'flex';
+
+  } catch(e) {
+    body.innerHTML =
+      '<div style="text-align:center;color:var(--danger);font-size:13px;padding:40px;">' +
+      'Could not load messages: ' + e.message + '</div>';
+  }
+}
 function filterChats() {
   const q = document.getElementById('chat-search').value.toLowerCase();
   const filtered = allMessages.filter(m => m.from_number.includes(q) || (m.user_message||'').toLowerCase().includes(q));
