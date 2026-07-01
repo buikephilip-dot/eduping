@@ -599,6 +599,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         <button class="subnav-btn" onclick="switchSection('termcal',this)">📅 Term Calendar</button>
         <button class="subnav-btn" onclick="switchSection('performance',this)">🏅 Rankings</button>
         <button class="subnav-btn" onclick="switchSection('results',this)">📄 Results</button>
+        <button class="subnav-btn" onclick="switchSection('cbt',this)">📝 CBT Exams</button>
       </div>
 
       <!-- OVERVIEW -->
@@ -1456,8 +1457,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
           </div>
           <div style="display:flex;height:520px;overflow:hidden;">
             <div id="teacher-chat-list" style="width:280px;border-right:1px solid #f0f2f5;overflow-y:auto;flex-shrink:0;"><div class="loading" style="padding:20px;">Loading...</div></div>
-            <div id="teacher-chat-messages" style="flex:1;overflow-y:auto;padding:16px;background:var(--gray-bg);">
-              <div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px;">Select a teacher to view their conversation</div>
+            <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
+              <div id="teacher-chat-messages" style="flex:1;overflow-y:auto;padding:16px;background:var(--gray-bg);">
+                <div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px;">Select a teacher to view their conversation</div>
+              </div>
+              <div id="teacher-reply-bar" style="display:none;gap:8px;padding:10px 12px;border-top:1px solid #f0f2f5;background:white;">
+                <input id="teacher-reply-input" placeholder="Take over — type a message to this teacher..." style="flex:1;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 14px;font-size:13px;font-family:inherit;" onkeydown="if(event.key==='Enter')sendTeacherReply()">
+                <button class="broadcast-btn" style="margin:0;padding:8px 16px;white-space:nowrap;" onclick="sendTeacherReply()">Send ↗</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1837,6 +1844,125 @@ const DEMO_FEES_SUMMARY = {
 };
 
 // ── Demo API interceptor ──────────────────────────────────
+// ── DEMO: CBT assessments (mutable so creating/publishing feels real) ──
+const DEMO_CBT = {
+  assessments: [
+    { id: 'demo-a1', title: 'Mathematics Mid-Term Test', subject: 'Mathematics', class_name: 'JSS2A', term: '2nd Term 2025/2026',
+      time_limit_minutes: 20, status: 'active', shuffle_questions: true, shuffle_options: true, show_score_immediately: true,
+      question_count: 4, session_count: 6, submitted_count: 4, created_at: new Date(Date.now()-3*86400000).toISOString() },
+    { id: 'demo-a2', title: 'English Comprehension Quiz', subject: 'English', class_name: 'JSS2A', term: '2nd Term 2025/2026',
+      time_limit_minutes: 15, status: 'draft', shuffle_questions: false, shuffle_options: false, show_score_immediately: true,
+      question_count: 3, session_count: 0, submitted_count: 0, created_at: new Date(Date.now()-86400000).toISOString() }
+  ],
+  questions: {
+    'demo-a1': [
+      { id: 'q1', question_text: 'What is 12 × 8?', question_type: 'mcq', marks: 2, order_index: 0,
+        options: [ {id:'q1o1', option_text:'86', is_correct:false}, {id:'q1o2', option_text:'96', is_correct:true}, {id:'q1o3', option_text:'106', is_correct:false}, {id:'q1o4', option_text:'88', is_correct:false} ] },
+      { id: 'q2', question_text: 'Solve for x: 3x + 5 = 20', question_type: 'mcq', marks: 3, order_index: 1,
+        options: [ {id:'q2o1', option_text:'x = 5', is_correct:true}, {id:'q2o2', option_text:'x = 7', is_correct:false}, {id:'q2o3', option_text:'x = 3', is_correct:false} ] },
+      { id: 'q3', question_text: 'A triangle has angles 60°, 60° and 60°. It is an equilateral triangle.', question_type: 'truefalse', marks: 1, order_index: 2,
+        options: [ {id:'q3o1', option_text:'True', is_correct:true}, {id:'q3o2', option_text:'False', is_correct:false} ] },
+      { id: 'q4', question_text: 'What is the perimeter of a square with side 9cm?', question_type: 'mcq', marks: 2, order_index: 3,
+        options: [ {id:'q4o1', option_text:'36cm', is_correct:true}, {id:'q4o2', option_text:'81cm', is_correct:false}, {id:'q4o3', option_text:'18cm', is_correct:false} ] }
+    ],
+    'demo-a2': [
+      { id: 'e1', question_text: 'Choose the correct spelling:', question_type: 'mcq', marks: 1, order_index: 0,
+        options: [ {id:'e1o1', option_text:'Recieve', is_correct:false}, {id:'e1o2', option_text:'Receive', is_correct:true}, {id:'e1o3', option_text:'Receeve', is_correct:false} ] },
+      { id: 'e2', question_text: '"The boy ran quickly." The word "quickly" is an adverb.', question_type: 'truefalse', marks: 1, order_index: 1,
+        options: [ {id:'e2o1', option_text:'True', is_correct:true}, {id:'e2o2', option_text:'False', is_correct:false} ] },
+      { id: 'e3', question_text: 'What is the plural of "child"?', question_type: 'fillin', marks: 2, order_index: 2,
+        options: [ {id:'e3o1', option_text:'children', is_correct:true} ] }
+    ]
+  },
+  monitor: {
+    'demo-a1': [
+      { id: 'ss1', student_name: 'Amara Okafor', status: 'submitted', started_at: new Date(Date.now()-7200000).toISOString(), submitted_at: new Date(Date.now()-6300000).toISOString(), score: 7.5, total_marks: 8, percentage: 93, time_remaining_seconds: 240 },
+      { id: 'ss2', student_name: 'Tobiloba Adeyemi', status: 'submitted', started_at: new Date(Date.now()-7100000).toISOString(), submitted_at: new Date(Date.now()-6200000).toISOString(), score: 6.5, total_marks: 8, percentage: 81, time_remaining_seconds: 130 },
+      { id: 'ss3', student_name: 'David Nwosu', status: 'submitted', started_at: new Date(Date.now()-7000000).toISOString(), submitted_at: new Date(Date.now()-6100000).toISOString(), score: 5.5, total_marks: 8, percentage: 69, time_remaining_seconds: 0 },
+      { id: 'ss4', student_name: 'Fatima Bello', status: 'submitted', started_at: new Date(Date.now()-6900000).toISOString(), submitted_at: new Date(Date.now()-6000000).toISOString(), score: 4, total_marks: 8, percentage: 52, time_remaining_seconds: 0 },
+      { id: 'ss5', student_name: 'Chukwuemeka Eze Jr', status: 'in_progress', started_at: new Date(Date.now()-600000).toISOString(), submitted_at: null, score: null, total_marks: null, percentage: null, time_remaining_seconds: 480 },
+      { id: 'ss6', student_name: 'Aisha Mohammed', status: 'pending', started_at: null, submitted_at: null, score: null, total_marks: null, percentage: null, time_remaining_seconds: null }
+    ]
+  }
+};
+
+function _demoCbtPaystack(baseUrl, opts) {
+  const method = (opts.method || 'GET').toUpperCase();
+  let body = {};
+  try { body = opts.body ? JSON.parse(opts.body) : {}; } catch(e) {}
+
+  // ── Paystack ──
+  if (baseUrl === '/api/admin/fees/paystack-link') {
+    const stu = (typeof DEMO_STUDENTS !== 'undefined' && DEMO_STUDENTS.find(s => s.id === body.student_id)) || { name: 'Student', balance: 65000, parent_phone: '+2348030000000' };
+    const amount = Number(body.amount || stu.balance || 65000) || 65000;
+    return { ok: true, url: 'https://checkout.paystack.com/demo' + Math.random().toString(36).slice(2, 10), reference: 'EDU-DEMO-' + Date.now(), amount, student: stu.name, parent_phone: stu.parent_phone };
+  }
+  if (baseUrl === '/api/admin/fees/paystack-send') {
+    return { ok: true, sent_to: '+2348069956420' };
+  }
+
+  // ── CBT ──
+  const mDetail  = baseUrl.match(/^\/api\/admin\/cbt\/assessments\/([^\/]+)$/);
+  const mSub     = baseUrl.match(/^\/api\/admin\/cbt\/assessments\/([^\/]+)\/(questions|publish|notify|results|monitor|release)$/);
+  const mQuestion= baseUrl.match(/^\/api\/admin\/cbt\/questions\/([^\/]+)$/);
+
+  if (baseUrl === '/api/admin/cbt/assessments' && method === 'GET') return DEMO_CBT.assessments;
+
+  if (baseUrl === '/api/admin/cbt/assessments' && method === 'POST') {
+    const a = { id: 'demo-a' + (DEMO_CBT.assessments.length + 1) + '-' + Date.now(), status: 'draft',
+                question_count: 0, session_count: 0, submitted_count: 0, created_at: new Date().toISOString(), ...body };
+    DEMO_CBT.assessments.unshift(a);
+    DEMO_CBT.questions[a.id] = [];
+    return a;
+  }
+
+  if (baseUrl === '/api/admin/cbt/bulk-import-questions') return { ok: true, imported: 5, failed: 0 };
+
+  if (mDetail && method === 'GET') {
+    const a = DEMO_CBT.assessments.find(x => x.id === mDetail[1]);
+    if (!a) return {};
+    return { ...a, questions: DEMO_CBT.questions[a.id] || [] };
+  }
+  if (mDetail && method === 'PATCH') {
+    const a = DEMO_CBT.assessments.find(x => x.id === mDetail[1]);
+    if (a) Object.assign(a, body);
+    return { ok: true, ...a };
+  }
+  if (mDetail && method === 'DELETE') {
+    DEMO_CBT.assessments = DEMO_CBT.assessments.filter(x => x.id !== mDetail[1]);
+    return { ok: true };
+  }
+  if (mQuestion) return { ok: true };
+
+  if (mSub) {
+    const id = mSub[1], action = mSub[2];
+    const a = DEMO_CBT.assessments.find(x => x.id === id);
+    if (action === 'questions' && method === 'POST') {
+      const qid = 'demo-q' + Date.now();
+      const opts2 = (body.options || []).map((o, i) => ({ id: qid + '-o' + i, option_text: o.option_text || o.text || String(o), is_correct: Boolean(o.is_correct), order_index: i }));
+      (DEMO_CBT.questions[id] = DEMO_CBT.questions[id] || []).push({ id: qid, question_text: body.question_text, question_type: body.question_type || 'mcq', marks: body.marks || 1, order_index: (DEMO_CBT.questions[id] || []).length, options: opts2 });
+      if (a) a.question_count = DEMO_CBT.questions[id].length;
+      return { ok: true, id: qid };
+    }
+    if (action === 'publish') {
+      if (a) { a.status = 'active'; a.session_count = 6; }
+      const kids = (typeof DEMO_STUDENTS !== 'undefined' ? DEMO_STUDENTS.filter(s => s.class_name === (a ? a.class_name : 'JSS2A')) : []).slice(0, 6);
+      const sessions = kids.map(s => { const t = 'demo-token-' + Math.random().toString(36).slice(2, 10); return { student_id: s.id, student_name: s.name, parent_phone: s.parent_phone, token: t, url: 'https://eduping.org/cbt/' + t }; });
+      return { published: true, sessions };
+    }
+    if (action === 'notify') return { sent: 6, total: 6, ok: true };
+    if (action === 'release') return { released: true, sent: 4, total: 4, ok: true };
+    if (action === 'monitor') return DEMO_CBT.monitor[id] || [];
+    if (action === 'results') {
+      const rows = (DEMO_CBT.monitor[id] || []).filter(r => r.status === 'submitted');
+      const results = rows.map(r => ({ student_name: r.student_name, score: r.score, total_marks: r.total_marks, percentage: r.percentage, grade: r.percentage >= 90 ? 'A' : r.percentage >= 70 ? 'B' : r.percentage >= 60 ? 'C' : r.percentage >= 50 ? 'D' : 'F', time_taken_seconds: 900 - (r.time_remaining_seconds || 0), status: r.status }));
+      const pcts = results.map(r => r.percentage);
+      return { results, stats: { total: (DEMO_CBT.monitor[id] || []).length, submitted: results.length, average: pcts.length ? Math.round(pcts.reduce((x, y) => x + y, 0) / pcts.length) : 0, highest: pcts.length ? Math.max(...pcts) : null, lowest: pcts.length ? Math.min(...pcts) : null } };
+    }
+  }
+  return { ok: true };
+}
+
 const DEMO_ROUTES = {
   '/api/admin/dashboard': () => ({
     conversations: 47, staff: DEMO_STAFF.length, outstanding_fees: DEMO_FEES_SUMMARY.totals.outstanding,
@@ -1855,7 +1981,7 @@ const DEMO_ROUTES = {
   '/api/admin/events': () => DEMO_EVENTS,
   '/api/admin/events/galleries': () => [],
   '/api/admin/attendance': () => DEMO_ATTENDANCE_TREND,
-  '/api/admin/chats': () => DEMO_MESSAGES,
+  '/api/admin/chats': () => DEMO_MESSAGES.map((m,i) => ({ ...m, parent_name: m.name, needs_attention: i === 2 })),
   '/api/admin/results/stats': () => ({ uploaded: 12, pins: 8, accessed: 6, fee_pending: 3 }),
   '/api/admin/results/pins': () => [],
   '/api/admin/waitlist': () => ({ ok: true }),
@@ -1918,6 +2044,13 @@ function demoClassSummary(cls) {
 // ── Demo API handler (called directly from patched api()) ─
 async function _demoApiHandler(url, opts = {}) {
   const isDemoModeActive = true;
+
+  // CBT + Paystack demo routes — must run before the generic POST catch-all
+  const _cbtBase = url.split('?')[0];
+  if (_cbtBase.startsWith('/api/admin/cbt/') || _cbtBase === '/api/admin/cbt/assessments' || _cbtBase.startsWith('/api/admin/fees/paystack')) {
+    await new Promise(r => setTimeout(r, 250));
+    return _demoCbtPaystack(_cbtBase, opts);
+  }
 
   // POST requests in demo mode — just succeed silently
   if (opts.method && opts.method !== 'GET') {
@@ -2061,12 +2194,14 @@ const switchSection = function(name, btn) {
     if (name === 'documents') loadDocuments();
     if (name === 'appraisal') loadAppraisal();
     if (name === 'usage') loadUsage();
-    if (name === 'chats') loadChats();
+    stopAllChatPolling();
+    if (name === 'chats') { loadChats(); startChatPolling(); }
     if (name === 'broadcast') loadBroadcast();
     if (name === 'fees') loadFees();
+    if (name === 'cbt' && typeof cbt !== 'undefined') cbt.init();
     if (name === 'classsummary') loadClassOptions();
     if (name === 'events') loadEvents();
-    if (name === 'teacherchats') loadTeacherChats();
+    if (name === 'teacherchats') { loadTeacherChats(); startTeacherChatPolling(); }
     if (name === 'notifications') loadNotifications();
     if (name === 'termcal') { loadTermCalendar(); loadExamSchedule(); }
     if (name === 'performance') loadPerformanceRankings();
@@ -3153,69 +3288,55 @@ async function importFromText() {
   btn.textContent = '➕ Import Students';
   btn.disabled = false;
 }
-async function loadChats() {
+async function loadChats(silent) {
   try {
-    const msgs = await api('/api/admin/chats');
-    allMessages = msgs;
-    renderChatList(msgs);
-    // Show escalation badge
-    const escalated = msgs.filter(m => m.assistant_reply && (
-      m.assistant_reply.includes('pass your question') ||
-      m.assistant_reply.includes('contact the school') ||
-      m.assistant_reply.includes('reach out directly')
-    ));
+    const threads = await api('/api/admin/chats');
+    allMessages = threads || [];
+    renderChatList(allMessages);
+    const attention = allMessages.filter(t => t.needs_attention);
     const badge = document.getElementById('escalation-badge');
-    if (escalated.length) {
-      const uniquePhones = [...new Set(escalated.map(m => m.from_number))];
-      badge.style.display = 'inline-block';
-      badge.textContent = uniquePhones.length + ' need attention';
-    } else {
-      badge.style.display = 'none';
+    if (badge) {
+      if (attention.length) { badge.style.display = 'inline-block'; badge.textContent = attention.length + ' need attention'; }
+      else badge.style.display = 'none';
     }
-  } catch(e) { console.error('loadChats error', e); }
+  } catch(e) { if (!silent) console.error('loadChats error', e); }
 }
 
-function renderChatList(msgs) {
-  // Group by phone number
-  const grouped = {};
-  for (const m of msgs) {
-    const phone = m.from_number;
-    if (!grouped[phone]) grouped[phone] = [];
-    grouped[phone].push(m);
-  }
-  const phones = Object.keys(grouped).sort((a,b) => {
-    const la = grouped[a][grouped[a].length-1].created_at;
-    const lb = grouped[b][grouped[b].length-1].created_at;
-    return new Date(lb) - new Date(la);
-  });
+function renderChatList(threads) {
   const list = document.getElementById('chat-list');
-  if (!phones.length) { list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No conversations yet</div>'; return; }
-  list.innerHTML = phones.map(phone => {
-    const convMsgs = grouped[phone];
-    const last = convMsgs[convMsgs.length-1];
-    const needsAttention = convMsgs.some(m => m.assistant_reply && (
-      m.assistant_reply.includes('pass your question') ||
-      m.assistant_reply.includes('contact the school') ||
-      m.assistant_reply.includes('reach out directly')
-    ));
-    const isActive = phone === activePhone;
-    const time = last.created_at ? new Date(last.created_at).toLocaleTimeString('en-NG', {hour:'2-digit',minute:'2-digit'}) : '';
-    return '<div onclick="openChat(\'' + phone + '\')" style="padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--border);background:' + (isActive ? 'var(--green-pale)' : 'white') + ';transition:background .15s;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
-      '<span style="font-size:13px;font-weight:600;color:var(--text);">' + ((last.parent_name && last.parent_name !== phone) ? last.parent_name + (last.student_name ? ' · ' + last.student_name : '') : phone) + '</span>' +
-      '<span style="font-size:11px;color:var(--text-muted);">' + time + '</span>' +
-      '</div>' +
+  if (!list) return;
+  if (!threads || !threads.length) { list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No conversations yet</div>'; return; }
+  list.innerHTML = threads.map(t => {
+    const isActive = t.phone === activePhone;
+    const time = t.last_time ? new Date(t.last_time).toLocaleTimeString('en-NG', {hour:'2-digit',minute:'2-digit'}) : '';
+    const displayName = t.parent_name || t.name || t.phone;
+    const sub = t.student_name ? (t.student_name + (t.class_name ? ' \u00b7 ' + t.class_name : '')) : '';
+    return '<div onclick="openChat(\'' + t.phone + '\')" style="padding:14px 16px;cursor:pointer;border-bottom:1px solid #f5f5f5;background:' + (isActive ? 'var(--green-pale)' : (t.needs_attention ? '#fff7f7' : 'white')) + ';transition:background .15s;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-      '<span style="font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;">' + (last.user_message||'').slice(0,50) + '</span>' +
-      (needsAttention ? '<span style="background:#fef2f2;color:#ef4444;font-size:10px;font-weight:600;padding:2px 6px;border-radius:8px;flex-shrink:0;">⚠️ Review</span>' : '') +
+        '<div style="font-weight:600;font-size:13px;">' + displayName + (t.needs_attention ? ' <span style="color:#ef4444;font-size:11px;">\u26a0\ufe0f</span>' : '') + '</div>' +
+        '<div style="font-size:10px;color:var(--text-muted);">' + time + '</div>' +
       '</div>' +
-      '</div>';
+      (sub ? '<div style="font-size:11px;color:var(--text-muted);">' + sub + '</div>' : '') +
+      '<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">' + (t.last_message || '\u2014') + '</div>' +
+    '</div>';
   }).join('');
 }
-  
-async function openChat(phone) {
+
+function filterChats() {
+  const q = (document.getElementById('chat-search')?.value || '').toLowerCase();
+  renderChatList(allMessages.filter(t =>
+    (t.phone || '').includes(q) ||
+    (t.parent_name || '').toLowerCase().includes(q) ||
+    (t.student_name || '').toLowerCase().includes(q) ||
+    (t.last_message || '').toLowerCase().includes(q)
+  ));
+}
+
+let _lastThreadHash = '';
+async function openChat(phone, silent) {
+  const isNewThread = activePhone !== phone;
   activePhone = phone;
-  renderChatList(allMessages); // highlight active in list
+  if (!silent) renderChatList(allMessages); // highlight active in list
 
   const header = document.getElementById('chat-window-header');
   const body = document.getElementById('chat-window-body');
@@ -3223,11 +3344,17 @@ async function openChat(phone) {
 
   const overview = allMessages.find(m => m.phone === phone);
   const displayName = (overview && (overview.parent_name || overview.student_name)) || phone;
-  header.innerHTML = '<div class="dash-card-title">💬 ' + displayName + '</div>';
-  body.innerHTML = '<div class="loading" style="padding:20px;">Loading messages...</div>';
+  if (!silent || isNewThread) {
+    header.innerHTML = '<div class="dash-card-title">💬 ' + displayName + ' <span style="font-size:10px;color:#10b981;font-weight:600;margin-left:8px;">\u25cf LIVE</span></div>';
+  }
+  if (!silent) body.innerHTML = '<div class="loading" style="padding:20px;">Loading messages...</div>';
 
   try {
     const msgs = await api('/api/admin/chats/' + encodeURIComponent(phone) + '/messages');
+    const hash = phone + ':' + (msgs ? msgs.length : 0) + ':' + (msgs && msgs.length ? msgs[msgs.length-1].created_at : '');
+    if (silent && hash === _lastThreadHash) return; // nothing new — leave DOM alone
+    _lastThreadHash = hash;
+    const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 120;
 
     if (!msgs || !msgs.length) {
       body.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px;">No messages yet in this conversation</div>';
@@ -3278,7 +3405,7 @@ async function openChat(phone) {
       return html;
     }).join('');
 
-    body.scrollTop = body.scrollHeight;
+    if (!silent || nearBottom) body.scrollTop = body.scrollHeight;
     if (replyBar) replyBar.style.display = 'flex';
 
   } catch(e) {
@@ -3673,6 +3800,7 @@ function renderFeesTable(rows) {
       + '<td style="display:flex;gap:6px;">'
         + '<button class="action-btn" onclick="openPaymentModal(\'' + r.id + '\',\'' + sn + '\')">Record</button>'
         + '<button class="action-btn" style="background:#eef4ff;color:#1a73e8;" onclick="viewPaymentHistory(\'' + r.id + '\',\'' + sn + '\')">History</button>'
+        + '<button class="action-btn" style="background:#e7f9ef;color:#0a8f4e;" onclick="generatePayLink(\'' + r.id + '\',\'' + sn + '\')">💳 Pay Link</button>'
       + '</td>'
       + '</tr>';
   });
@@ -4481,26 +4609,45 @@ function renderTeacherChatList(chats) {
   }).join('');
 }
 
-async function openTeacherChat(phone, name) {
+let _lastTeacherHash = '';
+async function openTeacherChat(phone, name, silent) {
   activeTeacherPhone = phone;
-  renderTeacherChatList(allTeacherChats);
+  if (name) activeTeacherName = name;
+  if (!silent) renderTeacherChatList(allTeacherChats);
   const msgEl = document.getElementById('teacher-chat-messages');
-  msgEl.innerHTML = '<div class="loading" style="padding:20px;">Loading messages...</div>';
+  const tReplyBar = document.getElementById('teacher-reply-bar');
+  if (!silent) msgEl.innerHTML = '<div class="loading" style="padding:20px;">Loading messages...</div>';
   try {
     const messages = await api('/api/admin/chats/' + encodeURIComponent(phone) + '/messages');
+    const hash = phone + ':' + (messages ? messages.length : 0) + ':' + (messages && messages.length ? messages[messages.length-1].created_at : '');
+    if (silent && hash === _lastTeacherHash) return;
+    _lastTeacherHash = hash;
+    const nearBottom = msgEl.scrollHeight - msgEl.scrollTop - msgEl.clientHeight < 120;
+    if (tReplyBar) tReplyBar.style.display = 'flex';
     if (!messages.length) {
       msgEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px;">No messages yet</div>';
       return;
     }
     msgEl.innerHTML = messages.map(m => {
-      const isOutgoing = m.direction === 'outbound' || m.role === 'assistant';
-      return '<div style="display:flex;justify-content:' + (isOutgoing ? 'flex-end' : 'flex-start') + ';margin-bottom:8px;">' +
-        '<div style="max-width:75%;background:' + (isOutgoing ? 'var(--green-bubble)' : 'white') + ';border-radius:' + (isOutgoing ? '12px 0 12px 12px' : '0 12px 12px 12px') + ';padding:8px 12px;font-size:13px;box-shadow:0 1px 2px rgba(0,0,0,.08);">' +
-          '<div style="line-height:1.5;">' + (m.body||m.message||'') + '</div>' +
-          '<div style="font-size:10px;color:var(--text-muted);text-align:right;margin-top:3px;">' + (m.created_at ? new Date(m.created_at).toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit'}) : '') + '</div>' +
+      const time = m.created_at ? new Date(m.created_at).toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit'}) : '';
+      const bubble = (text, out, label, bg) =>
+        '<div style="display:flex;justify-content:' + (out ? 'flex-end' : 'flex-start') + ';margin-bottom:8px;">' +
+          '<div style="max-width:75%;">' +
+          '<div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;' + (out ? 'text-align:right;' : '') + '">' + label + ' \u00b7 ' + time + '</div>' +
+          '<div style="background:' + bg + ';border-radius:' + (out ? '12px 0 12px 12px' : '0 12px 12px 12px') + ';padding:8px 12px;font-size:13px;line-height:1.5;box-shadow:0 1px 2px rgba(0,0,0,.08);">' + text + '</div>' +
         '</div></div>';
+      // Demo shape: {body, direction}
+      if (m.direction) return bubble(m.body || m.message || '', m.direction === 'outbound', m.direction === 'outbound' ? '\ud83e\udd16 EduPing AI' : '\ud83d\udc69\u200d\ud83c\udfeb Teacher', m.direction === 'outbound' ? 'var(--green-bubble)' : 'white');
+      // Real shape: {user_message, assistant_reply, channel}
+      const isAdmin = m.channel === 'admin' || m.channel === 'admin-reply';
+      let h = '';
+      if (m.user_message && m.user_message !== '[Admin reply]' && m.user_message !== '[Admin direct message]')
+        h += bubble(m.user_message, false, '\ud83d\udc69\u200d\ud83c\udfeb Teacher', 'white');
+      if (m.assistant_reply && m.assistant_reply !== '[AI suppressed — admin active in thread]')
+        h += bubble(m.assistant_reply, true, isAdmin ? '\ud83d\udc64 Admin' : '\ud83e\udd16 EduPing AI', isAdmin ? '#dbeafe' : 'var(--green-bubble)');
+      return h;
     }).join('');
-    msgEl.scrollTop = msgEl.scrollHeight;
+    if (!silent || nearBottom) msgEl.scrollTop = msgEl.scrollHeight;
   } catch(e) {
     msgEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:40px;">Could not load messages</div>';
   }
@@ -5654,6 +5801,1072 @@ async function triggerDemoSickbay() {
 }
 
 
+</script>
+
+<script>
+// apiFetch shim — the CBT module expects apiFetch(method, path, body)
+async function apiFetch(method, path, body) {
+  return api(path, { method, ...(body ? { body: JSON.stringify(body) } : {}) });
+}
+
+// Paystack: generate a payment link for a student and offer to WhatsApp it
+async function generatePayLink(studentId, studentName) {
+  try {
+    showToast('Creating Paystack link for ' + studentName + '\u2026');
+    const r = await api('/api/admin/fees/paystack-link', { method: 'POST', body: JSON.stringify({ student_id: studentId }) });
+    if (!r.ok) throw new Error(r.error || 'Failed');
+    try { await navigator.clipboard.writeText(r.url); } catch(e) {}
+    const send = confirm('Payment link created for ' + studentName + ' (\u20a6' + Number(r.amount).toLocaleString() + ') and copied to clipboard.\n\nSend it to the parent on WhatsApp now?');
+    if (send) {
+      await api('/api/admin/fees/paystack-send', { method: 'POST', body: JSON.stringify({ reference: r.reference }) });
+      showToast('\ud83d\udcf1 Payment link sent to parent on WhatsApp');
+    } else {
+      showToast('\ud83d\udd17 Link copied \u2014 paste it anywhere');
+    }
+  } catch (err) {
+    let msg = err.message || String(err);
+    try { const j = JSON.parse(msg); msg = j.error || msg; } catch(e) {}
+    alert('Could not create payment link: ' + msg);
+  }
+}
+</script>
+<style>
+#section-cbt .btn { padding: 9px 16px; font-size: 14px; font-weight: 600; border-radius: 8px; border: 1px solid #e5e7eb; background: #fff; cursor: pointer; }
+#section-cbt .btn-primary { background: #1a56db; border-color: #1a56db; color: #fff; }
+#section-cbt .btn-primary:hover { background: #1648b8; }
+#section-cbt .spinner { width: 22px; height: 22px; border: 3px solid #e5e7eb; border-top-color: #1a56db; border-radius: 50%; animation: cbtspin .8s linear infinite; }
+@keyframes cbtspin { to { transform: rotate(360deg); } }
+</style>
+<section id="section-cbt" class="dash-section">
+
+  <!-- ── TOP BAR ─────────────────────────────────────────────── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+    <div>
+      <h2 style="font-size:22px;font-weight:800;margin:0">📝 CBT Exams</h2>
+      <p style="color:var(--muted);font-size:14px;margin:4px 0 0">Create, manage and monitor computer-based tests</p>
+    </div>
+    <button class="btn btn-primary" onclick="cbt.openCreateModal()">+ New Assessment</button>
+  </div>
+
+  <!-- ── ASSESSMENT LIST ─────────────────────────────────────── -->
+  <div id="cbt-list-wrap">
+    <div id="cbt-list-loading" style="text-align:center;padding:40px;color:var(--muted)">
+      <div class="spinner" style="margin:0 auto 12px"></div>Loading assessments…
+    </div>
+    <div id="cbt-list"></div>
+  </div>
+
+  <!-- ── DETAIL PANEL (questions / results / monitor) ─────────── -->
+  <div id="cbt-detail" style="display:none">
+    <button class="btn btn-outline btn-sm" onclick="cbt.backToList()" style="margin-bottom:16px">← Back to list</button>
+    <div id="cbt-detail-header"></div>
+
+    <!-- Tabs -->
+    <div class="tab-bar" style="margin-bottom:16px">
+      <button class="tab-btn active" data-tab="questions" onclick="cbt.switchTab('questions',this)">Questions</button>
+      <button class="tab-btn" data-tab="monitor" onclick="cbt.switchTab('monitor',this)">Live Monitor</button>
+      <button class="tab-btn" data-tab="results" onclick="cbt.switchTab('results',this)">Results</button>
+    </div>
+
+    <!-- Questions tab -->
+    <div id="cbt-tab-questions">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+        <button class="btn btn-primary btn-sm" onclick="cbt.openAddQuestion()">+ Add Question</button>
+        <button class="btn btn-outline btn-sm" onclick="cbt.openBulkImport()">⬆ Bulk Import</button>
+      </div>
+      <div id="cbt-questions-list"></div>
+    </div>
+
+    <!-- Monitor tab -->
+    <div id="cbt-tab-monitor" style="display:none">
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" onclick="cbt.loadMonitor()">🔄 Refresh</button>
+        <span id="monitor-summary" style="font-size:14px;color:var(--muted);align-self:center"></span>
+      </div>
+      <div id="cbt-monitor-table"></div>
+    </div>
+
+    <!-- Results tab -->
+    <div id="cbt-tab-results" style="display:none">
+      <div id="cbt-results-stats" style="margin-bottom:16px"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+        <button class="btn btn-outline btn-sm" onclick="cbt.releaseResults()">📣 Release to Parents</button>
+        <button class="btn btn-outline btn-sm" onclick="cbt.exportCSV()">⬇ Export CSV</button>
+      </div>
+      <div id="cbt-results-table"></div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     MODALS
+════════════════════════════════════════════════════════════ -->
+
+<!-- Create / Edit Assessment Modal -->
+<div id="modal-cbt-assessment" class="modal-overlay" style="display:none" onclick="if(event.target===this)cbt.closeModal('modal-cbt-assessment')">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <h3 id="modal-assessment-title">New Assessment</h3>
+      <button class="modal-close" onclick="cbt.closeModal('modal-cbt-assessment')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="assessment-edit-id">
+      <div class="form-row">
+        <label>Title *</label>
+        <input type="text" id="f-title" placeholder="e.g. Maths CA Test 1" class="form-input">
+      </div>
+      <div class="form-row two-col">
+        <div>
+          <label>Subject *</label>
+          <input type="text" id="f-subject" placeholder="Mathematics" class="form-input">
+        </div>
+        <div>
+          <label>Class *</label>
+          <input type="text" id="f-class" placeholder="JSS 2A" class="form-input">
+        </div>
+      </div>
+      <div class="form-row two-col">
+        <div>
+          <label>Time Limit (mins)</label>
+          <input type="number" id="f-time" value="30" min="5" max="180" class="form-input">
+        </div>
+        <div>
+          <label>Term</label>
+          <input type="text" id="f-term" placeholder="First Term" class="form-input">
+        </div>
+      </div>
+      <div class="form-row two-col">
+        <div>
+          <label>Start Time (optional)</label>
+          <input type="datetime-local" id="f-start" class="form-input">
+        </div>
+        <div>
+          <label>End Time (optional)</label>
+          <input type="datetime-local" id="f-end" class="form-input">
+        </div>
+      </div>
+      <div class="form-row">
+        <label style="font-weight:600;margin-bottom:8px;display:block">Options</label>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <label class="toggle-row"><input type="checkbox" id="f-shuffle-q"><span>Shuffle question order per student</span></label>
+          <label class="toggle-row"><input type="checkbox" id="f-shuffle-o"><span>Shuffle option order per student</span></label>
+          <label class="toggle-row"><input type="checkbox" id="f-show-score" checked><span>Show score immediately after submission</span></label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="cbt.closeModal('modal-cbt-assessment')">Cancel</button>
+      <button class="btn btn-primary" onclick="cbt.saveAssessment()">Save Assessment</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add / Edit Question Modal -->
+<div id="modal-cbt-question" class="modal-overlay" style="display:none" onclick="if(event.target===this)cbt.closeModal('modal-cbt-question')">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <h3 id="modal-question-title">Add Question</h3>
+      <button class="modal-close" onclick="cbt.closeModal('modal-cbt-question')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="question-edit-id">
+      <div class="form-row">
+        <label>Question Text *</label>
+        <textarea id="f-qtext" rows="3" class="form-input" placeholder="Type your question here…"></textarea>
+      </div>
+      <div class="form-row two-col">
+        <div>
+          <label>Type</label>
+          <select id="f-qtype" class="form-input" onchange="cbt.onQuestionTypeChange()">
+            <option value="mcq">Multiple Choice (MCQ)</option>
+            <option value="truefalse">True / False</option>
+            <option value="fillin">Fill in the Blank</option>
+          </select>
+        </div>
+        <div>
+          <label>Marks</label>
+          <input type="number" id="f-marks" value="1" min="1" class="form-input">
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Image URL (optional)</label>
+        <input type="url" id="f-img" placeholder="https://…" class="form-input">
+      </div>
+      <div id="options-builder">
+        <label style="font-weight:600;margin-bottom:8px;display:block">Answer Options <span style="color:var(--muted);font-weight:400;font-size:13px">— tick the correct answer</span></label>
+        <div id="options-list" style="display:flex;flex-direction:column;gap:8px"></div>
+        <button class="btn btn-outline btn-sm" id="btn-add-option" onclick="cbt.addOption()" style="margin-top:10px">+ Add Option</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="cbt.closeModal('modal-cbt-question')">Cancel</button>
+      <button class="btn btn-primary" onclick="cbt.saveQuestion()">Save Question</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk Import Modal -->
+<div id="modal-cbt-bulk" class="modal-overlay" style="display:none" onclick="if(event.target===this)cbt.closeModal('modal-cbt-bulk')">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <h3>Bulk Import Questions</h3>
+      <button class="modal-close" onclick="cbt.closeModal('modal-cbt-bulk')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="info-box" style="margin-bottom:14px">
+        <strong>Format (one question per line, pipe-separated):</strong>
+        <pre style="margin-top:6px;font-size:12px;white-space:pre-wrap">Q: What is 2+2? | A: 3 | B: 4 | C: 5 | D: 6 | ANS: B
+Q: The sky is blue | A: True | B: False | ANS: A</pre>
+      </div>
+      <div class="form-row">
+        <label>Paste Questions</label>
+        <textarea id="f-bulk-text" rows="10" class="form-input" placeholder="Paste questions here…" style="font-family:monospace;font-size:13px"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="cbt.closeModal('modal-cbt-bulk')">Cancel</button>
+      <button class="btn btn-primary" onclick="cbt.submitBulkImport()">Import Questions</button>
+    </div>
+  </div>
+</div>
+
+<!-- Publish / Links Modal -->
+<div id="modal-cbt-links" class="modal-overlay" style="display:none" onclick="if(event.target===this)cbt.closeModal('modal-cbt-links')">
+  <div class="modal" style="max-width:580px">
+    <div class="modal-header">
+      <h3>Assessment Published ✅</h3>
+      <button class="modal-close" onclick="cbt.closeModal('modal-cbt-links')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom:12px;color:var(--muted);font-size:14px">Session links generated for each student. Share or send via WhatsApp.</p>
+      <div id="links-list" style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="cbt.closeModal('modal-cbt-links')">Close</button>
+      <button class="btn btn-primary" onclick="cbt.notifyAll()">📲 Send All via WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     CBT STYLES (append to your <style> block or separate file)
+════════════════════════════════════════════════════════════ -->
+<style>
+/* Assessment cards */
+.cbt-card {
+  background: var(--card, #fff);
+  border-radius: 12px;
+  border: 1px solid var(--border, #e5e7eb);
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.cbt-card-body { flex: 1; min-width: 0; }
+.cbt-card-title { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+.cbt-card-meta { font-size: 13px; color: var(--muted, #6b7280); margin-bottom: 10px; }
+.cbt-card-meta span { margin-right: 12px; }
+.cbt-card-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* Status badges */
+.badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; }
+.badge-draft  { background: #f3f4f6; color: #6b7280; }
+.badge-active { background: #d1fae5; color: #065f46; }
+.badge-closed { background: #fee2e2; color: #991b1b; }
+
+/* Buttons */
+.btn-sm { padding: 7px 14px; font-size: 13px; border-radius: 8px; }
+.btn-danger { background: #ef4444; color: #fff; border: none; cursor: pointer; border-radius: 8px; }
+.btn-danger:hover { background: #dc2626; }
+
+/* Tabs */
+.tab-bar { display: flex; border-bottom: 2px solid var(--border, #e5e7eb); gap: 0; }
+.tab-btn {
+  padding: 10px 18px; border: none; background: none; font-size: 14px;
+  font-weight: 600; color: var(--muted, #6b7280); cursor: pointer;
+  border-bottom: 3px solid transparent; margin-bottom: -2px;
+  transition: color .15s, border-color .15s;
+}
+.tab-btn.active { color: var(--brand, #1a56db); border-bottom-color: var(--brand, #1a56db); }
+
+/* Tables */
+.cbt-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cbt-table th { text-align: left; padding: 10px 12px; font-weight: 700; color: var(--muted, #6b7280); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; border-bottom: 2px solid var(--border, #e5e7eb); }
+.cbt-table td { padding: 11px 12px; border-bottom: 1px solid var(--border, #e5e7eb); }
+.cbt-table tr:last-child td { border-bottom: none; }
+.cbt-table tr:hover td { background: var(--bg, #f9fafb); }
+.table-wrap { background: var(--card, #fff); border: 1px solid var(--border, #e5e7eb); border-radius: 12px; overflow: hidden; overflow-x: auto; }
+
+/* Status dots */
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.dot-pending  { background: #9ca3af; }
+.dot-progress { background: #f59e0b; }
+.dot-submitted{ background: #10b981; }
+
+/* Question list */
+.question-item {
+  background: var(--card, #fff); border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px; padding: 14px 16px; margin-bottom: 10px;
+}
+.question-item-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.question-item-text { font-size: 15px; font-weight: 600; flex: 1; }
+.question-item-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.question-item-opts { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
+.opt-chip {
+  padding: 4px 12px; border-radius: 20px; font-size: 13px;
+  background: var(--bg, #f3f4f6); border: 1px solid var(--border, #e5e7eb);
+}
+.opt-chip.correct { background: #d1fae5; border-color: #10b981; font-weight: 700; color: #065f46; }
+
+/* Option builder row */
+.option-row { display: flex; align-items: center; gap: 8px; }
+.option-row input[type=text] { flex: 1; }
+.option-row input[type=radio] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--brand, #1a56db); }
+.option-row .btn-danger { padding: 6px 10px; font-size: 13px; }
+
+/* Form helpers */
+.form-row { margin-bottom: 14px; }
+.form-row label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px; color: var(--text, #111827); }
+.form-row.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-input {
+  width: 100%; padding: 10px 12px; border: 1.5px solid var(--border, #e5e7eb);
+  border-radius: 8px; font-size: 14px; outline: none;
+  transition: border-color .15s;
+}
+.form-input:focus { border-color: var(--brand, #1a56db); }
+.toggle-row { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; }
+.toggle-row input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--brand, #1a56db); cursor: pointer; }
+
+/* Info box */
+.info-box {
+  background: #eff6ff; border: 1px solid #bfdbfe;
+  border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #1e40af;
+}
+
+/* Stats cards */
+.stats-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.stat-card {
+  background: var(--card, #fff); border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px; padding: 14px 16px; min-width: 100px; flex: 1;
+}
+.stat-label { font-size: 11px; font-weight: 700; color: var(--muted, #6b7280); text-transform: uppercase; letter-spacing: .4px; }
+.stat-value { font-size: 26px; font-weight: 800; margin-top: 2px; }
+
+/* Link card */
+.link-card {
+  background: var(--bg, #f9fafb); border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px; padding: 10px 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.link-name { font-size: 14px; font-weight: 600; }
+.link-url { font-size: 12px; color: var(--muted, #6b7280); word-break: break-all; }
+.link-copy { flex-shrink: 0; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  z-index: 1000; display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.modal {
+  background: #fff; border-radius: 16px; width: 100%;
+  max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.2);
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 20px; border-bottom: 1px solid var(--border, #e5e7eb);
+  position: sticky; top: 0; background: #fff; z-index: 1;
+}
+.modal-header h3 { font-size: 18px; font-weight: 800; margin: 0; }
+.modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--muted, #6b7280); padding: 4px 8px; }
+.modal-body { padding: 20px; }
+.modal-footer { padding: 16px 20px; border-top: 1px solid var(--border, #e5e7eb); display: flex; gap: 10px; justify-content: flex-end; }
+
+/* Detail header */
+#cbt-detail-header {
+  background: var(--card, #fff); border-radius: 12px;
+  border: 1px solid var(--border, #e5e7eb); padding: 16px 18px; margin-bottom: 16px;
+}
+#cbt-detail-header h3 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+#detail-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+
+@media (max-width: 480px) {
+  .form-row.two-col { grid-template-columns: 1fr; }
+  .stats-row { flex-direction: column; }
+}
+</style>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     CBT JAVASCRIPT — add before </body>
+════════════════════════════════════════════════════════════ -->
+<script>
+const cbt = (() => {
+  'use strict';
+
+  let assessments = [];
+  let current = null;   // current assessment object
+  let publishedLinks = [];
+
+  // ── API wrapper ────────────────────────────────────────────────
+  // Uses existing apiFetch from index.html:
+  // apiFetch(method, path, body) — adds school headers automatically
+  function api(method, path, body) {
+    return apiFetch(method, path, body);
+  }
+
+  // ── INIT ───────────────────────────────────────────────────────
+  async function init() {
+    await loadList();
+  }
+
+  // ── LIST ───────────────────────────────────────────────────────
+  async function loadList() {
+    document.getElementById('cbt-list-loading').style.display = 'block';
+    document.getElementById('cbt-list').innerHTML = '';
+    try {
+      assessments = await api('GET', '/api/admin/cbt/assessments');
+      renderList();
+    } catch (e) {
+      document.getElementById('cbt-list').innerHTML = `<p style="color:red;padding:20px">${e.message}</p>`;
+    } finally {
+      document.getElementById('cbt-list-loading').style.display = 'none';
+    }
+  }
+
+  function renderList() {
+    const wrap = document.getElementById('cbt-list');
+    if (!assessments.length) {
+      wrap.innerHTML = `<div style="text-align:center;padding:48px;color:var(--muted)">
+        <div style="font-size:40px;margin-bottom:12px">📝</div>
+        <div style="font-weight:700;margin-bottom:6px">No assessments yet</div>
+        <div style="font-size:14px">Create your first CBT exam to get started.</div>
+      </div>`;
+      return;
+    }
+    wrap.innerHTML = assessments.map(a => `
+      <div class="cbt-card">
+        <div class="cbt-card-body">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div class="cbt-card-title">${esc(a.title)}</div>
+            <span class="badge badge-${a.status}">${statusLabel(a.status)}</span>
+          </div>
+          <div class="cbt-card-meta">
+            <span>📚 ${esc(a.subject)}</span>
+            <span>🏫 ${esc(a.class_name)}</span>
+            <span>⏱ ${a.time_limit_minutes} min</span>
+            <span>❓ ${a.question_count || 0} questions</span>
+            <span>👥 ${a.submitted_count || 0}/${a.session_count || 0} submitted</span>
+          </div>
+          <div class="cbt-card-actions">
+            <button class="btn btn-outline btn-sm" onclick="cbt.openDetail(${a.id})">Manage</button>
+            ${a.status === 'draft' ? `<button class="btn btn-primary btn-sm" onclick="cbt.publish(${a.id})">Publish →</button>` : ''}
+            ${a.status === 'active' ? `<button class="btn btn-outline btn-sm" onclick="cbt.notifyAssessment(${a.id})">📲 Notify Parents</button>` : ''}
+            <button class="btn btn-outline btn-sm" onclick="cbt.editAssessment(${a.id})">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="cbt.deleteAssessment(${a.id})">Delete</button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function statusLabel(s) {
+    return { draft: '📋 Draft', active: '🟢 Active', closed: '🔴 Closed' }[s] || s;
+  }
+
+  // ── CREATE / EDIT ASSESSMENT ───────────────────────────────────
+  function openCreateModal() {
+    document.getElementById('modal-assessment-title').textContent = 'New Assessment';
+    document.getElementById('assessment-edit-id').value = '';
+    document.getElementById('f-title').value = '';
+    document.getElementById('f-subject').value = '';
+    document.getElementById('f-class').value = '';
+    document.getElementById('f-time').value = 30;
+    document.getElementById('f-term').value = '';
+    document.getElementById('f-start').value = '';
+    document.getElementById('f-end').value = '';
+    document.getElementById('f-shuffle-q').checked = false;
+    document.getElementById('f-shuffle-o').checked = false;
+    document.getElementById('f-show-score').checked = true;
+    openModal('modal-cbt-assessment');
+  }
+
+  function editAssessment(id) {
+    const a = assessments.find(x => x.id === id);
+    if (!a) return;
+    document.getElementById('modal-assessment-title').textContent = 'Edit Assessment';
+    document.getElementById('assessment-edit-id').value = a.id;
+    document.getElementById('f-title').value = a.title;
+    document.getElementById('f-subject').value = a.subject;
+    document.getElementById('f-class').value = a.class_name;
+    document.getElementById('f-time').value = a.time_limit_minutes;
+    document.getElementById('f-term').value = a.term || '';
+    document.getElementById('f-start').value = a.start_time ? a.start_time.slice(0,16) : '';
+    document.getElementById('f-end').value = a.end_time ? a.end_time.slice(0,16) : '';
+    document.getElementById('f-shuffle-q').checked = a.shuffle_questions;
+    document.getElementById('f-shuffle-o').checked = a.shuffle_options;
+    document.getElementById('f-show-score').checked = a.show_score_immediately;
+    openModal('modal-cbt-assessment');
+  }
+
+  async function saveAssessment() {
+    const id = document.getElementById('assessment-edit-id').value;
+    const body = {
+      title: document.getElementById('f-title').value.trim(),
+      subject: document.getElementById('f-subject').value.trim(),
+      class_name: document.getElementById('f-class').value.trim(),
+      time_limit_minutes: Number(document.getElementById('f-time').value),
+      term: document.getElementById('f-term').value.trim(),
+      start_time: document.getElementById('f-start').value || null,
+      end_time: document.getElementById('f-end').value || null,
+      shuffle_questions: document.getElementById('f-shuffle-q').checked,
+      shuffle_options: document.getElementById('f-shuffle-o').checked,
+      show_score_immediately: document.getElementById('f-show-score').checked,
+    };
+    if (!body.title || !body.subject || !body.class_name) {
+      return alert('Title, subject and class are required.');
+    }
+    try {
+      if (id) {
+        await api('PATCH', `/api/admin/cbt/assessments/${id}`, body);
+      } else {
+        await api('POST', '/api/admin/cbt/assessments', body);
+      }
+      closeModal('modal-cbt-assessment');
+      await loadList();
+    } catch (e) { alert(e.message); }
+  }
+
+  async function deleteAssessment(id) {
+    const a = assessments.find(x => x.id === id);
+    if (!confirm(`Delete "${a?.title}"? This cannot be undone.`)) return;
+    try {
+      await api('DELETE', `/api/admin/cbt/assessments/${id}`);
+      await loadList();
+    } catch (e) { alert(e.message); }
+  }
+
+  // ── PUBLISH ────────────────────────────────────────────────────
+  async function publish(id) {
+    const a = assessments.find(x => x.id === id);
+    if (!confirm(`Publish "${a?.title}"? This will generate session links for all students in ${a?.class_name}.`)) return;
+    try {
+      const data = await api('POST', `/api/admin/cbt/assessments/${id}/publish`);
+      publishedLinks = data.sessions;
+      currentAssessmentId = id;
+      renderLinks(data.sessions);
+      openModal('modal-cbt-links');
+      await loadList();
+    } catch (e) { alert(e.message); }
+  }
+
+  let currentAssessmentId = null;
+
+  function renderLinks(sessions) {
+    const baseUrl = window.location.origin;
+    document.getElementById('links-list').innerHTML = sessions.map(s => `
+      <div class="link-card">
+        <div>
+          <div class="link-name">${esc(s.student_name)}</div>
+          <div class="link-url">${baseUrl}/cbt/${s.token}</div>
+        </div>
+        <button class="btn btn-outline btn-sm link-copy" onclick="copyLink('${baseUrl}/cbt/${s.token}', this)">Copy</button>
+      </div>
+    `).join('');
+  }
+
+  async function notifyAll() {
+    if (!currentAssessmentId) return;
+    if (!confirm('Send WhatsApp links to all parents in this class?')) return;
+    try {
+      const data = await api('POST', `/api/admin/cbt/assessments/${currentAssessmentId}/notify`);
+      alert(`✅ Sent to ${data.sent} of ${data.total} parents.`);
+      closeModal('modal-cbt-links');
+    } catch (e) { alert(e.message); }
+  }
+
+  async function notifyAssessment(id) {
+    currentAssessmentId = id;
+    if (!confirm('Send WhatsApp links to all parents in this class?')) return;
+    try {
+      const data = await api('POST', `/api/admin/cbt/assessments/${id}/notify`);
+      alert(`✅ Sent to ${data.sent} of ${data.total} parents.`);
+    } catch (e) { alert(e.message); }
+  }
+
+  // ── DETAIL PANEL ───────────────────────────────────────────────
+  async function openDetail(id) {
+    try {
+      current = await api('GET', `/api/admin/cbt/assessments/${id}`);
+      currentAssessmentId = id;
+      document.getElementById('cbt-list-wrap').style.display = 'none';
+      document.getElementById('cbt-detail').style.display = 'block';
+      renderDetailHeader();
+      renderQuestionsList();
+      switchTab('questions', document.querySelector('.tab-btn[data-tab="questions"]'));
+    } catch (e) { alert(e.message); }
+  }
+
+  function backToList() {
+    document.getElementById('cbt-detail').style.display = 'none';
+    document.getElementById('cbt-list-wrap').style.display = 'block';
+    loadList();
+  }
+
+  function renderDetailHeader() {
+    const a = current;
+    document.getElementById('cbt-detail-header').innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div style="flex:1">
+          <h3>${esc(a.title)} <span class="badge badge-${a.status}" style="margin-left:8px">${statusLabel(a.status)}</span></h3>
+          <div style="font-size:14px;color:var(--muted);margin-top:4px">
+            ${esc(a.subject)} · ${esc(a.class_name)} · ${a.time_limit_minutes} min · ${a.questions?.length || 0} questions
+          </div>
+        </div>
+      </div>
+      <div id="detail-actions">
+        ${a.status === 'draft' ? `<button class="btn btn-primary btn-sm" onclick="cbt.publish(${a.id})">Publish →</button>` : ''}
+        ${a.status === 'active' ? `<button class="btn btn-outline btn-sm" onclick="cbt.notifyAssessment(${a.id})">📲 Notify Parents</button>` : ''}
+        <button class="btn btn-outline btn-sm" onclick="cbt.editAssessment(${a.id})">✏️ Edit</button>
+        <select class="form-input btn-sm" style="width:auto" onchange="cbt.changeStatus(${a.id}, this.value)">
+          <option value="">Change Status…</option>
+          <option value="draft">→ Draft</option>
+          <option value="active">→ Active</option>
+          <option value="closed">→ Closed</option>
+        </select>
+      </div>
+    `;
+  }
+
+  async function changeStatus(id, status) {
+    if (!status) return;
+    try {
+      await api('PATCH', `/api/admin/cbt/assessments/${id}`, { status });
+      current.status = status;
+      renderDetailHeader();
+    } catch (e) { alert(e.message); }
+  }
+
+  function switchTab(tab, btn) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    ['questions','monitor','results'].forEach(t => {
+      document.getElementById(`cbt-tab-${t}`).style.display = t === tab ? '' : 'none';
+    });
+    if (tab === 'monitor') loadMonitor();
+    if (tab === 'results') loadResults();
+  }
+
+  // ── QUESTIONS ──────────────────────────────────────────────────
+  function renderQuestionsList() {
+    const wrap = document.getElementById('cbt-questions-list');
+    const qs = current.questions || [];
+    if (!qs.length) {
+      wrap.innerHTML = `<div style="text-align:center;padding:32px;color:var(--muted)">
+        No questions yet. Add your first question or use Bulk Import.
+      </div>`;
+      return;
+    }
+    const letters = ['A','B','C','D','E','F'];
+    wrap.innerHTML = qs.map((q, i) => `
+      <div class="question-item">
+        <div class="question-item-header">
+          <div class="question-item-text">${i+1}. ${esc(q.question_text)}</div>
+          <div class="question-item-actions">
+            <button class="btn btn-outline btn-sm" onclick="cbt.openEditQuestion(${q.id})">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="cbt.deleteQuestion(${q.id})">✕</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">${q.question_type.toUpperCase()} · ${q.marks} mark${q.marks!==1?'s':''}</div>
+        <div class="question-item-opts">
+          ${(q.options||[]).map((o,oi) => `
+            <span class="opt-chip ${o.is_correct?'correct':''}">
+              ${letters[oi]}. ${esc(o.option_text)}${o.is_correct?' ✓':''}
+            </span>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function openAddQuestion() {
+    document.getElementById('modal-question-title').textContent = 'Add Question';
+    document.getElementById('question-edit-id').value = '';
+    document.getElementById('f-qtext').value = '';
+    document.getElementById('f-qtype').value = 'mcq';
+    document.getElementById('f-marks').value = 1;
+    document.getElementById('f-img').value = '';
+    buildDefaultOptions('mcq');
+    openModal('modal-cbt-question');
+  }
+
+  function openEditQuestion(qid) {
+    const q = (current.questions || []).find(x => x.id === qid);
+    if (!q) return;
+    document.getElementById('modal-question-title').textContent = 'Edit Question';
+    document.getElementById('question-edit-id').value = q.id;
+    document.getElementById('f-qtext').value = q.question_text;
+    document.getElementById('f-qtype').value = q.question_type;
+    document.getElementById('f-marks').value = q.marks;
+    document.getElementById('f-img').value = q.image_url || '';
+    renderOptionRows(q.options || [], q.question_type);
+    openModal('modal-cbt-question');
+  }
+
+  function onQuestionTypeChange() {
+    const type = document.getElementById('f-qtype').value;
+    buildDefaultOptions(type);
+  }
+
+  function buildDefaultOptions(type) {
+    if (type === 'truefalse') {
+      renderOptionRows([
+        { option_text: 'True', is_correct: true },
+        { option_text: 'False', is_correct: false }
+      ], type);
+    } else if (type === 'fillin') {
+      renderOptionRows([{ option_text: '', is_correct: true }], type);
+    } else {
+      renderOptionRows([
+        { option_text: '', is_correct: false },
+        { option_text: '', is_correct: false },
+        { option_text: '', is_correct: false },
+        { option_text: '', is_correct: false },
+      ], type);
+    }
+  }
+
+  function renderOptionRows(opts, type) {
+    const container = document.getElementById('options-list');
+    const addBtn = document.getElementById('btn-add-option');
+    const isTF = type === 'truefalse';
+    const isFill = type === 'fillin';
+    addBtn.style.display = (isTF || isFill) ? 'none' : '';
+
+    container.innerHTML = opts.map((o, i) => `
+      <div class="option-row" data-idx="${i}">
+        <input type="radio" name="correct-opt" value="${i}" ${o.is_correct ? 'checked' : ''}
+          title="Mark as correct" ${isTF || isFill ? 'style="display:none"' : ''}>
+        <input type="text" class="form-input" placeholder="${isFill ? 'Correct answer' : `Option ${String.fromCharCode(65+i)}`}"
+          value="${esc(o.option_text)}" ${isTF ? 'readonly style="background:#f9fafb"' : ''}>
+        ${(!isTF && !isFill) ? `<button class="btn btn-danger" onclick="this.closest('.option-row').remove()" title="Remove">✕</button>` : ''}
+      </div>
+    `).join('');
+  }
+
+  function addOption() {
+    const container = document.getElementById('options-list');
+    const idx = container.children.length;
+    if (idx >= 6) return alert('Maximum 6 options allowed.');
+    const row = document.createElement('div');
+    row.className = 'option-row';
+    row.dataset.idx = idx;
+    row.innerHTML = `
+      <input type="radio" name="correct-opt" value="${idx}" title="Mark as correct">
+      <input type="text" class="form-input" placeholder="Option ${String.fromCharCode(65+idx)}">
+      <button class="btn btn-danger" onclick="this.closest('.option-row').remove()" title="Remove">✕</button>
+    `;
+    container.appendChild(row);
+  }
+
+  function collectOptions() {
+    const type = document.getElementById('f-qtype').value;
+    const rows = document.querySelectorAll('#options-list .option-row');
+    const checkedRadio = document.querySelector('#options-list input[type=radio]:checked');
+    const checkedIdx = checkedRadio ? Number(checkedRadio.value) : 0;
+    const opts = [];
+    rows.forEach((row, i) => {
+      const text = row.querySelector('input[type=text]').value.trim();
+      if (!text && type !== 'truefalse') return;
+      opts.push({
+        option_text: text,
+        is_correct: type === 'fillin' ? true : (i === checkedIdx)
+      });
+    });
+    return opts;
+  }
+
+  async function saveQuestion() {
+    const qid = document.getElementById('question-edit-id').value;
+    const opts = collectOptions();
+    if (!opts.length) return alert('Add at least one option.');
+    const hasCorrect = opts.some(o => o.is_correct);
+    if (!hasCorrect) return alert('Mark at least one correct answer.');
+
+    const body = {
+      question_text: document.getElementById('f-qtext').value.trim(),
+      question_type: document.getElementById('f-qtype').value,
+      marks: Number(document.getElementById('f-marks').value),
+      image_url: document.getElementById('f-img').value.trim() || null,
+      options: opts
+    };
+    if (!body.question_text) return alert('Question text is required.');
+
+    try {
+      if (qid) {
+        await api('PATCH', `/api/admin/cbt/questions/${qid}`, body);
+      } else {
+        body.order_index = (current.questions || []).length;
+        await api('POST', `/api/admin/cbt/assessments/${current.id}/questions`, body);
+      }
+      closeModal('modal-cbt-question');
+      current = await api('GET', `/api/admin/cbt/assessments/${current.id}`);
+      renderQuestionsList();
+      renderDetailHeader();
+    } catch (e) { alert(e.message); }
+  }
+
+  async function deleteQuestion(qid) {
+    if (!confirm('Delete this question?')) return;
+    try {
+      await api('DELETE', `/api/admin/cbt/questions/${qid}`);
+      current = await api('GET', `/api/admin/cbt/assessments/${current.id}`);
+      renderQuestionsList();
+      renderDetailHeader();
+    } catch (e) { alert(e.message); }
+  }
+
+  // ── BULK IMPORT ────────────────────────────────────────────────
+  function openBulkImport() {
+    document.getElementById('f-bulk-text').value = '';
+    openModal('modal-cbt-bulk');
+  }
+
+  async function submitBulkImport() {
+    const text = document.getElementById('f-bulk-text').value.trim();
+    if (!text) return alert('Paste some questions first.');
+    try {
+      const data = await api('POST', '/api/admin/cbt/bulk-import-questions', {
+        assessment_id: current.id,
+        questions: text,
+        text_format: true
+      });
+      alert(`✅ Imported ${data.imported} question${data.imported !== 1 ? 's' : ''}.`);
+      closeModal('modal-cbt-bulk');
+      current = await api('GET', `/api/admin/cbt/assessments/${current.id}`);
+      renderQuestionsList();
+      renderDetailHeader();
+    } catch (e) { alert(e.message); }
+  }
+
+  // ── MONITOR ────────────────────────────────────────────────────
+  async function loadMonitor() {
+    document.getElementById('cbt-monitor-table').innerHTML = '<p style="color:var(--muted);padding:16px">Loading…</p>';
+    try {
+      const rows = await api('GET', `/api/admin/cbt/assessments/${current.id}/monitor`);
+      const pending   = rows.filter(r => r.status === 'pending').length;
+      const progress  = rows.filter(r => r.status === 'in_progress').length;
+      const submitted = rows.filter(r => r.status === 'submitted').length;
+      document.getElementById('monitor-summary').textContent =
+        `${pending} not opened · ${progress} in progress · ${submitted} submitted`;
+
+      if (!rows.length) {
+        document.getElementById('cbt-monitor-table').innerHTML = '<p style="color:var(--muted);padding:16px">No sessions found. Publish the assessment first.</p>';
+        return;
+      }
+      document.getElementById('cbt-monitor-table').innerHTML = `
+        <div class="table-wrap">
+          <table class="cbt-table">
+            <thead><tr>
+              <th>Student</th>
+              <th>Status</th>
+              <th>Started</th>
+              <th>Submitted</th>
+              <th>Score</th>
+            </tr></thead>
+            <tbody>
+              ${rows.map(r => `
+                <tr>
+                  <td style="font-weight:600">${esc(r.student_name)}</td>
+                  <td>
+                    <span class="dot dot-${r.status === 'in_progress' ? 'progress' : r.status}"></span>
+                    ${r.status === 'pending' ? 'Not opened' : r.status === 'in_progress' ? 'In progress' : 'Submitted'}
+                  </td>
+                  <td>${r.started_at ? fmtTime(r.started_at) : '—'}</td>
+                  <td>${r.submitted_at ? fmtTime(r.submitted_at) : '—'}</td>
+                  <td>${r.status === 'submitted' ? `${r.score}/${r.total_marks} (${r.percentage}%)` : '—'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    } catch (e) {
+      document.getElementById('cbt-monitor-table').innerHTML = `<p style="color:red;padding:16px">${e.message}</p>`;
+    }
+  }
+
+  // ── RESULTS ────────────────────────────────────────────────────
+  async function loadResults() {
+    document.getElementById('cbt-results-table').innerHTML = '<p style="color:var(--muted);padding:16px">Loading…</p>';
+    try {
+      const data = await api('GET', `/api/admin/cbt/assessments/${current.id}/results`);
+      const { results, stats } = data;
+
+      document.getElementById('cbt-results-stats').innerHTML = `
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-label">Submitted</div><div class="stat-value">${stats.submitted}</div></div>
+          <div class="stat-card"><div class="stat-label">Average</div><div class="stat-value">${stats.average ?? '—'}%</div></div>
+          <div class="stat-card"><div class="stat-label">Highest</div><div class="stat-value">${stats.highest ?? '—'}%</div></div>
+          <div class="stat-card"><div class="stat-label">Lowest</div><div class="stat-value">${stats.lowest ?? '—'}%</div></div>
+        </div>`;
+
+      if (!results.length) {
+        document.getElementById('cbt-results-table').innerHTML = '<p style="color:var(--muted);padding:16px">No results yet.</p>';
+        return;
+      }
+
+      document.getElementById('cbt-results-table').innerHTML = `
+        <div class="table-wrap">
+          <table class="cbt-table">
+            <thead><tr>
+              <th>#</th><th>Student</th><th>Score</th><th>%</th><th>Grade</th><th>Time Taken</th><th>Status</th>
+            </tr></thead>
+            <tbody>
+              ${results.map((r, i) => `
+                <tr>
+                  <td style="color:var(--muted)">${i+1}</td>
+                  <td style="font-weight:600">${esc(r.student_name)}</td>
+                  <td>${r.score != null ? `${r.score}/${r.total_marks}` : '—'}</td>
+                  <td>${r.percentage != null ? `${Math.round(r.percentage)}%` : '—'}</td>
+                  <td><span class="badge ${gradeBadge(r.grade)}">${r.grade || '—'}</span></td>
+                  <td>${r.time_taken_seconds ? fmtDuration(r.time_taken_seconds) : '—'}</td>
+                  <td>
+                    <span class="dot dot-${r.status === 'in_progress' ? 'progress' : r.status}"></span>
+                    ${r.status === 'submitted' ? 'Submitted' : r.status === 'in_progress' ? 'In progress' : 'Not started'}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    } catch (e) {
+      document.getElementById('cbt-results-table').innerHTML = `<p style="color:red;padding:16px">${e.message}</p>`;
+    }
+  }
+
+  async function releaseResults() {
+    if (!confirm('Send WhatsApp score messages to all parents who submitted?')) return;
+    try {
+      const data = await api('POST', `/api/admin/cbt/assessments/${current.id}/release`);
+      alert(`✅ Results sent to ${data.sent} of ${data.total} parents.`);
+    } catch (e) { alert(e.message); }
+  }
+
+  function exportCSV() {
+    api('GET', `/api/admin/cbt/assessments/${current.id}/results`).then(data => {
+      const rows = [['Student', 'Score', 'Total', 'Percentage', 'Grade', 'Time Taken (s)', 'Status']];
+      data.results.forEach(r => {
+        rows.push([r.student_name, r.score ?? '', r.total_marks ?? '', r.percentage ?? '', r.grade ?? '', r.time_taken_seconds ?? '', r.status]);
+      });
+      const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${current.title.replace(/\s+/g,'_')}_results.csv`;
+      a.click();
+    }).catch(e => alert(e.message));
+  }
+
+  // ── HELPERS ────────────────────────────────────────────────────
+  function esc(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function fmtTime(iso) {
+    return new Date(iso).toLocaleTimeString('en-NG', { hour:'2-digit', minute:'2-digit' });
+  }
+
+  function fmtDuration(secs) {
+    const m = Math.floor(secs / 60), s = secs % 60;
+    return `${m}m ${s}s`;
+  }
+
+  function gradeBadge(g) {
+    return { A: 'badge-active', B: 'badge-blue', C: 'badge-draft', D: 'badge-draft', F: 'badge-closed' }[g] || 'badge-draft';
+  }
+
+  function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+  function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+  function copyLink(url, btn) {
+    navigator.clipboard.writeText(url).then(() => {
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy', 2000);
+    });
+  }
+  window.copyLink = copyLink;   // expose for inline onclick
+
+  // ── PUBLIC API ─────────────────────────────────────────────────
+  return {
+    init, loadList,
+    openCreateModal, editAssessment, saveAssessment, deleteAssessment,
+    publish, notifyAll, notifyAssessment,
+    openDetail, backToList, switchTab, changeStatus,
+    openAddQuestion, openEditQuestion, onQuestionTypeChange, addOption, saveQuestion, deleteQuestion,
+    openBulkImport, submitBulkImport,
+    loadMonitor, loadResults, releaseResults, exportCSV,
+    openModal, closeModal
+  };
+})();
+
+// Auto-init when CBT section is shown (hook into your existing nav)
+// Call cbt.init() when the CBT section becomes active.
+// Example: document.querySelector('[data-section="cbt"]').addEventListener('click', cbt.init)
+</script>
+
+
+<script>
+// ══ REALTIME CHAT POLLING — admin sees parent & teacher chats live ══
+let _chatPollTimer = null, _teacherPollTimer = null;
+let activeTeacherName = '';
+
+function startChatPolling() {
+  stopAllChatPolling();
+  _chatPollTimer = setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      await loadChats(true);
+      if (activePhone) await openChat(activePhone, true);
+    } catch(e) {}
+  }, 4000);
+}
+function startTeacherChatPolling() {
+  stopAllChatPolling();
+  _teacherPollTimer = setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      await loadTeacherChats();
+      if (activeTeacherPhone) await openTeacherChat(activeTeacherPhone, activeTeacherName, true);
+    } catch(e) {}
+  }, 4000);
+}
+function stopAllChatPolling() {
+  if (_chatPollTimer) { clearInterval(_chatPollTimer); _chatPollTimer = null; }
+  if (_teacherPollTimer) { clearInterval(_teacherPollTimer); _teacherPollTimer = null; }
+}
+
+// ══ Teacher take-over: send a WhatsApp message directly (AI pauses for 30 min) ══
+async function sendTeacherReply() {
+  const input = document.getElementById('teacher-reply-input');
+  const msg = (input.value || '').trim();
+  if (!msg || !activeTeacherPhone) return;
+  input.disabled = true;
+  try {
+    await api('/api/admin/send-message', { method: 'POST', body: JSON.stringify({ to: activeTeacherPhone, message: msg }) });
+    input.value = '';
+    showToast('\u2705 Sent \u2014 AI paused on this thread for 30 min');
+    await openTeacherChat(activeTeacherPhone, activeTeacherName, true);
+  } catch(e) {
+    alert('Failed to send: ' + (e.message || 'unknown error'));
+  }
+  input.disabled = false;
+  input.focus();
+}
 </script>
 </body>
 </html>

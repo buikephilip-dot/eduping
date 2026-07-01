@@ -302,6 +302,34 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
     </div>
 
     <div class="card">
+      <div class="card-title">💳 How Parents Pay</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.6;">
+        EduPing will share these details with parents on WhatsApp whenever they ask how to pay school fees.
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Bank Name</label>
+          <input class="form-input" id="s-bank-name" placeholder="GTBank">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Account Number</label>
+          <input class="form-input" id="s-account-number" placeholder="0123456789" inputmode="numeric" maxlength="10">
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Account Name</label>
+          <input class="form-input" id="s-account-name" placeholder="Winrose Schools Ltd">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Paystack Payment Link (optional)</label>
+          <input class="form-input" id="s-paystack-link" placeholder="https://paystack.com/pay/winrose-fees">
+          <div class="form-hint">Create a free Payment Page on paystack.com and paste the link here — parents can pay by card or transfer</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
       <div class="card-title">📸 School Gate / Landmark</div>
       <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.6;">
         Teachers will take a photo at this location every morning to sign in. Describe what the landmark looks like so EduPing can verify it.
@@ -840,6 +868,10 @@ function collectData() {
     fees: document.getElementById('s-fees').value.trim(),
     fee_deadline: document.getElementById('s-fee-deadline').value.trim(),
     fee_instructions: document.getElementById('s-fee-instructions').value.trim(),
+    bank_name: document.getElementById('s-bank-name').value.trim(),
+    bank_account_number: document.getElementById('s-account-number').value.trim(),
+    bank_account_name: document.getElementById('s-account-name').value.trim(),
+    paystack_payment_link: document.getElementById('s-paystack-link').value.trim(),
     landmark_description: document.getElementById('s-landmark').value.trim(),
     landmark_image: landmarkBase64,
     grading: {
