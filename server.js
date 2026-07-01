@@ -52,7 +52,7 @@ try {
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 app.use(morgan('combined'));
-app.use(express.json({ limit: '15mb' }));
+app.use(express.json({ limit: '15mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 300 });
@@ -768,6 +768,19 @@ function parentPrompt(ctx, first) {
     ? ctx.notes.map(n => n.note).join('; ')
     : 'No behaviour notes';
 
+  // ── Payment details from onboarding (bank + Paystack) ──
+  const cfg = (typeof school.config === 'string' ? (() => { try { return JSON.parse(school.config); } catch(e) { return {}; } })() : (school.config || {}));
+  const payParts = [];
+  if (cfg.paystack_payment_link) payParts.push(`Pay online securely via Paystack: ${cfg.paystack_payment_link}`);
+  if (cfg.bank_account_number) payParts.push(`Bank transfer: ${cfg.bank_name || 'Bank'} — Account ${cfg.bank_account_number} (${cfg.bank_account_name || school.name})`);
+  if (cfg.fee_instructions) payParts.push(cfg.fee_instructions);
+  const paymentInfo = payParts.length ? payParts.join('. ') : 'Payment details not yet on file — ask the parent to contact the school bursar';
+
+  // Siblings (multi-child parents)
+  const siblingNote = (ctx.siblings && ctx.siblings.length)
+    ? `\nThis parent also has other children at the school: ${ctx.siblings.join(', ')}. You are currently answering about ${student.name}. If the parent asks about another child by name, tell them to mention that child's name and you will switch to them.`
+    : '';
+
   return `You are a warm, caring school assistant for ${school.name}${school.city ? ', ' + school.city : ''}, powered by EduPing.
 
 Your personality:
@@ -786,14 +799,16 @@ ${student.name} is in ${student.class_name || 'their class'}. Parent/guardian na
 Attendance: ${attendanceSummary}.
 Academic performance: ${scoreSummary}${scoreTrend ? ' — ' + scoreTrend : ''}.
 Fees: ${feeSummary}.
+How parents can pay fees: ${paymentInfo}.
 Recent homework: ${homeworkSummary}.
 Health: ${sickbaySummary}.
 Behaviour: ${behaviourSummary}.
 Upcoming school events: ${eventSummary}.
-Current term: ${school.current_term || 'not specified'}.
+Current term: ${school.current_term || 'not specified'}.${siblingNote}
 
 Conversation rules:
 - This is a WhatsApp conversation — keep it flowing and human
+- If a parent asks how to pay fees, give them the exact payment details listed above (Paystack link and/or bank account) — never be vague about payment
 - If a parent asks a follow-up question, answer it directly without repeating information already given
 - If a parent seems worried, acknowledge their feeling before answering
 - If a parent seems happy or proud, share in that moment genuinely
@@ -836,9 +851,32 @@ async function handleIncomingWhatsApp(req, res) {
     [school.id, from, last9]
   );
   const staff = staffLookup;
-  if (staff.rowCount) reply = await processTeacher(school, staff.rows[0], body, mediaUrl, mediaType);
+  if (staff.rowCount) {
+    // Admin takeover: if admin replied recently, AI stays silent — just log the teacher's message
+    if (await isAiSuppressed(school.id, from)) {
+      await q(`INSERT INTO messages (school_id,from_number,channel,user_message,assistant_reply) VALUES ($1,$2,'teacher',$3,$4)`,
+        [school.id, from, body, '[AI suppressed — admin active in thread]']);
+      return res.type('text/xml').send(new twilio.twiml.MessagingResponse().toString());
+    }
+    reply = await processTeacher(school, staff.rows[0], body, mediaUrl, mediaType);
+    // Log teacher conversations so admins can monitor them in the dashboard
+    await q(`INSERT INTO messages (school_id,from_number,channel,user_message,assistant_reply) VALUES ($1,$2,'teacher',$3,$4)`,
+      [school.id, from, body, reply]).catch(e => console.warn('[teacher-log]', e.message));
+  }
   else {
-    const student = await q(`SELECT * FROM students WHERE school_id=$1 AND parent_phone=$2 LIMIT 1`, [school.id, from]);
+    // Match parent by exact phone OR last 9 digits (same fix as staff — handles +234 vs 0 formats)
+    const student = await q(
+      `SELECT * FROM students WHERE school_id=$1 AND (parent_phone=$2 OR right(regexp_replace(parent_phone,'[^0-9]','','g'),9)=$3) ORDER BY created_at ASC`,
+      [school.id, from, last9]
+    );
+    // Multi-child parents: if a child's name is mentioned in the message, answer about THAT child
+    let siblings = [];
+    if (student.rows.length > 1) {
+      const bodyLower = String(body || '').toLowerCase();
+      const named = student.rows.find(s => String(s.name).toLowerCase().split(/\s+/).some(p => p.length > 2 && bodyLower.includes(p)));
+      if (named) student.rows = [named, ...student.rows.filter(s => s.id !== named.id)];
+      siblings = student.rows.slice(1).map(s => `${s.name}${s.class_name ? ' (' + s.class_name + ')' : ''}`);
+    }
     if (student.rowCount) {
       const lower = body.toLowerCase().trim();
       const first = (await q(`SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1`, [school.id, from])).rowCount === 0;
@@ -877,6 +915,7 @@ How can I help you today? You can ask about attendance, results, fees, homework,
           reply = `✅ Great! We've noted that you're on board with ${pending.rows[0].student_name}'s study plan.\n\nReply *TUTOR* anytime if you'd like us to connect you with a private tutor.\n\n${school.name} 🏫`;
         } else {
           const ctx = await buildStudentContext(school, student.rows[0], from);
+          ctx.siblings = siblings;
           reply = await callAI(parentPrompt(ctx, first), body || 'Hello', null, ctx.history);
         }
       }
@@ -892,6 +931,7 @@ How can I help you today? You can ask about attendance, results, fees, homework,
           return res.type('text/xml').send(twiml.toString()); // empty response — no AI reply
         }
         const ctx = await buildStudentContext(school, student.rows[0], from);
+        ctx.siblings = siblings;
         reply = await callAI(parentPrompt(ctx, first), body || 'Hello', null, ctx.history);
       }
 
@@ -985,7 +1025,7 @@ async function processTeacher(school, staff, body, mediaUrl, mediaType) {
     let saved = 0;
     const failed = [];
 
-    const singleRx = /([A-Za-z][\w\s]{1,25?})\s+scored\s+(\d{1,3})(?:\/\d+)?(?:\s+in\s+([A-Za-z\s]+))?/i;
+    const singleRx = /([A-Za-z][\w\s]{0,25}?)\s+scored\s+(\d{1,3})(?:\s*\/\s*\d+)?(?:\s+in\s+([A-Za-z\s]+))?/i;
     const singleM = body.match(singleRx);
 
     const bulkRx = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(\d{1,3})(?:\s+([A-Za-z]+))?/g;
@@ -1181,6 +1221,8 @@ app.post('/api/onboarding', async (req, res) => {
       appraisal_weights: d.appraisal_weights,
       tone: d.tone, greeting: d.greeting, languages: d.languages,
       fee_instructions: d.fee_instructions,
+      bank_name: d.bank_name, bank_account_number: d.bank_account_number,
+      bank_account_name: d.bank_account_name, paystack_payment_link: d.paystack_payment_link,
       school_phone: d.school_phone, school_email: d.school_email,
       principal: d.principal, term_start: d.term_start,
       term_end: d.term_end, midterm_break: d.midterm_break
@@ -1635,6 +1677,8 @@ app.post('/api/admin/send-message', requireSchool, async (req, res) => {
     const fromNumber = school.twilio_number || process.env.TWILIO_DEFAULT_FROM || process.env.TWILIO_WHATSAPP_NUMBER;
     if (!fromNumber) return res.status(400).json({ error: 'No WhatsApp number configured for this school' });
     await twilioSend(normalisePhone(to), fromNumber, message);
+    // Admin has taken over — silence the AI on this thread for 30 minutes
+    await suppressAiForThread(school.id, normalisePhone(to), 30).catch(e => console.warn('[suppress]', e.message));
     await q(`INSERT INTO messages (school_id,from_number,channel,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)`,
       [school.id, normalisePhone(to), 'admin', '[Admin reply]', message]);
     res.json({ ok: true });
@@ -2726,6 +2770,7 @@ app.get('/api/admin/chats', requireSchool, async (req, res) => {
       SELECT DISTINCT ON (m.from_number)
         m.from_number as phone,
         m.user_message as last_message,
+        m.assistant_reply as last_reply,
         m.created_at as last_time,
         COALESCE(s.parent_name, m.from_number) as parent_name,
         s.name as student_name,
@@ -2733,9 +2778,16 @@ app.get('/api/admin/chats', requireSchool, async (req, res) => {
       FROM messages m
       LEFT JOIN students s ON s.school_id = m.school_id AND s.parent_phone = m.from_number
       WHERE m.school_id=$1
+        AND COALESCE(m.channel,'') != 'teacher'
+        AND m.from_number NOT IN (SELECT COALESCE(phone,'') FROM staff WHERE school_id=$1)
       ORDER BY m.from_number, m.created_at DESC
     `, [sid]);
-    json(res, rows.rows);
+    const escalationPhrases = ['pass your question', 'contact the school', 'reach out directly'];
+    const out = rows.rows.map(r => ({
+      ...r,
+      needs_attention: escalationPhrases.some(p => (r.last_reply || '').toLowerCase().includes(p))
+    })).sort((a, b) => new Date(b.last_time) - new Date(a.last_time));
+    json(res, out);
   } catch(err) { bad(res, err.message, 500); }
 });
 
@@ -2743,7 +2795,7 @@ app.get('/api/admin/chats', requireSchool, async (req, res) => {
 app.get('/api/admin/chats/:phone/messages', requireSchool, async (req, res) => {
   try {
     const phone = decodeURIComponent(req.params.phone).replace(/\D/g,'').slice(-10);
-    const rows = await q(`SELECT user_message, assistant_reply, created_at FROM messages
+    const rows = await q(`SELECT user_message, assistant_reply, channel, created_at FROM messages
       WHERE school_id=$1 AND from_number LIKE $2
       ORDER BY created_at ASC LIMIT 100`, [req.school.id, '%' + phone + '%']);
     json(res, rows.rows);
@@ -3136,6 +3188,8 @@ app.use((err, req, res, next) => { console.error(err); res.status(500).json({ er
 (async () => {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required. Add Railway PostgreSQL and expose DATABASE_URL.');
   await migrate();
+  await migrateCBT().catch(e => console.error('[migrateCBT]', e.message));
+  await migratePaystack().catch(e => console.error('[migratePaystack]', e.message));
   await seedIfEmpty();
   await initReporting({ app, requireSchool, q, callAI, twilioSend, cron });
   app.listen(PORT, () => {
@@ -3275,3 +3329,969 @@ app.patch('/api/admin/fees/:student_id', requireSchool, async (req, res) => {
     json(res, { ok: true });
   } catch(err) { bad(res, err.message, 500); }
 });
+
+// ═══════════════════════════════════════════════════════════════
+// CBT MODULE — Computer-Based Testing (ported from eduping v2)
+// ═══════════════════════════════════════════════════════════════
+const CBT_BASE_URL = process.env.BASE_URL || 'https://eduping.org';
+
+// ─── MIGRATION — call from migrate.js ─────────────────────────────────────────
+async function migrateCBT() {
+  await q(`
+    CREATE TABLE IF NOT EXISTS assessments (
+      id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id             UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      title                 TEXT NOT NULL,
+      subject               TEXT NOT NULL,
+      class_name            TEXT NOT NULL,
+      term                  TEXT NOT NULL,
+      time_limit_minutes    INTEGER NOT NULL DEFAULT 30,
+      shuffle_questions     BOOLEAN DEFAULT false,
+      shuffle_options       BOOLEAN DEFAULT false,
+      show_score_immediately BOOLEAN DEFAULT true,
+      status                TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','active','closed')),
+      start_time            TIMESTAMPTZ,
+      end_time              TIMESTAMPTZ,
+      created_by_staff      UUID REFERENCES staff(id) ON DELETE SET NULL,
+      created_at            TIMESTAMPTZ DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS questions (
+      id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      assessment_id  UUID NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
+      school_id      UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      question_text  TEXT NOT NULL,
+      question_type  TEXT NOT NULL DEFAULT 'mcq' CHECK (question_type IN ('mcq','truefalse','fillin')),
+      marks          INTEGER NOT NULL DEFAULT 1,
+      image_url      TEXT,
+      order_index    INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS options (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      question_id  UUID NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+      option_text  TEXT NOT NULL,
+      is_correct   BOOLEAN DEFAULT false,
+      order_index  INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS student_sessions (
+      id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      assessment_id          UUID NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
+      student_id             UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+      school_id              UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      access_token           UUID UNIQUE NOT NULL DEFAULT gen_random_uuid(),
+      started_at             TIMESTAMPTZ,
+      submitted_at           TIMESTAMPTZ,
+      time_remaining_seconds INTEGER,
+      score                  NUMERIC,
+      total_marks            NUMERIC,
+      percentage             NUMERIC,
+      answers_json           JSONB DEFAULT '{}'::jsonb,
+      status                 TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','in_progress','submitted'))
+    );
+
+    CREATE TABLE IF NOT EXISTS cbt_results (
+      id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      assessment_id     UUID NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
+      student_id        UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+      school_id         UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      score             NUMERIC,
+      total_marks       NUMERIC,
+      percentage        NUMERIC,
+      grade             TEXT,
+      time_taken_seconds INTEGER,
+      parent_notified   BOOLEAN DEFAULT false,
+      created_at        TIMESTAMPTZ DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_student_sessions_token      ON student_sessions(access_token);
+    CREATE INDEX IF NOT EXISTS idx_student_sessions_assessment ON student_sessions(assessment_id);
+    CREATE INDEX IF NOT EXISTS idx_assessments_school          ON assessments(school_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_questions_assessment        ON questions(assessment_id);
+    CREATE INDEX IF NOT EXISTS idx_cbt_results_assessment      ON cbt_results(assessment_id);
+  `);
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+
+function calcGrade(pct) {
+  if (pct >= 70) return 'A';
+  if (pct >= 60) return 'B';
+  if (pct >= 50) return 'C';
+  if (pct >= 45) return 'D';
+  return 'F';
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function ordinal(n) {
+  const s = ['th','st','nd','rd'], v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+// ─── AUTO-MARK ────────────────────────────────────────────────────────────────
+
+async function autoMark(answers, assessmentId) {
+  const { rows: questions } = await q(
+    `SELECT q.id, q.question_type, q.marks,
+       json_agg(json_build_object('id',o.id,'option_text',o.option_text,'is_correct',o.is_correct)
+                ORDER BY o.order_index) AS options
+     FROM questions q
+     LEFT JOIN options o ON o.question_id = q.id
+     WHERE q.assessment_id = $1
+     GROUP BY q.id`, [assessmentId]
+  );
+
+  let score = 0, totalMarks = 0;
+  const breakdown = {};
+
+  for (const q of questions) {
+    totalMarks += q.marks;
+    const given = answers[q.id];
+    let correct = false;
+
+    if (q.question_type === 'mcq' || q.question_type === 'truefalse') {
+      const correctOpt = q.options.find(o => o.is_correct);
+      correct = correctOpt && String(given) === String(correctOpt.id);
+    } else if (q.question_type === 'fillin') {
+      const correctOpt = q.options.find(o => o.is_correct);
+      correct = correctOpt &&
+        String(given || '').trim().toLowerCase() === correctOpt.option_text.trim().toLowerCase();
+    }
+
+    if (correct) score += q.marks;
+    breakdown[q.id] = { correct, given, marks: q.marks, earned: correct ? q.marks : 0 };
+  }
+
+  const percentage = totalMarks > 0 ? Math.round((score / totalMarks) * 100) : 0;
+  return { score, totalMarks, percentage, grade: calcGrade(percentage), breakdown };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ADMIN ROUTES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Create assessment
+app.post('/api/admin/cbt/assessments', requireSchool, async (req, res) => {
+  try {
+    const {
+      title, subject, class_name, term, time_limit_minutes,
+      shuffle_questions, shuffle_options, show_score_immediately,
+      start_time, end_time, created_by_staff
+    } = req.body;
+
+    if (!title || !subject || !class_name) return bad(res, 'title, subject and class_name required', 400);
+
+    const { rows: [a] } = await q(
+      `INSERT INTO assessments
+         (school_id, title, subject, class_name, term, time_limit_minutes,
+          shuffle_questions, shuffle_options, show_score_immediately,
+          start_time, end_time, created_by_staff)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [req.school.id, title, subject, class_name,
+       term || req.school.current_term,
+       time_limit_minutes || 30,
+       !!shuffle_questions, !!shuffle_options,
+       show_score_immediately !== false,
+       start_time || null, end_time || null,
+       created_by_staff || null]
+    );
+    json(res, a);
+  } catch (e) { console.error(e); bad(res, e.message); }
+});
+
+// List assessments
+app.get('/api/admin/cbt/assessments', requireSchool, async (req, res) => {
+  try {
+    const { rows } = await q(
+      `SELECT a.*,
+         COUNT(DISTINCT qu.id)::int AS question_count,
+         COUNT(DISTINCT ss.id)::int AS session_count,
+         COUNT(DISTINCT CASE WHEN ss.status='submitted' THEN ss.id END)::int AS submitted_count
+       FROM assessments a
+       LEFT JOIN questions qu ON qu.assessment_id = a.id
+       LEFT JOIN student_sessions ss ON ss.assessment_id = a.id
+       WHERE a.school_id = $1
+       GROUP BY a.id ORDER BY a.created_at DESC`,
+      [req.school.id]
+    );
+    json(res, rows);
+  } catch (e) { bad(res, e.message); }
+});
+
+// Get single assessment with questions + options
+app.get('/api/admin/cbt/assessments/:id', requireSchool, async (req, res) => {
+  try {
+    const { rows: [assessment] } = await q(
+      'SELECT * FROM assessments WHERE id=$1 AND school_id=$2',
+      [req.params.id, req.school.id]
+    );
+    if (!assessment) return bad(res, 'Not found', 404);
+
+    const { rows: questions } = await q(
+      'SELECT * FROM questions WHERE assessment_id=$1 ORDER BY order_index, id',
+      [req.params.id]
+    );
+    for (const question of questions) {
+      const { rows: opts } = await q(
+        'SELECT * FROM options WHERE question_id=$1 ORDER BY order_index, id',
+        [question.id]
+      );
+      question.options = opts;
+    }
+    assessment.questions = questions;
+    json(res, assessment);
+  } catch (e) { bad(res, e.message); }
+});
+
+// Update assessment
+app.patch('/api/admin/cbt/assessments/:id', requireSchool, async (req, res) => {
+  try {
+    const fields = [
+      'title','subject','class_name','term','time_limit_minutes',
+      'shuffle_questions','shuffle_options','show_score_immediately',
+      'status','start_time','end_time'
+    ];
+    const updates = [], vals = [];
+    let i = 1;
+    for (const f of fields) {
+      if (req.body[f] !== undefined) { updates.push(`${f}=$${i++}`); vals.push(req.body[f]); }
+    }
+    if (!updates.length) return bad(res, 'Nothing to update', 400);
+    vals.push(req.params.id, req.school.id);
+    const { rows: [a] } = await q(
+      `UPDATE assessments SET ${updates.join(',')} WHERE id=$${i++} AND school_id=$${i} RETURNING *`,
+      vals
+    );
+    if (!a) return bad(res, 'Not found', 404);
+    json(res, a);
+  } catch (e) { bad(res, e.message); }
+});
+
+// Delete assessment
+app.delete('/api/admin/cbt/assessments/:id', requireSchool, async (req, res) => {
+  try {
+    const { rowCount } = await q(
+      'DELETE FROM assessments WHERE id=$1 AND school_id=$2',
+      [req.params.id, req.school.id]
+    );
+    if (!rowCount) return bad(res, 'Not found', 404);
+    json(res, { deleted: true });
+  } catch (e) { bad(res, e.message); }
+});
+
+// Add question with options
+app.post('/api/admin/cbt/assessments/:id/questions', requireSchool, async (req, res) => {
+  try {
+    const { rows: [a] } = await q(
+      'SELECT id FROM assessments WHERE id=$1 AND school_id=$2',
+      [req.params.id, req.school.id]
+    );
+    if (!a) return bad(res, 'Assessment not found', 404);
+
+    const { question_text, question_type, marks, image_url, order_index, options } = req.body;
+    if (!question_text) return bad(res, 'question_text required', 400);
+
+    const { rows: [newQ] } = await q(
+      `INSERT INTO questions (assessment_id, school_id, question_text, question_type, marks, image_url, order_index)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.params.id, req.school.id, question_text,
+       question_type || 'mcq', marks || 1, image_url || null, order_index || 0]
+    );
+
+    newQ.options = [];
+    if (Array.isArray(options)) {
+      for (let idx = 0; idx < options.length; idx++) {
+        const o = options[idx];
+        const { rows: [opt] } = await q(
+          'INSERT INTO options (question_id, option_text, is_correct, order_index) VALUES ($1,$2,$3,$4) RETURNING *',
+          [newQ.id, o.option_text, !!o.is_correct, idx]
+        );
+        newQ.options.push(opt);
+      }
+    }
+    json(res, newQ);
+  } catch (e) { bad(res, e.message); }
+});
+
+// Edit question
+app.patch('/api/admin/cbt/questions/:id', requireSchool, async (req, res) => {
+  try {
+    const { rows: [existing] } = await q(
+      `SELECT qu.* FROM questions qu
+       JOIN assessments a ON a.id = qu.assessment_id
+       WHERE qu.id=$1 AND a.school_id=$2`,
+      [req.params.id, req.school.id]
+    );
+    if (!existing) return bad(res, 'Not found', 404);
+
+    const fields = ['question_text','question_type','marks','image_url','order_index'];
+    const updates = [], vals = [];
+    let i = 1;
+    for (const f of fields) {
+      if (req.body[f] !== undefined) { updates.push(`${f}=$${i++}`); vals.push(req.body[f]); }
+    }
+
+    let updated = existing;
+    if (updates.length) {
+      vals.push(req.params.id);
+      const { rows: [u] } = await q(
+        `UPDATE questions SET ${updates.join(',')} WHERE id=$${i} RETURNING *`, vals
+      );
+      updated = u;
+    }
+
+    if (Array.isArray(req.body.options)) {
+      await q('DELETE FROM options WHERE question_id=$1', [req.params.id]);
+      updated.options = [];
+      for (let idx = 0; idx < req.body.options.length; idx++) {
+        const o = req.body.options[idx];
+        const { rows: [opt] } = await q(
+          'INSERT INTO options (question_id, option_text, is_correct, order_index) VALUES ($1,$2,$3,$4) RETURNING *',
+          [req.params.id, o.option_text, !!o.is_correct, idx]
+        );
+        updated.options.push(opt);
+      }
+    }
+    json(res, updated);
+  } catch (e) { bad(res, e.message); }
+});
+
+// Delete question
+app.delete('/api/admin/cbt/questions/:id', requireSchool, async (req, res) => {
+  try {
+    const { rowCount } = await q(
+      `DELETE FROM questions
+       WHERE id=$1 AND assessment_id IN (
+         SELECT id FROM assessments WHERE school_id=$2
+       )`,
+      [req.params.id, req.school.id]
+    );
+    if (!rowCount) return bad(res, 'Not found', 404);
+    json(res, { deleted: true });
+  } catch (e) { bad(res, e.message); }
+});
+
+// Publish — generate per-student sessions
+app.post('/api/admin/cbt/assessments/:id/publish', requireSchool, async (req, res) => {
+  try {
+    const { rows: [assessment] } = await q(
+      'SELECT * FROM assessments WHERE id=$1 AND school_id=$2',
+      [req.params.id, req.school.id]
+    );
+    if (!assessment) return bad(res, 'Not found', 404);
+
+    const { rows: students } = await q(
+      'SELECT * FROM students WHERE school_id=$1 AND class_name=$2 AND status=$3',
+      [req.school.id, assessment.class_name, 'active']
+    );
+    if (!students.length) return bad(res, `No active students found in ${assessment.class_name}`, 400);
+
+    const sessions = [];
+    for (const s of students) {
+      const { rows: [existing] } = await q(
+        'SELECT access_token FROM student_sessions WHERE assessment_id=$1 AND student_id=$2',
+        [assessment.id, s.id]
+      );
+      const token = existing?.access_token || (await q(
+        `INSERT INTO student_sessions (assessment_id, student_id, school_id)
+         VALUES ($1,$2,$3) RETURNING access_token`,
+        [assessment.id, s.id, req.school.id]
+      )).rows[0].access_token;
+
+      sessions.push({
+        student_id: s.id,
+        student_name: s.name,
+        parent_phone: s.parent_phone,
+        token,
+        url: `${CBT_BASE_URL}/cbt/${token}`
+      });
+    }
+
+    await q("UPDATE assessments SET status='active' WHERE id=$1", [assessment.id]);
+    json(res, { published: true, sessions });
+  } catch (e) { bad(res, e.message); }
+});
+
+// Notify parents via WhatsApp
+app.post('/api/admin/cbt/assessments/:id/notify', requireSchool, async (req, res) => {
+  try {
+    const { rows: [assessment] } = await q(
+      'SELECT * FROM assessments WHERE id=$1 AND school_id=$2',
+      [req.params.id, req.school.id]
+    );
+    if (!assessment) return bad(res, 'Not found', 404);
+
+    const { rows: sessions } = await q(
+      `SELECT ss.access_token, s.name AS student_name, s.parent_phone, s.parent_name
+       FROM student_sessions ss JOIN students s ON s.id = ss.student_id
+       WHERE ss.assessment_id=$1`, [assessment.id]
+    );
+
+    const school = req.school;
+    const timingNote = assessment.start_time
+      ? `Opens: ${new Date(assessment.start_time).toLocaleString('en-NG', { weekday:'long', hour:'2-digit', minute:'2-digit' })}.`
+      : '';
+
+    let sent = 0;
+    for (const sess of sessions) {
+      if (!sess.parent_phone) continue;
+      const link = `${CBT_BASE_URL}/cbt/${sess.access_token}`;
+      const msg =
+        `📝 ${assessment.subject} ${assessment.title} — ${school.name}\n` +
+        `Dear ${sess.parent_name || 'Parent'}, ${sess.student_name} has a ${assessment.subject} test scheduled.\n` +
+        `Access their exam here: ${link}\n` +
+        `Time limit: ${assessment.time_limit_minutes} minutes. ${timingNote}\n` +
+        `${school.name} 🏫`;
+      try {
+        await twilioSend(sess.parent_phone, school.twilio_number, msg);
+        sent++;
+      } catch (e) { console.error('[cbt] notify error:', e.message); }
+    }
+    json(res, { sent, total: sessions.length });
+  } catch (e) { bad(res, e.message); }
+});
+
+// Results
+app.get('/api/admin/cbt/assessments/:id/results', requireSchool, async (req, res) => {
+  try {
+    const { rows: [assessment] } = await q(
+      'SELECT * FROM assessments WHERE id=$1 AND school_id=$2',
+      [req.params.id, req.school.id]
+    );
+    if (!assessment) return bad(res, 'Not found', 404);
+
+    const { rows } = await q(
+      `SELECT ss.id, ss.status, ss.score, ss.total_marks, ss.percentage,
+         ss.started_at, ss.submitted_at,
+         s.name AS student_name, s.class_name,
+         r.grade, r.time_taken_seconds, r.parent_notified,
+         RANK() OVER (ORDER BY ss.percentage DESC NULLS LAST)::int AS class_position,
+         COUNT(*) OVER ()::int AS total_students
+       FROM student_sessions ss
+       JOIN students s ON s.id = ss.student_id
+       LEFT JOIN cbt_results r ON r.assessment_id = ss.assessment_id AND r.student_id = ss.student_id
+       WHERE ss.assessment_id=$1 AND ss.school_id=$2
+       ORDER BY ss.percentage DESC NULLS LAST`,
+      [req.params.id, req.school.id]
+    );
+
+    const submitted = rows.filter(r => r.status === 'submitted');
+    const avg = submitted.length
+      ? Math.round(submitted.reduce((s, r) => s + (r.percentage || 0), 0) / submitted.length)
+      : null;
+
+    json(res, {
+      assessment,
+      results: rows,
+      stats: {
+        total: rows.length,
+        submitted: submitted.length,
+        average: avg,
+        highest: submitted[0]?.percentage ?? null,
+        lowest: submitted[submitted.length - 1]?.percentage ?? null
+      }
+    });
+  } catch (e) { bad(res, e.message); }
+});
+
+// Live monitor
+app.get('/api/admin/cbt/assessments/:id/monitor', requireSchool, async (req, res) => {
+  try {
+    const { rows } = await q(
+      `SELECT ss.id, ss.status, ss.started_at, ss.submitted_at,
+         ss.score, ss.total_marks, ss.percentage, ss.time_remaining_seconds,
+         s.name AS student_name
+       FROM student_sessions ss
+       JOIN students s ON s.id = ss.student_id
+       WHERE ss.assessment_id=$1 AND ss.school_id=$2
+       ORDER BY s.name`,
+      [req.params.id, req.school.id]
+    );
+    json(res, rows);
+  } catch (e) { bad(res, e.message); }
+});
+
+// Release results — WhatsApp scores to parents
+app.post('/api/admin/cbt/assessments/:id/release', requireSchool, async (req, res) => {
+  try {
+    const { rows: [assessment] } = await q(
+      'SELECT * FROM assessments WHERE id=$1 AND school_id=$2',
+      [req.params.id, req.school.id]
+    );
+    if (!assessment) return bad(res, 'Not found', 404);
+
+    const { rows } = await q(
+      `SELECT ss.score, ss.total_marks, ss.percentage, ss.student_id,
+         s.name AS student_name, s.parent_phone, s.parent_name,
+         r.grade,
+         RANK() OVER (ORDER BY ss.percentage DESC NULLS LAST)::int AS class_position,
+         COUNT(*) OVER ()::int AS total_students
+       FROM student_sessions ss
+       JOIN students s ON s.id = ss.student_id
+       LEFT JOIN cbt_results r ON r.assessment_id = ss.assessment_id AND r.student_id = ss.student_id
+       WHERE ss.assessment_id=$1 AND ss.school_id=$2 AND ss.status='submitted'`,
+      [req.params.id, req.school.id]
+    );
+
+    let sent = 0;
+    for (const r of rows) {
+      if (!r.parent_phone) continue;
+      const grade = r.grade || calcGrade(r.percentage);
+      const msg =
+        `📊 Results Released — ${req.school.name}\n` +
+        `Dear ${r.parent_name || 'Parent'}, ${r.student_name}'s ${assessment.subject} ${assessment.title} results are now available.\n` +
+        `Score: ${r.score}/${r.total_marks} | Grade: ${grade} | Class position: ${ordinal(r.class_position)} of ${r.total_students}\n` +
+        `${req.school.name} 🏫`;
+      try {
+        await twilioSend(r.parent_phone, req.school.twilio_number, msg);
+        await q(
+          'UPDATE cbt_results SET parent_notified=true WHERE assessment_id=$1 AND student_id=$2',
+          [assessment.id, r.student_id]
+        );
+        sent++;
+      } catch (e) { console.error('[cbt] release error:', e.message); }
+    }
+    json(res, { sent, total: rows.length });
+  } catch (e) { bad(res, e.message); }
+});
+
+// Bulk import questions
+app.post('/api/admin/cbt/bulk-import-questions', requireSchool, async (req, res) => {
+  try {
+    const { assessment_id, questions: raw, text_format } = req.body;
+
+    const { rows: [assessment] } = await q(
+      'SELECT id FROM assessments WHERE id=$1 AND school_id=$2',
+      [assessment_id, req.school.id]
+    );
+    if (!assessment) return bad(res, 'Assessment not found', 404);
+
+    let questions = [];
+
+    if (text_format && typeof raw === 'string') {
+      // Format: Q: text | A: opt | B: opt | ANS: B  (one per line)
+      const lines = raw.trim().split('\n').filter(l => l.trim());
+      for (const line of lines) {
+        const parts = line.split('|').map(p => p.trim());
+        const qObj = {}, opts = [];
+        let correctLetter = null;
+        for (const part of parts) {
+          if (/^Q:/i.test(part))   qObj.text = part.replace(/^Q:\s*/i, '');
+          else if (/^ANS:/i.test(part)) correctLetter = part.replace(/^ANS:\s*/i, '').toUpperCase().trim();
+          else {
+            const m = part.match(/^([A-F]):\s*(.*)/i);
+            if (m) opts.push({ letter: m[1].toUpperCase(), text: m[2] });
+          }
+        }
+        if (qObj.text && opts.length) {
+          questions.push({
+            question_text: qObj.text,
+            question_type: 'mcq',
+            marks: 1,
+            options: opts.map(o => ({ option_text: o.text, is_correct: o.letter === correctLetter }))
+          });
+        }
+      }
+    } else if (Array.isArray(raw)) {
+      questions = raw;
+    }
+
+    const created = [];
+    for (let idx = 0; idx < questions.length; idx++) {
+      const qd = questions[idx];
+      const { rows: [newQ] } = await q(
+        `INSERT INTO questions (assessment_id, school_id, question_text, question_type, marks, order_index)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [assessment_id, req.school.id, qd.question_text, qd.question_type || 'mcq', qd.marks || 1, idx]
+      );
+      newQ.options = [];
+      if (Array.isArray(qd.options)) {
+        for (let oi = 0; oi < qd.options.length; oi++) {
+          const o = qd.options[oi];
+          const { rows: [opt] } = await q(
+            'INSERT INTO options (question_id, option_text, is_correct, order_index) VALUES ($1,$2,$3,$4) RETURNING *',
+            [newQ.id, o.option_text, !!o.is_correct, oi]
+          );
+          newQ.options.push(opt);
+        }
+      }
+      created.push(newQ);
+    }
+    json(res, { imported: created.length, questions: created });
+  } catch (e) { bad(res, e.message); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STUDENT-FACING ROUTES  (no auth — token-based)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Verify token — return exam info
+app.get('/api/cbt/:token', async (req, res) => {
+  try {
+    const { rows: [session] } = await q(
+      `SELECT ss.*, ss.access_token,
+         s.name AS student_name, s.class_name AS student_class,
+         a.title, a.subject, a.time_limit_minutes,
+         a.status AS assessment_status, a.start_time, a.end_time,
+         a.show_score_immediately,
+         sc.name AS school_name
+       FROM student_sessions ss
+       JOIN students s  ON s.id  = ss.student_id
+       JOIN assessments a ON a.id = ss.assessment_id
+       JOIN schools sc    ON sc.id = ss.school_id
+       WHERE ss.access_token = $1`, [req.params.token]
+    );
+    if (!session) return bad(res, 'Invalid or expired exam link', 404);
+
+    if (session.status === 'submitted') {
+      return json(res, {
+        already_submitted: true,
+        student_name: session.student_name,
+        score: session.score,
+        total_marks: session.total_marks,
+        percentage: session.percentage,
+        show_score: session.show_score_immediately
+      });
+    }
+    if (session.assessment_status !== 'active') {
+      return bad(res, 'This exam is not currently active', 403);
+    }
+    json(res, {
+      status: session.status,
+      student_name: session.student_name,
+      student_class: session.student_class,
+      school_name: session.school_name,
+      title: session.title,
+      subject: session.subject,
+      time_limit_minutes: session.time_limit_minutes,
+      time_remaining_seconds: session.time_remaining_seconds || session.time_limit_minutes * 60,
+      start_time: session.start_time,
+      end_time: session.end_time
+    });
+  } catch (e) { bad(res, e.message); }
+});
+
+// Start session — return shuffled questions (no is_correct)
+app.post('/api/cbt/:token/start', async (req, res) => {
+  try {
+    const { rows: [session] } = await q(
+      `SELECT ss.*, a.shuffle_questions, a.shuffle_options, a.time_limit_minutes,
+         a.status AS assessment_status
+       FROM student_sessions ss
+       JOIN assessments a ON a.id = ss.assessment_id
+       WHERE ss.access_token = $1`, [req.params.token]
+    );
+    if (!session) return bad(res, 'Invalid token', 404);
+    if (session.status === 'submitted') return bad(res, 'Already submitted', 400);
+    if (session.assessment_status !== 'active') return bad(res, 'Exam not active', 403);
+
+    if (session.status === 'pending') {
+      await q(
+        `UPDATE student_sessions SET status='in_progress', started_at=now(),
+           time_remaining_seconds=$1 WHERE access_token=$2`,
+        [session.time_limit_minutes * 60, req.params.token]
+      );
+    }
+
+    const { rows: questions } = await q(
+      `SELECT id, question_text, question_type, marks, image_url, order_index
+       FROM questions WHERE assessment_id=$1`, [session.assessment_id]
+    );
+
+    let qs = session.shuffle_questions
+      ? shuffle(questions)
+      : questions.sort((a, b) => a.order_index - b.order_index);
+
+    for (const question of qs) {
+      const { rows: opts } = await q(
+        'SELECT id, option_text, order_index FROM options WHERE question_id=$1',
+        [question.id]
+      );
+      // Never send is_correct to the client
+      question.options = session.shuffle_options
+        ? shuffle(opts)
+        : opts.sort((a, b) => a.order_index - b.order_index);
+    }
+
+    json(res, {
+      questions: qs,
+      time_remaining_seconds: session.time_remaining_seconds || session.time_limit_minutes * 60,
+      answers: session.answers_json || {}
+    });
+  } catch (e) { bad(res, e.message); }
+});
+
+// Autosave
+app.post('/api/cbt/:token/save', async (req, res) => {
+  try {
+    const { answers, time_remaining_seconds } = req.body;
+    const { rows: [session] } = await q(
+      'SELECT id, status FROM student_sessions WHERE access_token=$1', [req.params.token]
+    );
+    if (!session) return bad(res, 'Invalid token', 404);
+    if (session.status === 'submitted') return bad(res, 'Already submitted', 400);
+
+    await q(
+      `UPDATE student_sessions SET answers_json=$1, time_remaining_seconds=$2
+       WHERE access_token=$3`,
+      [JSON.stringify(answers || {}), time_remaining_seconds || 0, req.params.token]
+    );
+    json(res, { saved: true });
+  } catch (e) { bad(res, e.message); }
+});
+
+// Submit
+app.post('/api/cbt/:token/submit', async (req, res) => {
+  try {
+    const { answers, time_remaining_seconds } = req.body;
+
+    const { rows: [session] } = await q(
+      `SELECT ss.*, a.show_score_immediately, a.time_limit_minutes, a.subject, a.title, a.term,
+         a.status AS assessment_status,
+         s.parent_phone, s.parent_name, s.name AS student_name,
+         sc.name AS school_name, sc.twilio_number
+       FROM student_sessions ss
+       JOIN assessments a ON a.id = ss.assessment_id
+       JOIN students s    ON s.id = ss.student_id
+       JOIN schools sc    ON sc.id = ss.school_id
+       WHERE ss.access_token = $1`, [req.params.token]
+    );
+    if (!session) return bad(res, 'Invalid token', 404);
+    if (session.status === 'submitted') return bad(res, 'Already submitted', 400);
+
+    const finalAnswers = answers || session.answers_json || {};
+    const timeTaken = session.started_at
+      ? Math.round((Date.now() - new Date(session.started_at).getTime()) / 1000)
+      : session.time_limit_minutes * 60 - (time_remaining_seconds || 0);
+
+    const { score, totalMarks, percentage, grade, breakdown } =
+      await autoMark(finalAnswers, session.assessment_id);
+
+    // Update session
+    await q(
+      `UPDATE student_sessions
+       SET status='submitted', submitted_at=now(),
+           answers_json=$1, time_remaining_seconds=$2,
+           score=$3, total_marks=$4, percentage=$5
+       WHERE access_token=$6`,
+      [JSON.stringify(finalAnswers), time_remaining_seconds || 0,
+       score, totalMarks, percentage, req.params.token]
+    );
+
+    // Insert cbt_results
+    await q(
+      `INSERT INTO cbt_results
+         (assessment_id, student_id, school_id, score, total_marks, percentage, grade, time_taken_seconds)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT DO NOTHING`,
+      [session.assessment_id, session.student_id, session.school_id,
+       score, totalMarks, percentage, grade, timeTaken]
+    );
+
+    // Feed into existing scores table for Friday AI reports
+    await q(
+      `INSERT INTO scores (school_id, student_id, subject, score, term, uploaded_at)
+       VALUES ($1,$2,$3,$4,$5,now())
+       ON CONFLICT (school_id, student_id, subject, term)
+       DO UPDATE SET score=$4, uploaded_at=now()`,
+      [session.school_id, session.student_id, session.subject, percentage, session.term]
+    );
+
+    // WhatsApp parent notification
+    if (session.parent_phone && session.twilio_number) {
+      const mins = Math.round(timeTaken / 60);
+      const msg =
+        `✅ Exam Submitted — ${session.school_name}\n` +
+        `Dear ${session.parent_name || 'Parent'}, ${session.student_name} has just submitted their ${session.subject} ${session.title}.\n` +
+        `Score: ${score}/${totalMarks} (${percentage}%) — Grade: ${grade}\n` +
+        `Time taken: ${mins} minute${mins !== 1 ? 's' : ''}.\n` +
+        `${session.school_name} 🏫`;
+      try {
+        await twilioSend(session.parent_phone, session.twilio_number, msg);
+      } catch (e) { console.error('[cbt] submit WhatsApp error:', e.message); }
+    }
+
+    const result = {
+      submitted: true,
+      show_score: session.show_score_immediately,
+      message: session.show_score_immediately
+        ? null
+        : 'Your answers have been submitted. Results will be released by your school.'
+    };
+    if (session.show_score_immediately) {
+      Object.assign(result, { score, total_marks: totalMarks, percentage, grade, breakdown });
+    }
+    json(res, result);
+  } catch (e) { bad(res, e.message); }
+});
+
+
+
+
+// ═══════════════════════════════════════════════════════════════
+// PAYSTACK MODULE — online fee collection (missing payments.js, rebuilt)
+// Works when PAYSTACK_SECRET_KEY env var is set on Railway.
+// Until then, endpoints return a clear "not configured" message and
+// schools use the bank/Paystack-page details collected at onboarding.
+// ═══════════════════════════════════════════════════════════════
+
+function hasPaystack() { return Boolean(process.env.PAYSTACK_SECRET_KEY); }
+
+async function migratePaystack() {
+  await q(`
+    CREATE TABLE IF NOT EXISTS paystack_transactions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      student_id UUID REFERENCES students(id) ON DELETE SET NULL,
+      fee_id UUID,
+      reference TEXT UNIQUE NOT NULL,
+      amount NUMERIC NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      authorization_url TEXT,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      paid_at TIMESTAMPTZ
+    );
+  `);
+}
+
+// ── Admin: generate a Paystack payment link for a student's balance ──
+app.post('/api/admin/fees/paystack-link', requireSchool, async (req, res) => {
+  try {
+    if (!hasPaystack()) return bad(res, 'Paystack is not configured yet. Add PAYSTACK_SECRET_KEY in Railway settings, or use the bank details from onboarding.', 400);
+    const { student_id, amount } = req.body;
+    if (!student_id) return bad(res, 'student_id required');
+    const sid = req.school.id;
+
+    const st = await q(`SELECT s.id, s.name, s.class_name, s.parent_phone, s.parent_name,
+                               f.id AS fee_id, COALESCE(f.amount_due,0)-COALESCE(f.amount_paid,0) AS balance
+                        FROM students s
+                        LEFT JOIN fees f ON f.student_id=s.id AND f.school_id=s.school_id
+                        WHERE s.school_id=$1 AND s.id=$2 LIMIT 1`, [sid, student_id]);
+    if (!st.rows.length) return bad(res, 'Student not found', 404);
+    const stu = st.rows[0];
+
+    const naira = Number(amount || stu.balance || 0);
+    if (!naira || naira <= 0) return bad(res, 'No outstanding balance for this student. Pass an amount to charge a custom figure.');
+
+    // Paystack requires an email — derive a routing address from the parent phone
+    const digits = String(stu.parent_phone || '0000000000').replace(/\D/g, '');
+    const email = `p${digits}@eduping.org`;
+    const reference = `EDU-${sid.slice(0,8)}-${Date.now()}`;
+
+    const psRes = await fetch('https://api.paystack.co/transaction/initialize', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${process.env.PAYSTACK_SECRET_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        amount: Math.round(naira * 100), // kobo
+        reference,
+        currency: 'NGN',
+        metadata: {
+          school_id: sid, student_id: stu.id, fee_id: stu.fee_id,
+          student_name: stu.name, school_name: req.school.name,
+          custom_fields: [
+            { display_name: 'Student', variable_name: 'student', value: `${stu.name} (${stu.class_name || ''})` },
+            { display_name: 'School', variable_name: 'school', value: req.school.name }
+          ]
+        }
+      })
+    });
+    const ps = await psRes.json();
+    if (!ps.status) return bad(res, `Paystack error: ${ps.message || 'could not create link'}`, 502);
+
+    await q(`INSERT INTO paystack_transactions (school_id, student_id, fee_id, reference, amount, authorization_url)
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+      [sid, stu.id, stu.fee_id, reference, naira, ps.data.authorization_url]);
+
+    json(res, { ok: true, url: ps.data.authorization_url, reference, amount: naira, student: stu.name, parent_phone: stu.parent_phone });
+  } catch (err) { bad(res, err.message, 500); }
+});
+
+// ── Admin: send the payment link to the parent on WhatsApp ──
+app.post('/api/admin/fees/paystack-send', requireSchool, async (req, res) => {
+  try {
+    const { reference } = req.body;
+    if (!reference) return bad(res, 'reference required');
+    const tx = await q(`SELECT pt.*, s.name AS student_name, s.parent_phone
+                        FROM paystack_transactions pt JOIN students s ON s.id=pt.student_id
+                        WHERE pt.reference=$1 AND pt.school_id=$2`, [reference, req.school.id]);
+    if (!tx.rows.length) return bad(res, 'Transaction not found', 404);
+    const t = tx.rows[0];
+    if (!t.parent_phone) return bad(res, 'No parent phone on file for this student');
+    const from = req.school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
+    const msg = `💳 *School Fees Payment — ${req.school.name}*\n\nDear parent, you can now pay *${t.student_name}*'s school fees of *₦${Number(t.amount).toLocaleString()}* securely online (card, bank transfer or USSD):\n\n${t.authorization_url}\n\nYou will receive an instant confirmation once payment is complete.\n\n${req.school.name} 🏫`;
+    await twilioSend(t.parent_phone, from, msg);
+    json(res, { ok: true, sent_to: t.parent_phone });
+  } catch (err) { bad(res, err.message, 500); }
+});
+
+// ── Paystack webhook — verifies signature, records payment, sends receipt ──
+app.post('/webhook/paystack', async (req, res) => {
+  try {
+    if (!hasPaystack()) return res.sendStatus(200);
+    const signature = req.headers['x-paystack-signature'];
+    const raw = req.rawBody || Buffer.from(JSON.stringify(req.body));
+    const expected = crypto.createHmac('sha512', process.env.PAYSTACK_SECRET_KEY).update(raw).digest('hex');
+    if (signature !== expected) {
+      console.warn('[paystack] invalid webhook signature');
+      return res.sendStatus(401);
+    }
+
+    const event = req.body;
+    if (event.event !== 'charge.success') return res.sendStatus(200);
+    const reference = event.data?.reference;
+    if (!reference) return res.sendStatus(200);
+
+    const tx = await q(`SELECT * FROM paystack_transactions WHERE reference=$1`, [reference]);
+    if (!tx.rows.length) return res.sendStatus(200);
+    const t = tx.rows[0];
+    if (t.status === 'success') return res.sendStatus(200); // idempotent — already processed
+
+    const paidNaira = Number(event.data.amount || 0) / 100;
+    await q(`UPDATE paystack_transactions SET status='success', paid_at=now() WHERE id=$1`, [t.id]);
+
+    // Update the fee record
+    if (t.fee_id) {
+      await q(`UPDATE fees SET amount_paid = COALESCE(amount_paid,0) + $1,
+               status = CASE WHEN COALESCE(amount_paid,0) + $1 >= amount_due THEN 'paid' ELSE 'partial' END
+               WHERE id=$2`, [paidNaira, t.fee_id]);
+    }
+    await q(`INSERT INTO fee_payments (school_id, student_id, fee_id, amount, payment_method, payment_date, note)
+             VALUES ($1,$2,$3,$4,'paystack',current_date,$5)`,
+      [t.school_id, t.student_id, t.fee_id, paidNaira, `Paystack ref ${reference}`]).catch(e => console.warn('[paystack] ledger insert:', e.message));
+
+    // WhatsApp receipt to parent + alert to school admin
+    const info = await q(`SELECT s.name AS student_name, s.parent_phone, sc.name AS school_name, sc.twilio_number, sc.admin_phone
+                          FROM students s JOIN schools sc ON sc.id=s.school_id WHERE s.id=$1`, [t.student_id]);
+    if (info.rows.length) {
+      const i = info.rows[0];
+      const from = i.twilio_number || process.env.TWILIO_DEFAULT_FROM;
+      if (i.parent_phone) {
+        await twilioSend(i.parent_phone, from,
+          `✅ *Payment Received — ${i.school_name}*\n\nWe confirm receipt of your online payment for *${i.student_name}*.\n\n💰 *Amount:* ₦${paidNaira.toLocaleString()}\n💳 *Method:* Paystack (online)\n🧾 *Reference:* ${reference}\n\nThank you for your prompt payment.\n\n${i.school_name} 🏫`
+        ).catch(e => console.warn('[paystack] parent receipt:', e.message));
+      }
+      if (i.admin_phone) {
+        await twilioSend(i.admin_phone, from,
+          `💰 *Fee Payment Alert — ${i.school_name}*\n\n*${i.student_name}* — ₦${paidNaira.toLocaleString()} paid online via Paystack.\nRef: ${reference}\n\nThe fee record has been updated automatically. ${i.school_name} 🏫`
+        ).catch(e => console.warn('[paystack] admin alert:', e.message));
+      }
+    }
+    res.sendStatus(200);
+  } catch (err) {
+    console.error('[paystack webhook]', err.message);
+    res.sendStatus(200); // always 200 so Paystack doesn't retry forever
+  }
+});
+
+// ── Student CBT exam page ──
+app.get('/cbt/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', 'cbt.html')));
