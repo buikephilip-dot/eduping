@@ -211,6 +211,8 @@ async function migrate() {
       award_type TEXT, winner_id UUID, winner_type TEXT, week_of DATE, announced BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT now()
     );
     ALTER TABLE schools ADD COLUMN IF NOT EXISTS config JSONB DEFAULT '{}'::jsonb;
+    ALTER TABLE fees ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
+    ALTER TABLE fees ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
     CREATE INDEX IF NOT EXISTS idx_students_school ON students(school_id);
     CREATE INDEX IF NOT EXISTS idx_students_phone ON students(parent_phone);
     CREATE INDEX IF NOT EXISTS idx_staff_school_phone ON staff(school_id, phone);
