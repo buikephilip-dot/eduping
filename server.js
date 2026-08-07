@@ -53,7 +53,7 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 app.use(morgan('combined'));
 app.use(express.json({ limit: '15mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
-app.use(express.urlencoded({ extended: true, limit: '15mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 300 });
 app.use('/api/', apiLimiter);
@@ -144,6 +144,10 @@ async function migrate() {
   // Drop old unique constraint on twilio_number if it exists (allows empty values)
   await q(`ALTER TABLE schools DROP CONSTRAINT IF EXISTS schools_twilio_number_key`).catch(() => {});
 
+  // Add gesture-challenge columns to signin_log for schools that already have the table
+  await q(`ALTER TABLE signin_log ADD COLUMN IF NOT EXISTS gesture TEXT`).catch(() => {});
+  await q(`ALTER TABLE signin_log ADD COLUMN IF NOT EXISTS gesture_verified BOOLEAN DEFAULT false`).catch(() => {});
+
   await q(`
     CREATE TABLE IF NOT EXISTS schools (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name TEXT NOT NULL, city TEXT, landmark_description TEXT,
@@ -161,8 +165,21 @@ async function migrate() {
     );
     CREATE TABLE IF NOT EXISTS signin_log (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
-      staff_id UUID REFERENCES staff(id) ON DELETE SET NULL, date DATE NOT NULL, time TEXT, status TEXT, photo_verified BOOLEAN DEFAULT false
+      staff_id UUID REFERENCES staff(id) ON DELETE SET NULL, date DATE NOT NULL, time TEXT, status TEXT, photo_verified BOOLEAN DEFAULT false,
+      gesture TEXT, gesture_verified BOOLEAN DEFAULT false
     );
+    CREATE TABLE IF NOT EXISTS signin_challenges (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+      gesture TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INT DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      verified_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS idx_signin_challenges_staff_pending ON signin_challenges(staff_id, status);
     CREATE TABLE IF NOT EXISTS students (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
       name TEXT NOT NULL, class_name TEXT, parent_name TEXT, parent_phone TEXT, weekly_performance_score NUMERIC DEFAULT 0,
@@ -668,13 +685,87 @@ async function callClaudeVision(system, userText, imageBase64) {
     { type: 'text', text: userText || 'Analyze this image.' }
   ];
   const response = await client.messages.create({
-    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5',
+    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
     max_tokens: 900,
     temperature: 0.2,
     system: applyResponseRules(system),
     messages: [{ role: 'user', content }]
   });
   return response.content?.[0]?.text || 'I could not process that image yet. Please try again with a clearer photo.';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SIGN-IN GESTURE CHALLENGE
+// WhatsApp strips GPS + timestamp EXIF data from photos, so a photo
+// alone proves nothing about when/where it was taken — it could be
+// reused indefinitely. Instead, each sign-in issues a random gesture
+// the teacher must perform live; the gesture can't be predicted or
+// staged in advance, so a valid photo proves the selfie was taken
+// *after* the challenge was issued.
+// ═══════════════════════════════════════════════════════════════
+
+const CHALLENGE_GESTURES = [
+  'a thumbs up',
+  'a peace sign (two fingers in a V)',
+  'one open hand raised, palm facing the camera',
+  'a fist raised beside the face',
+  'two thumbs up',
+  'one hand touching their ear',
+  'one hand giving a thumbs up next to their chin',
+  'a hand shaped like an L on their forehead',
+];
+
+const CHALLENGE_TTL_MINUTES = 10;
+const CHALLENGE_MAX_ATTEMPTS = 3;
+
+function pickGesture() {
+  return CHALLENGE_GESTURES[Math.floor(Math.random() * CHALLENGE_GESTURES.length)];
+}
+
+// Reuse an existing unexpired pending challenge if one exists, else issue a new one.
+async function getOrCreateChallenge(school, staff) {
+  const existing = await q(
+    `SELECT * FROM signin_challenges
+      WHERE staff_id=$1 AND school_id=$2 AND status='pending' AND expires_at > now()
+      ORDER BY created_at DESC LIMIT 1`,
+    [staff.id, school.id]
+  );
+  if (existing.rowCount) return existing.rows[0];
+
+  const gesture = pickGesture();
+  const inserted = await q(
+    `INSERT INTO signin_challenges (school_id, staff_id, gesture, status, expires_at)
+     VALUES ($1,$2,$3,'pending', now() + interval '${CHALLENGE_TTL_MINUTES} minutes')
+     RETURNING *`,
+    [school.id, staff.id, gesture]
+  );
+  return inserted.rows[0];
+}
+
+// Twilio media URLs require Basic Auth with the account credentials.
+async function fetchTwilioMediaBase64(mediaUrl) {
+  const auth = Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
+  const res = await fetch(mediaUrl, { headers: { Authorization: `Basic ${auth}` } });
+  if (!res.ok) throw new Error(`Failed to download media (${res.status})`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  return buf.toString('base64');
+}
+
+// Ask Claude Vision whether the photo shows a live selfie performing the given gesture.
+async function verifyGesturePhoto(gesture, imageBase64) {
+  if (!hasVisionAi()) {
+    // No vision key configured — fail safe by rejecting rather than silently accepting.
+    return { verified: false, reason: 'Vision AI not configured — cannot verify sign-in photos yet.' };
+  }
+  const system = `You are a strict verifier for a school staff sign-in system. You will be shown one photo and one required gesture. Reply with EXACTLY two lines:
+Line 1: YES or NO — YES only if the photo is a real selfie of a person clearly and unambiguously performing the required gesture right now.
+Line 2: a short one-sentence reason.
+Say NO if: there is no visible face, the gesture is unclear or different, the image looks like a screenshot/reused photo/stock photo, or you are not confident.`;
+  const userText = `Required gesture: ${gesture}\n\nDoes this photo show a person performing exactly this gesture?`;
+  const raw = await callClaudeVision(system, userText, imageBase64);
+  const firstLine = String(raw).trim().split('\n')[0].trim().toUpperCase();
+  const verified = firstLine.startsWith('YES');
+  return { verified, reason: raw };
 }
 
 function demoReply(text, system = '') {
@@ -984,9 +1075,55 @@ async function processTeacher(school, staff, body, mediaUrl, mediaType) {
   }
 
   const isImage = mediaUrl && (mediaType || '').includes('image');
-  if (lower.includes('sign in') || lower.includes('good morning') || isImage) {
-    await q(`INSERT INTO signin_log (school_id,staff_id,date,time,status,photo_verified) VALUES ($1,$2,current_date,to_char(now(),'HH24:MI'),$3,$4)`, [school.id, staff.id, 'submitted', Boolean(isImage)]);
-    return `✅ ${staff.name}, your sign in has been recorded. ${school.name} 🏫`;
+  const wantsSignIn = lower.includes('sign in') || lower.includes('good morning');
+
+  // ── Step 1: teacher asks to sign in (no photo yet) — issue/resend today's gesture challenge ──
+  if (wantsSignIn && !isImage) {
+    const challenge = await getOrCreateChallenge(school, staff);
+    const minutesLeft = Math.max(1, Math.round((new Date(challenge.expires_at) - Date.now()) / 60000));
+    return `📸 Hi ${staff.name}, to sign in please send a *selfie right now* doing: *${challenge.gesture}*.\n\nThis confirms you're signing in live — the request expires in ${minutesLeft} min, so a saved or old photo won't work.\n\n${school.name} 🏫`;
+  }
+
+  // ── Step 2: teacher sends a photo — verify it against their pending challenge ──
+  if (isImage) {
+    const pending = await q(
+      `SELECT * FROM signin_challenges WHERE staff_id=$1 AND school_id=$2 AND status='pending' AND expires_at > now()
+        ORDER BY created_at DESC LIMIT 1`,
+      [staff.id, school.id]
+    );
+
+    if (!pending.rowCount) {
+      return `Please type *"sign in"* first, ${staff.name} — I'll send you a quick gesture to confirm it's really you, live. ${school.name} 🏫`;
+    }
+
+    const challenge = pending.rows[0];
+
+    let verification;
+    try {
+      const imageBase64 = await fetchTwilioMediaBase64(mediaUrl);
+      verification = await verifyGesturePhoto(challenge.gesture, imageBase64);
+    } catch (e) {
+      console.error('[signin] verification error:', e.message);
+      verification = { verified: false, reason: 'Could not process the photo. Please try again.' };
+    }
+
+    if (verification.verified) {
+      await q(`UPDATE signin_challenges SET status='verified', verified_at=now() WHERE id=$1`, [challenge.id]);
+      await q(
+        `INSERT INTO signin_log (school_id,staff_id,date,time,status,photo_verified,gesture,gesture_verified)
+         VALUES ($1,$2,current_date,to_char(now(),'HH24:MI'),'submitted',true,$3,true)`,
+        [school.id, staff.id, challenge.gesture]
+      );
+      return `✅ ${staff.name}, your sign in has been verified and recorded. ${school.name} 🏫`;
+    }
+
+    const attempts = challenge.attempts + 1;
+    if (attempts >= CHALLENGE_MAX_ATTEMPTS) {
+      await q(`UPDATE signin_challenges SET status='failed', attempts=$1 WHERE id=$2`, [attempts, challenge.id]);
+      return `❌ ${staff.name}, I couldn't verify that photo (${verification.reason || 'gesture not confirmed'}). Please type *"sign in"* to get a new challenge and try again. ${school.name} 🏫`;
+    }
+    await q(`UPDATE signin_challenges SET attempts=$1 WHERE id=$2`, [attempts, challenge.id]);
+    return `⚠️ ${staff.name}, I couldn't confirm that — please send a clear selfie doing: *${challenge.gesture}* (attempt ${attempts}/${CHALLENGE_MAX_ATTEMPTS}). ${school.name} 🏫`;
   }
   if (lower.includes('homework') || lower.includes('assignment')) {
     await q(`INSERT INTO homeworks (school_id,assigned_by,class_name,subject,description,due_date) VALUES ($1,$2,$3,$4,$5,current_date + interval '3 days')`, [school.id, staff.id, staff.class, staff.subject, body]);
@@ -1394,6 +1531,38 @@ app.get('/api/admin/dashboard', requireSchool, async (req, res) => {
 const crud = [
   ['students','name,class_name,parent_name,parent_phone,weekly_performance_score'], ['staff','name,role,subject,class,phone,performance_score'], ['admission_inquiries','parent_name,phone,child_name,class_applying,status'], ['school_events','title,event_date']
 ];
+app.get('/api/admin/signin-log', requireSchool, async (req, res) => {
+  try {
+    const sid = req.school.id;
+    const { period, date } = req.query;
+    let where = 'sl.school_id=$1';
+    const params = [sid];
+
+    if (date) {
+      params.push(date);
+      where += ` AND sl.date=$${params.length}`;
+    } else if (period === 'week') {
+      where += ` AND sl.date >= current_date - interval '7 days'`;
+    } else if (period === 'month') {
+      where += ` AND sl.date >= current_date - interval '30 days'`;
+    } else {
+      // default: today
+      where += ` AND sl.date = current_date`;
+    }
+
+    const rows = await q(
+      `SELECT sl.id, sl.date, sl.time, sl.status, sl.photo_verified, sl.gesture, sl.gesture_verified,
+              st.name AS staff_name, st.class AS class
+       FROM signin_log sl
+       LEFT JOIN staff st ON st.id = sl.staff_id
+       WHERE ${where}
+       ORDER BY sl.time DESC LIMIT 500`,
+      params
+    );
+    json(res, rows.rows);
+  } catch (err) { bad(res, err.message, 500); }
+});
+
 app.get('/api/admin/sickbay_log', requireSchool, async (req, res) => {
   try {
     json(res, (await q(`SELECT * FROM sickbay_log WHERE school_id=$1 ORDER BY visited_at DESC LIMIT 200`, [req.school.id])).rows);
@@ -1550,7 +1719,7 @@ app.post('/api/admin/students/import-photo', requireSchool, async (req, res) => 
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const response = await client.messages.create({
-      model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 2000,
       messages: [{
         role: 'user',
