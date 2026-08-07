@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EduPing Status</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --green: #0b6b3a;
+      --green-2: #10a35a;
+      --dark: #071b12;
+      --muted: #667781;
+      --card: #ffffff;
+      --cream: #f7f4ed;
+      --yellow: #facc15;
+      --red: #ef4444;
+      --orange: #f59e0b;
+      --border: #e5e7eb;
+      --shadow: 0 18px 45px rgba(7, 27, 18, 0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'DM Sans', sans-serif;
+      color: var(--dark);
+      background:
+        radial-gradient(circle at top left, rgba(16, 163, 90, .16), transparent 34%),
+        linear-gradient(135deg, #ffffff 0%, var(--cream) 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 28px;
+    }
+    .wrap { width: min(920px, 100%); }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .logo {
+      width: 46px; height: 46px; border-radius: 14px; background: var(--green);
+      display: grid; place-items: center; color: white; font-size: 24px; box-shadow: var(--shadow);
+    }
+    .brand h1 { margin: 0; font-size: 28px; line-height: 1; }
+    .brand p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+    .hero {
+      background: rgba(255, 255, 255, .82);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,.8);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .top {
+      padding: 30px;
+      background: linear-gradient(135deg, var(--green), #063d22);
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: center;
+    }
+    .top h2 { margin: 0 0 8px; font-size: clamp(28px, 4vw, 46px); letter-spacing: -1px; }
+    .top p { margin: 0; color: rgba(255,255,255,.8); max-width: 560px; }
+    .overall {
+      display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.12);
+      padding: 12px 16px; border-radius: 999px; white-space: nowrap; font-weight: 700;
+    }
+    .pulse {
+      width: 12px; height: 12px; border-radius: 50%; background: #22c55e;
+      box-shadow: 0 0 0 0 rgba(34,197,94,.6); animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse { 70% { box-shadow: 0 0 0 12px rgba(34,197,94,0); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); } }
+    .grid { padding: 24px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .card { border: 1px solid var(--border); border-radius: 22px; padding: 22px; background: var(--card); }
+    .icon { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; font-size: 23px; margin-bottom: 18px; }
+    .ok .icon { background: #dcfce7; }
+    .warn .icon { background: #fef3c7; }
+    .bad .icon { background: #fee2e2; }
+    .label { font-size: 14px; color: var(--muted); margin-bottom: 5px; }
+    .status { font-size: 23px; font-weight: 800; margin-bottom: 8px; }
+    .detail { font-size: 13px; color: var(--muted); line-height: 1.45; }
+    .footer { padding: 0 24px 24px; display: flex; justify-content: space-between; gap: 12px; align-items: center; color: var(--muted); font-size: 13px; }
+    .btn { border: 0; background: var(--dark); color: white; border-radius: 999px; padding: 11px 16px; font: inherit; font-weight: 700; cursor: pointer; }
+    .btn:hover { opacity: .92; }
+    .small { font-size: 12px; }
+    @media (max-width: 760px) {
+      body { padding: 16px; align-items: flex-start; }
+      .top { flex-direction: column; align-items: flex-start; }
+      .grid { grid-template-columns: 1fr; }
+      .footer { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="brand">
+      <div class="logo">🏫</div>
+      <div>
+        <h1>EduPing</h1>
+        <p>Public system status for schools</p>
+      </div>
+    </div>
+
+    <section class="hero">
+      <div class="top">
+        <div>
+          <h2 id="headline">Checking systems...</h2>
+          <p>Schools can confirm EduPing availability here before contacting support.</p>
+        </div>
+        <div class="overall"><span class="pulse"></span><span id="overallText">Checking</span></div>
+      </div>
+
+      <div class="grid">
+        <article class="card ok" id="aiCard">
+          <div class="icon">🤖</div>
+          <div class="label">EduPing AI</div>
+          <div class="status" id="aiStatus">Checking...</div>
+          <div class="detail" id="aiDetail">Waiting for server response.</div>
+        </article>
+        <article class="card ok" id="whatsappCard">
+          <div class="icon">💬</div>
+          <div class="label">WhatsApp</div>
+          <div class="status" id="whatsappStatus">Checking...</div>
+          <div class="detail" id="whatsappDetail">Waiting for server response.</div>
+        </article>
+        <article class="card ok" id="databaseCard">
+          <div class="icon">🗄️</div>
+          <div class="label">Database</div>
+          <div class="status" id="databaseStatus">Checking...</div>
+          <div class="detail" id="databaseDetail">Waiting for server response.</div>
+        </article>
+      </div>
+
+      <div class="footer">
+        <div>
+          <strong>Last checked:</strong> <span id="checkedAt">Never</span><br>
+          <span class="small">This page refreshes automatically every 60 seconds.</span>
+        </div>
+        <button class="btn" onclick="loadStatus()">Refresh status</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const names = { online: 'Online', connected: 'Connected', healthy: 'Healthy', demo: 'Demo Mode', not_configured: 'Not Configured', offline: 'Offline', error: 'Error' };
+    function cls(status) {
+      if (['online','connected','healthy'].includes(status)) return 'card ok';
+      if (['demo','not_configured'].includes(status)) return 'card warn';
+      return 'card bad';
+    }
+    function setService(key, service) {
+      document.getElementById(key + 'Card').className = cls(service.status);
+      document.getElementById(key + 'Status').textContent = names[service.status] || service.status;
+      document.getElementById(key + 'Detail').textContent = service.detail || '';
+    }
+    function timeAgo(iso) {
+      const date = new Date(iso);
+      if (Number.isNaN(date.getTime())) return 'Unknown';
+      return date.toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' });
+    }
+    async function loadStatus() {
+      try {
+        const res = await fetch('/api/status', { cache: 'no-store' });
+        if (!res.ok) throw new Error('Bad status response');
+        const data = await res.json();
+        setService('ai', data.services.ai);
+        setService('whatsapp', data.services.whatsapp);
+        setService('database', data.services.database);
+        const databaseOk = data.services.database.status === 'healthy';
+        const aiLive = data.services.ai.status === 'online';
+        const whatsappLive = data.services.whatsapp.status === 'connected';
+        const allLive = databaseOk && aiLive && whatsappLive;
+        const degraded = databaseOk && (!aiLive || !whatsappLive);
+        document.getElementById('headline').textContent = allLive ? 'All systems operational' : degraded ? 'Core system online, setup pending' : 'Service interruption detected';
+        document.getElementById('overallText').textContent = allLive ? 'Operational' : degraded ? 'Degraded' : 'Issue detected';
+        document.getElementById('checkedAt').textContent = timeAgo(data.checked_at);
+      } catch (err) {
+        ['ai','whatsapp','database'].forEach(k => setService(k, { status: 'error', detail: 'Could not reach status endpoint.' }));
+        document.getElementById('headline').textContent = 'Unable to check status';
+        document.getElementById('overallText').textContent = 'Unknown';
+        document.getElementById('checkedAt').textContent = new Date().toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' });
+      }
+    }
+    loadStatus();
+    setInterval(loadStatus, 60000);
+  </script>
+</body>
+</html>
