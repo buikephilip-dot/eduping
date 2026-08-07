@@ -3683,13 +3683,13 @@ function renderSigninLog(rows) {
     } else { warning.style.display = 'none'; }
   } else if (warning) { warning.style.display = 'none'; }
 
-  body.innerHTML = '<table class="data-table"><thead><tr><th>Teacher</th><th>Class</th><th>Date</th><th>Time</th><th>Photo Verified</th><th>Status</th></tr></thead><tbody>' +
+  body.innerHTML = '<table class="data-table"><thead><tr><th>Teacher</th><th>Class</th><th>Date</th><th>Time</th><th>Gesture Challenge</th><th>Status</th></tr></thead><tbody>' +
     rows.map(r => '<tr>' +
       '<td><strong>' + (r.staff_name||'—') + '</strong></td>' +
       '<td>' + (r.class||'—') + '</td>' +
       '<td>' + (r.date ? new Date(r.date).toLocaleDateString('en-NG') : '—') + '</td>' +
       '<td>' + (r.time||'—') + '</td>' +
-      '<td>' + (r.photo_verified ? '✅ Yes' : '⬜ No') + '</td>' +
+      '<td>' + (r.gesture_verified ? '✅ ' + (r.gesture || 'Verified') : (r.gesture ? '⬜ Not confirmed (' + r.gesture + ')' : '⬜ No challenge')) + '</td>' +
       '<td><span class="pill ' + (r.status === 'submitted' ? 'pill-green' : 'pill-gold') + '">' + (r.status||'—') + '</span></td>' +
     '</tr>').join('') +
     '</tbody></table>';
@@ -3712,8 +3712,8 @@ function filterSigninLog() {
 
 function exportSigninLog() {
   if (!allSigninLogs.length) { showToast('No data to export'); return; }
-  const csv = 'Teacher,Class,Date,Time,Photo Verified,Status\n' +
-    allSigninLogs.map(r => [r.staff_name||'', r.class||'', r.date||'', r.time||'', r.photo_verified ? 'Yes' : 'No', r.status||''].map(v => '"'+v+'"').join(',')).join('\n');
+  const csv = 'Teacher,Class,Date,Time,Gesture,Gesture Verified,Status\n' +
+    allSigninLogs.map(r => [r.staff_name||'', r.class||'', r.date||'', r.time||'', r.gesture||'', r.gesture_verified ? 'Yes' : 'No', r.status||''].map(v => '"'+v+'"').join(',')).join('\n');
   downloadCSV(csv, 'signin_log_export.csv');
 }
 
