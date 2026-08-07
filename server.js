@@ -53,7 +53,7 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 app.use(morgan('combined'));
 app.use(express.json({ limit: '15mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
-app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 
 const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 300 });
 app.use('/api/', apiLimiter);
@@ -668,7 +668,7 @@ async function callClaudeVision(system, userText, imageBase64) {
     { type: 'text', text: userText || 'Analyze this image.' }
   ];
   const response = await client.messages.create({
-    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5',
     max_tokens: 900,
     temperature: 0.2,
     system: applyResponseRules(system),
@@ -1550,7 +1550,7 @@ app.post('/api/admin/students/import-photo', requireSchool, async (req, res) => 
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5',
       max_tokens: 2000,
       messages: [{
         role: 'user',
