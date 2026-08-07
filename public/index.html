@@ -6263,11 +6263,11 @@ const cbt = (() => {
             <span>👥 ${a.submitted_count || 0}/${a.session_count || 0} submitted</span>
           </div>
           <div class="cbt-card-actions">
-            <button class="btn btn-outline btn-sm" onclick="cbt.openDetail(${a.id})">Manage</button>
-            ${a.status === 'draft' ? `<button class="btn btn-primary btn-sm" onclick="cbt.publish(${a.id})">Publish →</button>` : ''}
-            ${a.status === 'active' ? `<button class="btn btn-outline btn-sm" onclick="cbt.notifyAssessment(${a.id})">📲 Notify Parents</button>` : ''}
-            <button class="btn btn-outline btn-sm" onclick="cbt.editAssessment(${a.id})">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="cbt.deleteAssessment(${a.id})">Delete</button>
+            <button class="btn btn-outline btn-sm" onclick="cbt.openDetail('${a.id}')">Manage</button>
+            ${a.status === 'draft' ? `<button class="btn btn-primary btn-sm" onclick="cbt.publish('${a.id}')">Publish →</button>` : ''}
+            ${a.status === 'active' ? `<button class="btn btn-outline btn-sm" onclick="cbt.notifyAssessment('${a.id}')">📲 Notify Parents</button>` : ''}
+            <button class="btn btn-outline btn-sm" onclick="cbt.editAssessment('${a.id}')">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="cbt.deleteAssessment('${a.id}')">Delete</button>
           </div>
         </div>
       </div>
@@ -6429,10 +6429,10 @@ const cbt = (() => {
         </div>
       </div>
       <div id="detail-actions">
-        ${a.status === 'draft' ? `<button class="btn btn-primary btn-sm" onclick="cbt.publish(${a.id})">Publish →</button>` : ''}
-        ${a.status === 'active' ? `<button class="btn btn-outline btn-sm" onclick="cbt.notifyAssessment(${a.id})">📲 Notify Parents</button>` : ''}
-        <button class="btn btn-outline btn-sm" onclick="cbt.editAssessment(${a.id})">✏️ Edit</button>
-        <select class="form-input btn-sm" style="width:auto" onchange="cbt.changeStatus(${a.id}, this.value)">
+        ${a.status === 'draft' ? `<button class="btn btn-primary btn-sm" onclick="cbt.publish('${a.id}')">Publish →</button>` : ''}
+        ${a.status === 'active' ? `<button class="btn btn-outline btn-sm" onclick="cbt.notifyAssessment('${a.id}')">📲 Notify Parents</button>` : ''}
+        <button class="btn btn-outline btn-sm" onclick="cbt.editAssessment('${a.id}')">✏️ Edit</button>
+        <select class="form-input btn-sm" style="width:auto" onchange="cbt.changeStatus('${a.id}', this.value)">
           <option value="">Change Status…</option>
           <option value="draft">→ Draft</option>
           <option value="active">→ Active</option>
@@ -6477,8 +6477,8 @@ const cbt = (() => {
         <div class="question-item-header">
           <div class="question-item-text">${i+1}. ${esc(q.question_text)}</div>
           <div class="question-item-actions">
-            <button class="btn btn-outline btn-sm" onclick="cbt.openEditQuestion(${q.id})">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="cbt.deleteQuestion(${q.id})">✕</button>
+            <button class="btn btn-outline btn-sm" onclick="cbt.openEditQuestion('${q.id}')">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="cbt.deleteQuestion('${q.id}')">✕</button>
           </div>
         </div>
         <div style="font-size:12px;color:var(--muted);margin-top:4px">${q.question_type.toUpperCase()} · ${q.marks} mark${q.marks!==1?'s':''}</div>
