@@ -119,6 +119,7 @@ function normalisePhone(phone = '') {
   return raw;
 }
 function uuid() { return crypto.randomUUID(); }
+function maxAdminsForPlan(plan) { return plan === 'starter' ? 1 : 5; }
 function createToken(payload) {
   return jwt.sign(payload, process.env.JWT_SECRET || 'eduping-secret', { expiresIn: '7d' });
 }
@@ -180,6 +181,73 @@ async function migrate() {
       verified_at TIMESTAMPTZ
     );
     CREATE INDEX IF NOT EXISTS idx_signin_challenges_staff_pending ON signin_challenges(staff_id, status);
+
+    -- Per-admin accounts + sessions (replaces single shared school password)
+    CREATE TABLE IF NOT EXISTS admin_users (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      username TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'admin',
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TIMESTAMPTZ DEFAULT now(),
+      UNIQUE(school_id, username)
+    );
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      admin_user_id UUID NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      device_label TEXT,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      last_seen_at TIMESTAMPTZ DEFAULT now(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      revoked_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS idx_admin_sessions_admin ON admin_sessions(admin_user_id);
+
+    -- Teacher self-serve portal (tokenized link + PIN + device binding)
+    CREATE TABLE IF NOT EXISTS teacher_portal_tokens (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+      token TEXT NOT NULL UNIQUE,
+      pin_hash TEXT NOT NULL,
+      bound_device_id TEXT,
+      unlocked_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      expires_at TIMESTAMPTZ NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_teacher_portal_tokens_staff ON teacher_portal_tokens(staff_id);
+
+    CREATE TABLE IF NOT EXISTS pending_questions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      assessment_id UUID NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
+      staff_id UUID REFERENCES staff(id) ON DELETE SET NULL,
+      question_text TEXT NOT NULL,
+      question_type TEXT NOT NULL DEFAULT 'mcq',
+      marks INTEGER NOT NULL DEFAULT 1,
+      image_url TEXT,
+      options JSONB,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ DEFAULT now(),
+      reviewed_at TIMESTAMPTZ
+    );
+
+    CREATE TABLE IF NOT EXISTS pending_scores (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      staff_id UUID REFERENCES staff(id) ON DELETE SET NULL,
+      student_id UUID REFERENCES students(id) ON DELETE SET NULL,
+      student_name TEXT,
+      class_name TEXT,
+      subject TEXT NOT NULL,
+      score NUMERIC NOT NULL,
+      term TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ DEFAULT now(),
+      reviewed_at TIMESTAMPTZ
+    );
     CREATE TABLE IF NOT EXISTS students (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
       name TEXT NOT NULL, class_name TEXT, parent_name TEXT, parent_phone TEXT, weekly_performance_score NUMERIC DEFAULT 0,
@@ -1240,12 +1308,39 @@ function requireSuper(req, res, next) {
 }
 async function requireSchool(req, res, next) {
   try { rateLimitDB(req.headers['x-school-id']); } catch(e) { return res.status(429).json({ error: e.message }); }
+
+  // Preferred path: per-admin session token (Authorization: Bearer <jwt>)
+  const authHeader = req.headers['authorization'] || '';
+  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+  if (bearer) {
+    try {
+      const payload = jwt.verify(bearer, process.env.JWT_SECRET || 'eduping-secret');
+      const sess = await q(
+        `SELECT s.id AS session_id, s.expires_at, s.revoked_at, au.id AS admin_user_id, au.username, au.role, au.school_id
+         FROM admin_sessions s JOIN admin_users au ON au.id = s.admin_user_id
+         WHERE s.id=$1 AND au.status='active'`,
+        [payload.session_id]
+      );
+      if (sess.rowCount && !sess.rows[0].revoked_at && new Date(sess.rows[0].expires_at) > new Date()) {
+        const school = await getSchool(sess.rows[0].school_id);
+        if (school) {
+          q(`UPDATE admin_sessions SET last_seen_at=now() WHERE id=$1`, [payload.session_id]).catch(() => {});
+          req.school = school;
+          req.admin = { id: sess.rows[0].admin_user_id, username: sess.rows[0].username, role: sess.rows[0].role, session_id: payload.session_id };
+          return next();
+        }
+      }
+    } catch (e) { /* invalid/expired token — fall through to legacy check */ }
+  }
+
+  // Legacy fallback: shared school password (kept for any older integrations)
   const schoolId = req.headers['x-school-id'] || req.query.school_id || req.body.school_id;
   const password = req.headers['x-admin-password'] || req.body.admin_password; // never from query params — would appear in logs
   if (!schoolId || !password) return bad(res, 'Missing school_id or admin password', 401);
   const school = await getSchool(schoolId);
   if (!school || school.admin_password !== password) return bad(res, 'Unauthorized school admin', 401);
   req.school = school;
+  req.admin = { role: 'owner', legacy: true };
   next();
 }
 
@@ -1516,9 +1611,122 @@ app.patch('/api/super/schools/:id', requireSuper, async (req, res) => {
 app.delete('/api/super/schools/:id', requireSuper, async (req, res) => { await q(`DELETE FROM schools WHERE id=$1`, [req.params.id]); json(res, { ok: true }); });
 
 app.post('/api/admin/login', async (req, res) => {
-  const r = await q(`SELECT id,name,city,status FROM schools WHERE id=$1 AND admin_password=$2`, [req.body.school_id, req.body.password]);
-  json(res, { ok: r.rowCount === 1, school: r.rows[0] || null });
+  try {
+    const { school_id, password, device_label } = req.body;
+    if (!school_id || !password) return json(res, { ok: false });
+    const school = await getSchool(school_id);
+    if (!school) return json(res, { ok: false });
+
+    const existing = await q(`SELECT * FROM admin_users WHERE school_id=$1 AND status='active'`, [school.id]);
+    let adminUser = null;
+    for (const row of existing.rows) {
+      if (await bcrypt.compare(password, row.password_hash)) { adminUser = row; break; }
+    }
+
+    // First login since upgrade: no admin_users yet, but legacy shared password matches — auto-provision the Owner account
+    if (!adminUser && existing.rowCount === 0 && school.admin_password === password) {
+      const hash = await bcrypt.hash(password, 10);
+      const created = await q(
+        `INSERT INTO admin_users (school_id, username, password_hash, role) VALUES ($1,'owner',$2,'owner') RETURNING *`,
+        [school.id, hash]
+      );
+      adminUser = created.rows[0];
+    }
+
+    if (!adminUser) return json(res, { ok: false });
+
+    const sessionRow = await q(
+      `INSERT INTO admin_sessions (admin_user_id, school_id, device_label, expires_at)
+       VALUES ($1,$2,$3, now() + interval '30 days') RETURNING id`,
+      [adminUser.id, school.id, (device_label || 'Unknown device').slice(0, 120)]
+    );
+    const token = jwt.sign(
+      { session_id: sessionRow.rows[0].id },
+      process.env.JWT_SECRET || 'eduping-secret',
+      { expiresIn: '30d' }
+    );
+
+    json(res, {
+      ok: true,
+      token,
+      school: { id: school.id, name: school.name, city: school.city, status: school.status, plan: school.plan, current_term: school.current_term },
+      admin: { username: adminUser.username, role: adminUser.role }
+    });
+  } catch (err) { bad(res, err.message, 500); }
 });
+
+app.post('/api/admin/logout', requireSchool, async (req, res) => {
+  if (req.admin?.session_id) {
+    await q(`UPDATE admin_sessions SET revoked_at=now() WHERE id=$1`, [req.admin.session_id]);
+  }
+  json(res, { ok: true });
+});
+
+app.post('/api/admin/change-password', requireSchool, async (req, res) => {
+  try {
+    if (!req.admin?.id) return bad(res, 'Please log out and log in again to change your password', 400);
+    const { current_password, new_password } = req.body;
+    if (!new_password || new_password.length < 6) return bad(res, 'New password must be at least 6 characters', 400);
+    const row = await q(`SELECT * FROM admin_users WHERE id=$1`, [req.admin.id]);
+    if (!row.rowCount || !(await bcrypt.compare(current_password || '', row.rows[0].password_hash))) {
+      return bad(res, 'Current password is incorrect', 401);
+    }
+    const hash = await bcrypt.hash(new_password, 10);
+    await q(`UPDATE admin_users SET password_hash=$1 WHERE id=$2`, [hash, req.admin.id]);
+    json(res, { ok: true });
+  } catch (err) { bad(res, err.message, 500); }
+});
+
+// Team management — invite/remove admins (limited by plan tier)
+app.get('/api/admin/team', requireSchool, async (req, res) => {
+  const rows = await q(`SELECT id, username, role, status, created_at FROM admin_users WHERE school_id=$1 AND status='active' ORDER BY created_at`, [req.school.id]);
+  json(res, { admins: rows.rows, max_admins: maxAdminsForPlan(req.school.plan), plan: req.school.plan });
+});
+
+app.post('/api/admin/team', requireSchool, async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password || password.length < 6) return bad(res, 'Username and a password (6+ chars) are required', 400);
+    const max = maxAdminsForPlan(req.school.plan);
+    const count = await q(`SELECT COUNT(*)::int c FROM admin_users WHERE school_id=$1 AND status='active'`, [req.school.id]);
+    if (count.rows[0].c >= max) return bad(res, `Your ${req.school.plan} plan allows up to ${max} admin${max === 1 ? '' : 's'}. Upgrade to add more.`, 403);
+    const hash = await bcrypt.hash(password, 10);
+    const created = await q(
+      `INSERT INTO admin_users (school_id, username, password_hash, role) VALUES ($1,$2,$3,'admin') RETURNING id, username, role, status, created_at`,
+      [req.school.id, username.trim(), hash]
+    );
+    json(res, created.rows[0]);
+  } catch (err) {
+    if (String(err.message).includes('duplicate')) return bad(res, 'That username is already taken', 409);
+    bad(res, err.message, 500);
+  }
+});
+
+app.delete('/api/admin/team/:id', requireSchool, async (req, res) => {
+  if (req.admin?.role !== 'owner') return bad(res, 'Only the account owner can remove admins', 403);
+  if (req.params.id === req.admin?.id) return bad(res, 'You cannot remove your own account', 400);
+  await q(`UPDATE admin_users SET status='removed' WHERE id=$1 AND school_id=$2`, [req.params.id, req.school.id]);
+  await q(`UPDATE admin_sessions SET revoked_at=now() WHERE admin_user_id=$1`, [req.params.id]);
+  json(res, { ok: true });
+});
+
+// Active device sessions — lets an admin see/revoke where they (or teammates) are logged in
+app.get('/api/admin/sessions', requireSchool, async (req, res) => {
+  const rows = await q(
+    `SELECT s.id, s.device_label, s.created_at, s.last_seen_at, s.expires_at, au.username
+     FROM admin_sessions s JOIN admin_users au ON au.id = s.admin_user_id
+     WHERE s.school_id=$1 AND s.revoked_at IS NULL AND s.expires_at > now()
+     ORDER BY s.last_seen_at DESC`,
+    [req.school.id]
+  );
+  json(res, rows.rows.map(r => ({ ...r, is_current: r.id === req.admin?.session_id })));
+});
+
+app.post('/api/admin/sessions/:id/revoke', requireSchool, async (req, res) => {
+  await q(`UPDATE admin_sessions SET revoked_at=now() WHERE id=$1 AND school_id=$2`, [req.params.id, req.school.id]);
+  json(res, { ok: true });
+});
+
 app.get('/api/admin/dashboard', requireSchool, async (req, res) => {
   const sid = req.school.id;
   const [students, staff, messages, fees, admissions, signin] = await Promise.all([
@@ -4099,6 +4307,235 @@ app.post('/api/admin/cbt/bulk-import-questions', requireSchool, async (req, res)
     }
     json(res, { imported: created.length, questions: created });
   } catch (e) { bad(res, e.message); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TEACHER SELF-SERVE PORTAL
+// Admin sends a tokenized link (48h expiry) + a separate PIN via WhatsApp.
+// Teacher opens the link, enters the PIN once to unlock (binds to that device),
+// then can submit CBT questions and student scores — both land in a pending
+// queue that requires admin approval before going live.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const TEACHER_LINK_TTL_HOURS = 48;
+
+function generatePin() { return String(Math.floor(1000 + Math.random() * 9000)); }
+
+// Admin-triggered: issue a fresh link + PIN and send both via WhatsApp
+app.post('/api/admin/staff/:id/portal-link', requireSchool, async (req, res) => {
+  try {
+    const { rows: [staff] } = await q(`SELECT * FROM staff WHERE id=$1 AND school_id=$2`, [req.params.id, req.school.id]);
+    if (!staff) return bad(res, 'Staff member not found', 404);
+    if (!staff.phone) return bad(res, 'This staff member has no WhatsApp number on file', 400);
+
+    const token = crypto.randomBytes(24).toString('base64url');
+    const pin = generatePin();
+    const pinHash = await bcrypt.hash(pin, 10);
+
+    await q(
+      `INSERT INTO teacher_portal_tokens (school_id, staff_id, token, pin_hash, expires_at)
+       VALUES ($1,$2,$3,$4, now() + interval '${TEACHER_LINK_TTL_HOURS} hours')`,
+      [req.school.id, staff.id, token, pinHash]
+    );
+
+    const link = `${CBT_BASE_URL}/teacher/${token}`;
+    if (hasTwilio()) {
+      await twilioSend(staff.phone, req.school.twilio_number, `📋 Hi ${staff.name}, here's your EduPing submission link for questions & scores:\n${link}\n\nThis link expires in ${TEACHER_LINK_TTL_HOURS}h. A PIN is coming in the next message — enter it once to unlock.`);
+      await twilioSend(staff.phone, req.school.twilio_number, `🔐 Your EduPing PIN: ${pin}\n\nDo not share this. Enter it on the page to unlock your submission form.`);
+    }
+
+    json(res, { ok: true, link, sent: hasTwilio() });
+  } catch (err) { bad(res, err.message, 500); }
+});
+
+app.get('/teacher/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', 'teacher-portal.html')));
+
+// Teacher-facing: safe, side-effect-free — fine for WhatsApp's link-preview crawler to hit
+app.get('/api/teacher/:token', async (req, res) => {
+  try {
+    const { rows: [t] } = await q(
+      `SELECT tpt.*, st.name AS staff_name, st.class AS class_name, st.subject
+       FROM teacher_portal_tokens tpt JOIN staff st ON st.id = tpt.staff_id
+       WHERE tpt.token=$1`,
+      [req.params.token]
+    );
+    if (!t) return bad(res, 'This link is invalid.', 404);
+    if (new Date(t.expires_at) < new Date()) return bad(res, 'This link has expired. Ask your admin to send a new one.', 410);
+
+    const school = await getSchool(t.school_id);
+    const assessments = await q(
+      `SELECT id, title, subject, status FROM assessments
+       WHERE school_id=$1 AND class_name=$2 AND status IN ('draft','active') ORDER BY created_at DESC`,
+      [t.school_id, t.class_name]
+    );
+    const recent = await q(
+      `SELECT 'question' AS kind, question_text AS label, status, created_at FROM pending_questions WHERE staff_id=$1
+       UNION ALL
+       SELECT 'score' AS kind, student_name || ' — ' || subject AS label, status, created_at FROM pending_scores WHERE staff_id=$1
+       ORDER BY created_at DESC LIMIT 10`,
+      [t.staff_id]
+    );
+
+    json(res, {
+      unlocked: Boolean(t.unlocked_at),
+      staff_name: t.staff_name,
+      class_name: t.class_name,
+      subject: t.subject,
+      school_name: school?.name,
+      assessments: assessments.rows,
+      recent_submissions: recent.rows
+    });
+  } catch (err) { bad(res, err.message, 500); }
+});
+
+// Unlock with PIN — binds this token to the first device that unlocks it
+app.post('/api/teacher/:token/unlock', async (req, res) => {
+  try {
+    const { pin, device_id } = req.body;
+    if (!pin || !device_id) return bad(res, 'Missing PIN or device id', 400);
+
+    const { rows: [t] } = await q(`SELECT * FROM teacher_portal_tokens WHERE token=$1`, [req.params.token]);
+    if (!t) return bad(res, 'This link is invalid.', 404);
+    if (new Date(t.expires_at) < new Date()) return bad(res, 'This link has expired. Ask your admin to send a new one.', 410);
+
+    if (t.bound_device_id && t.bound_device_id !== device_id) {
+      return bad(res, 'This link is already active on another device. Ask your admin to send a new one.', 403);
+    }
+
+    const validPin = await bcrypt.compare(pin, t.pin_hash);
+    if (!validPin) return bad(res, 'Incorrect PIN', 401);
+
+    await q(
+      `UPDATE teacher_portal_tokens SET unlocked_at=COALESCE(unlocked_at, now()), bound_device_id=COALESCE(bound_device_id, $1) WHERE id=$2`,
+      [device_id, t.id]
+    );
+    json(res, { ok: true });
+  } catch (err) { bad(res, err.message, 500); }
+});
+
+// Shared guard for the two submit routes below
+async function requireUnlockedTeacherToken(req, res, next) {
+  try {
+    const device_id = req.headers['x-device-id'];
+    if (!device_id) return bad(res, 'Missing device id', 400);
+    const { rows: [t] } = await q(`SELECT * FROM teacher_portal_tokens WHERE token=$1`, [req.params.token]);
+    if (!t) return bad(res, 'This link is invalid.', 404);
+    if (new Date(t.expires_at) < new Date()) return bad(res, 'This link has expired. Ask your admin to send a new one.', 410);
+    if (!t.unlocked_at) return bad(res, 'Please unlock with your PIN first.', 401);
+    if (t.bound_device_id !== device_id) return bad(res, 'This link is active on a different device.', 403);
+    req.teacherToken = t;
+    next();
+  } catch (err) { bad(res, err.message, 500); }
+}
+
+app.post('/api/teacher/:token/questions', requireUnlockedTeacherToken, async (req, res) => {
+  try {
+    const t = req.teacherToken;
+    const { assessment_id, question_text, question_type, marks, options } = req.body;
+    if (!assessment_id || !question_text) return bad(res, 'Missing assessment or question text', 400);
+
+    const { rows: [assessment] } = await q(`SELECT id FROM assessments WHERE id=$1 AND school_id=$2`, [assessment_id, t.school_id]);
+    if (!assessment) return bad(res, 'Assessment not found', 404);
+
+    await q(
+      `INSERT INTO pending_questions (school_id, assessment_id, staff_id, question_text, question_type, marks, options)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [t.school_id, assessment_id, t.staff_id, question_text, question_type || 'mcq', marks || 1, JSON.stringify(options || [])]
+    );
+    json(res, { ok: true, message: 'Submitted — awaiting admin review.' });
+  } catch (err) { bad(res, err.message, 500); }
+});
+
+app.post('/api/teacher/:token/scores', requireUnlockedTeacherToken, async (req, res) => {
+  try {
+    const t = req.teacherToken;
+    const { student_name, subject, score, term } = req.body;
+    if (!student_name || !subject || score === undefined || score === null) return bad(res, 'Missing student, subject, or score', 400);
+
+    // Best-effort match to an existing student in the teacher's own class, for later approval
+    const { rows: [student] } = await q(
+      `SELECT id FROM students WHERE school_id=$1 AND class_name=$2 AND name ILIKE $3 LIMIT 1`,
+      [t.school_id, t.class_name, student_name.trim()]
+    );
+
+    await q(
+      `INSERT INTO pending_scores (school_id, staff_id, student_id, student_name, class_name, subject, score, term)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [t.school_id, t.staff_id, student?.id || null, student_name.trim(), t.class_name, subject, score, term || null]
+    );
+    json(res, { ok: true, message: 'Submitted — awaiting admin review.' });
+  } catch (err) { bad(res, err.message, 500); }
+});
+
+// ── Admin: pending review queue ──
+app.get('/api/admin/pending-questions', requireSchool, async (req, res) => {
+  const rows = await q(
+    `SELECT pq.*, st.name AS staff_name, a.title AS assessment_title
+     FROM pending_questions pq
+     LEFT JOIN staff st ON st.id = pq.staff_id
+     LEFT JOIN assessments a ON a.id = pq.assessment_id
+     WHERE pq.school_id=$1 AND pq.status='pending' ORDER BY pq.created_at DESC`,
+    [req.school.id]
+  );
+  json(res, rows.rows);
+});
+
+app.post('/api/admin/pending-questions/:id/approve', requireSchool, async (req, res) => {
+  try {
+    const { rows: [pq] } = await q(`SELECT * FROM pending_questions WHERE id=$1 AND school_id=$2 AND status='pending'`, [req.params.id, req.school.id]);
+    if (!pq) return bad(res, 'Pending question not found', 404);
+
+    const { rows: [countRow] } = await q(`SELECT COALESCE(MAX(order_index),-1)+1 AS next_idx FROM questions WHERE assessment_id=$1`, [pq.assessment_id]);
+    const { rows: [newQ] } = await q(
+      `INSERT INTO questions (assessment_id, school_id, question_text, question_type, marks, image_url, order_index)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [pq.assessment_id, req.school.id, pq.question_text, pq.question_type, pq.marks, pq.image_url, countRow.next_idx]
+    );
+    const options = Array.isArray(pq.options) ? pq.options : (pq.options ? JSON.parse(pq.options) : []);
+    for (let i = 0; i < options.length; i++) {
+      const o = options[i];
+      await q(`INSERT INTO options (question_id, option_text, is_correct, order_index) VALUES ($1,$2,$3,$4)`, [newQ.id, o.text || o.option_text, !!o.is_correct, i]);
+    }
+    await q(`UPDATE pending_questions SET status='approved', reviewed_at=now() WHERE id=$1`, [pq.id]);
+    json(res, { ok: true, question: newQ });
+  } catch (err) { bad(res, err.message, 500); }
+});
+
+app.post('/api/admin/pending-questions/:id/reject', requireSchool, async (req, res) => {
+  await q(`UPDATE pending_questions SET status='rejected', reviewed_at=now() WHERE id=$1 AND school_id=$2`, [req.params.id, req.school.id]);
+  json(res, { ok: true });
+});
+
+app.get('/api/admin/pending-scores', requireSchool, async (req, res) => {
+  const rows = await q(
+    `SELECT ps.*, st.name AS staff_name
+     FROM pending_scores ps LEFT JOIN staff st ON st.id = ps.staff_id
+     WHERE ps.school_id=$1 AND ps.status='pending' ORDER BY ps.created_at DESC`,
+    [req.school.id]
+  );
+  json(res, rows.rows);
+});
+
+app.post('/api/admin/pending-scores/:id/approve', requireSchool, async (req, res) => {
+  try {
+    const { rows: [ps] } = await q(`SELECT * FROM pending_scores WHERE id=$1 AND school_id=$2 AND status='pending'`, [req.params.id, req.school.id]);
+    if (!ps) return bad(res, 'Pending score not found', 404);
+    if (!ps.student_id) return bad(res, 'No matching student found — reject this and ask the teacher to check the spelling of the student name.', 400);
+
+    await q(
+      `INSERT INTO scores (school_id, student_id, subject, score, term)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (school_id, student_id, subject, term) DO UPDATE SET score=EXCLUDED.score, uploaded_at=now()`,
+      [req.school.id, ps.student_id, ps.subject, ps.score, ps.term]
+    );
+    await q(`UPDATE pending_scores SET status='approved', reviewed_at=now() WHERE id=$1`, [ps.id]);
+    json(res, { ok: true });
+  } catch (err) { bad(res, err.message, 500); }
+});
+
+app.post('/api/admin/pending-scores/:id/reject', requireSchool, async (req, res) => {
+  await q(`UPDATE pending_scores SET status='rejected', reviewed_at=now() WHERE id=$1 AND school_id=$2`, [req.params.id, req.school.id]);
+  json(res, { ok: true });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
