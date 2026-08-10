@@ -478,6 +478,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
   <div style="display:flex;align-items:center;gap:12px;">
     <button class="dark-toggle" onclick="toggleDarkMode()" id="dark-toggle-btn">🌙 Dark</button>
     <div class="ai-status"><span class="ai-dot"></span> EduPing</div>
+    <button class="dark-toggle" onclick="doLogout()" id="logout-btn" style="display:none;">🚪 Log out</button>
   </div>
 </div>
 
@@ -600,6 +601,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         <button class="subnav-btn" onclick="switchSection('performance',this)">🏅 Rankings</button>
         <button class="subnav-btn" onclick="switchSection('results',this)">📄 Results</button>
         <button class="subnav-btn" onclick="switchSection('cbt',this)">📝 CBT Exams</button>
+        <button class="subnav-btn" onclick="switchSection('pending',this)">📥 Pending Review <span id="pending-badge" style="display:none;background:var(--danger);color:white;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></button>
+        <button class="subnav-btn" onclick="switchSection('team',this)">👥 Team & Devices</button>
       </div>
 
       <!-- OVERVIEW -->
@@ -1679,6 +1682,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
     <div id="staff-modal-body" style="font-size:13px;"></div>
     <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
       <button class="broadcast-btn" id="staff-modal-msg-btn">💬 Send WhatsApp</button>
+      <button class="action-btn" id="staff-modal-portal-btn">📋 Send Portal Link</button>
       <button class="action-btn" id="staff-modal-edit-btn">✏️ Edit Details</button>
       <button class="action-btn" id="staff-modal-deactivate-btn" style="color:var(--danger);border-color:var(--danger);">🚫 Deactivate</button>
     </div>
@@ -1738,7 +1742,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
 
 <script>
 // ── State ─────────────────────────────────────────────────
-let schoolId = '', adminPassword = '', schoolData = null, chatHistory = [];
+let schoolId = '', adminPassword = '', sessionToken = '', adminRole = '', schoolData = null, chatHistory = [];
 const colors = ['#1a7a4a','#c9a84c','#3b82f6','#7c3aed','#e53935','#0891b2'];
 
 // ── API helper ────────────────────────────────────────────
@@ -2119,7 +2123,7 @@ async function api(url, opts = {}) {
   if (typeof isDemoMode !== 'undefined' && isDemoMode) {
     return _demoApiHandler(url, opts);
   }
-  opts.headers = { 'Content-Type': 'application/json', 'x-school-id': schoolId, 'x-admin-password': adminPassword, ...(opts.headers || {}) };
+  opts.headers = { 'Content-Type': 'application/json', 'x-school-id': schoolId, ...(sessionToken ? { 'Authorization': 'Bearer ' + sessionToken } : { 'x-admin-password': adminPassword }), ...(opts.headers || {}) };
   const res = await fetch(url, opts);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
@@ -2128,15 +2132,59 @@ async function api(url, opts = {}) {
 // ── Login ─────────────────────────────────────────────────
 async function doLogin() {
   schoolId = document.getElementById('login-school-id').value.trim();
-  adminPassword = document.getElementById('login-password').value.trim();
-  if (!schoolId || !adminPassword) { showLoginErr('Please fill in both fields'); return; }
+  const password = document.getElementById('login-password').value.trim();
+  if (!schoolId || !password) { showLoginErr('Please fill in both fields'); return; }
   try {
-    const res = await fetch('/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ school_id: schoolId, password: adminPassword }) });
+    const res = await fetch('/api/admin/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ school_id: schoolId, password, device_label: deviceLabel() })
+    });
     const data = await res.json();
     if (!data.ok) { showLoginErr('Wrong school ID or password'); return; }
+    sessionToken = data.token;
+    adminRole = data.admin?.role || '';
     schoolData = data.school;
+    localStorage.setItem('eduping-session', JSON.stringify({ token: sessionToken, schoolId }));
     onLoggedIn();
   } catch(e) { showLoginErr('Could not connect. Try again.'); }
+}
+
+function deviceLabel() {
+  const ua = navigator.userAgent;
+  if (/Android/i.test(ua)) return 'Android device';
+  if (/iPhone|iPad/i.test(ua)) return 'iPhone/iPad';
+  if (/Mac/i.test(ua)) return 'Mac';
+  if (/Windows/i.test(ua)) return 'Windows PC';
+  return 'Browser';
+}
+
+// Auto-restore a session on page load, so refreshing doesn't force a re-login
+async function restoreSession() {
+  const saved = localStorage.getItem('eduping-session');
+  if (!saved) return false;
+  try {
+    const { token, schoolId: sid } = JSON.parse(saved);
+    if (!token || !sid) return false;
+    sessionToken = token; schoolId = sid;
+    const res = await fetch('/api/admin/dashboard', { headers: { 'x-school-id': schoolId, 'Authorization': 'Bearer ' + sessionToken } });
+    if (!res.ok) throw new Error('expired');
+    const data = await res.json();
+    schoolData = data.school;
+    onLoggedIn();
+    return true;
+  } catch (e) {
+    localStorage.removeItem('eduping-session');
+    sessionToken = ''; schoolId = '';
+    return false;
+  }
+}
+
+async function doLogout() {
+  try { await api('/api/admin/logout', { method: 'POST' }); } catch (e) {}
+  localStorage.removeItem('eduping-session');
+  sessionToken = ''; adminPassword = ''; adminRole = ''; schoolId = ''; schoolData = null;
+  document.getElementById('main-tabs').style.display = 'none';
+  showView('login');
 }
 
 function showLoginErr(msg) {
@@ -2147,6 +2195,7 @@ function showLoginErr(msg) {
 function onLoggedIn() {
   document.getElementById('login-view').classList.remove('active');
   document.getElementById('main-tabs').style.display = 'flex';
+  document.getElementById('logout-btn').style.display = '';
   document.getElementById('school-name-nav').textContent = schoolData.name + ', ' + (schoolData.city || '');
   document.getElementById('dash-greeting').textContent = 'Good morning, Admin 👋';
   document.getElementById('dash-school-sub').textContent = schoolData.name;
@@ -2206,6 +2255,8 @@ const switchSection = function(name, btn) {
     if (name === 'termcal') { loadTermCalendar(); loadExamSchedule(); }
     if (name === 'performance') loadPerformanceRankings();
     if (name === 'results') loadResults();
+    if (name === 'pending') loadPendingReview();
+    if (name === 'team') { loadTeam(); loadSessions(); }
   }, 120);
 };
 
@@ -3717,6 +3768,133 @@ function exportSigninLog() {
   downloadCSV(csv, 'signin_log_export.csv');
 }
 
+// ── Pending Review (teacher portal submissions) ─────────────
+async function loadPendingReview() {
+  const qList = document.getElementById('pending-questions-list');
+  const sList = document.getElementById('pending-scores-list');
+  try {
+    const [questions, scores] = await Promise.all([
+      api('/api/admin/pending-questions'),
+      api('/api/admin/pending-scores')
+    ]);
+
+    const badge = document.getElementById('pending-badge');
+    const total = questions.length + scores.length;
+    if (total > 0) { badge.textContent = total; badge.style.display = ''; } else { badge.style.display = 'none'; }
+
+    qList.innerHTML = questions.length ? questions.map(q => `
+      <div class="dash-card" style="margin-bottom:10px;padding:14px;">
+        <div style="display:flex;justify-content:space-between;gap:8px;">
+          <div>
+            <div style="font-weight:600;font-size:14px;">${esc(q.question_text)}</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+              ${esc(q.staff_name||'Unknown teacher')} · ${esc(q.assessment_title||'—')} · ${q.question_type.toUpperCase()} · ${q.marks} mark${q.marks!==1?'s':''}
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0;">
+            <button class="btn btn-primary btn-sm" onclick="approvePendingQuestion('${q.id}')">✅ Approve</button>
+            <button class="btn btn-danger btn-sm" onclick="rejectPendingQuestion('${q.id}')">✕</button>
+          </div>
+        </div>
+      </div>`).join('') : '<div class="loading">No pending questions</div>';
+
+    sList.innerHTML = scores.length ? scores.map(s => `
+      <div class="dash-card" style="margin-bottom:10px;padding:14px;">
+        <div style="display:flex;justify-content:space-between;gap:8px;">
+          <div>
+            <div style="font-weight:600;font-size:14px;">${esc(s.student_name)} — ${esc(s.subject)}: ${s.score}</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+              ${esc(s.staff_name||'Unknown teacher')} · ${esc(s.class_name||'—')} · ${esc(s.term||'—')}
+              ${!s.student_id ? '<span style="color:var(--danger);"> · ⚠️ No matching student found</span>' : ''}
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0;">
+            <button class="btn btn-primary btn-sm" onclick="approvePendingScore('${s.id}')">✅ Approve</button>
+            <button class="btn btn-danger btn-sm" onclick="rejectPendingScore('${s.id}')">✕</button>
+          </div>
+        </div>
+      </div>`).join('') : '<div class="loading">No pending scores</div>';
+  } catch(e) {
+    qList.innerHTML = '<div class="loading">Could not load pending questions</div>';
+    sList.innerHTML = '<div class="loading">Could not load pending scores</div>';
+  }
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+
+async function approvePendingQuestion(id) {
+  try { await api('/api/admin/pending-questions/' + id + '/approve', { method: 'POST' }); showToast('✅ Question approved and added to the exam'); loadPendingReview(); }
+  catch(e) { showToast('Failed to approve ❌'); }
+}
+async function rejectPendingQuestion(id) {
+  if (!confirm('Reject this question? The teacher will need to resubmit if it was a mistake.')) return;
+  try { await api('/api/admin/pending-questions/' + id + '/reject', { method: 'POST' }); showToast('Question rejected'); loadPendingReview(); }
+  catch(e) { showToast('Failed ❌'); }
+}
+async function approvePendingScore(id) {
+  try { await api('/api/admin/pending-scores/' + id + '/approve', { method: 'POST' }); showToast('✅ Score approved'); loadPendingReview(); }
+  catch(e) { showToast(e.message || 'Failed to approve ❌'); }
+}
+async function rejectPendingScore(id) {
+  if (!confirm('Reject this score?')) return;
+  try { await api('/api/admin/pending-scores/' + id + '/reject', { method: 'POST' }); showToast('Score rejected'); loadPendingReview(); }
+  catch(e) { showToast('Failed ❌'); }
+}
+
+// ── Team & Devices ───────────────────────────────────────────
+async function loadTeam() {
+  const list = document.getElementById('team-list');
+  try {
+    const data = await api('/api/admin/team');
+    document.getElementById('team-plan-note').textContent =
+      `${data.plan === 'starter' ? 'Basic' : 'Paid'} plan — ${data.admins.length}/${data.max_admins} admin${data.max_admins===1?'':'s'} used.`;
+    list.innerHTML = data.admins.map(a => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-color,#eee);">
+        <div><strong>${esc(a.username)}</strong> <span class="pill ${a.role==='owner'?'pill-gold':'pill-green'}" style="margin-left:6px;">${a.role}</span></div>
+        ${a.role !== 'owner' ? `<button class="btn btn-danger btn-sm" onclick="removeTeamAdmin('${a.id}','${esc(a.username)}')">Remove</button>` : ''}
+      </div>`).join('');
+  } catch(e) { list.innerHTML = '<div class="loading">Could not load team</div>'; }
+}
+
+async function addTeamAdmin() {
+  const username = document.getElementById('team-new-username').value.trim();
+  const password = document.getElementById('team-new-password').value.trim();
+  if (!username || password.length < 6) { showToast('Enter a username and a password of 6+ characters'); return; }
+  try {
+    await api('/api/admin/team', { method: 'POST', body: JSON.stringify({ username, password }) });
+    showToast('✅ Admin added');
+    document.getElementById('team-new-username').value = '';
+    document.getElementById('team-new-password').value = '';
+    loadTeam();
+  } catch(e) { showToast(e.message || 'Failed to add admin ❌'); }
+}
+
+async function removeTeamAdmin(id, username) {
+  if (!confirm('Remove ' + username + '? Their sessions will be logged out immediately.')) return;
+  try { await api('/api/admin/team/' + id, { method: 'DELETE' }); showToast('Admin removed'); loadTeam(); loadSessions(); }
+  catch(e) { showToast(e.message || 'Failed ❌'); }
+}
+
+async function loadSessions() {
+  const list = document.getElementById('sessions-list');
+  try {
+    const sessions = await api('/api/admin/sessions');
+    list.innerHTML = sessions.length ? sessions.map(s => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-color,#eee);">
+        <div>
+          <strong>${esc(s.device_label||'Unknown device')}</strong> ${s.is_current ? '<span class="pill pill-green" style="margin-left:6px;">This device</span>' : ''}
+          <div style="font-size:12px;color:var(--text-muted);">${esc(s.username)} · last active ${new Date(s.last_seen_at).toLocaleString('en-NG')}</div>
+        </div>
+        ${!s.is_current ? `<button class="btn btn-danger btn-sm" onclick="revokeSession('${s.id}')">Log out</button>` : ''}
+      </div>`).join('') : '<div class="loading">No active sessions</div>';
+  } catch(e) { list.innerHTML = '<div class="loading">Could not load sessions</div>'; }
+}
+
+async function revokeSession(id) {
+  try { await api('/api/admin/sessions/' + id + '/revoke', { method: 'POST' }); showToast('Device logged out'); loadSessions(); }
+  catch(e) { showToast('Failed ❌'); }
+}
+
 async function loadFeeSetupClasses() {
   const sel = document.getElementById('fee-setup-class');
   if (!sel || sel.options.length > 1) return;
@@ -3934,6 +4112,7 @@ function exportClassSummary() {
 document.addEventListener('DOMContentLoaded', () => {
   const d = document.getElementById('payment-date');
   if (d) d.value = new Date().toISOString().slice(0,10);
+  restoreSession();
 });
 
 
@@ -4932,9 +5111,18 @@ async function openStaffProfile(staffId) {
       if (staff.phone) window.open('https://wa.me/' + staff.phone.replace(/\D/g,''), '_blank');
       else showToast('No phone number on record');
     };
+    document.getElementById('staff-modal-portal-btn').onclick = () => sendPortalLink(staffId, staff.name);
     document.getElementById('staff-modal-edit-btn').onclick = () => editStaffDetails(staff);
     document.getElementById('staff-modal-deactivate-btn').onclick = () => deactivateStaff(staffId, staff.name);
   } catch(e) { document.getElementById('staff-modal-body').innerHTML = '<div style="color:var(--danger);">Could not load profile</div>'; }
+}
+
+async function sendPortalLink(staffId, staffName) {
+  if (!confirm('Send ' + staffName + ' a link to submit CBT questions and scores? It expires in 48 hours and requires a PIN sent separately on WhatsApp.')) return;
+  try {
+    const r = await api('/api/admin/staff/' + staffId + '/portal-link', { method: 'POST' });
+    showToast(r.sent ? '✅ Link and PIN sent to ' + staffName + ' on WhatsApp' : '⚠️ Link created, but WhatsApp is not configured — copy it manually: ' + r.link);
+  } catch(e) { showToast('Failed to send portal link ❌'); }
 }
 
 function closeStaffModal() {
@@ -5522,7 +5710,7 @@ function renderScoreChart(subjects) {
 // ── Toast ─────────────────────────────────────────────────
 function exitDemo() {
   isDemoMode = false;
-  schoolId = ''; adminPassword = ''; schoolData = null;
+  schoolId = ''; adminPassword = ''; sessionToken = ''; schoolData = null;
   window._schoolName = '';
   const banner = document.getElementById('demo-banner');
   if (banner) banner.style.display = 'none';
@@ -5898,6 +6086,39 @@ async function generatePayLink(studentId, studentName) {
   </div>
 </section>
 
+<!-- PENDING REVIEW (teacher portal submissions) -->
+<section id="section-pending" class="dash-section">
+  <div class="section-header"><h2>📥 Pending Review</h2></div>
+  <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">
+    Questions and scores teachers submitted through their portal link. Nothing here reaches students or report cards until you approve it.
+  </p>
+
+  <h3 style="font-size:15px;margin-bottom:8px;">❓ Questions</h3>
+  <div id="pending-questions-list" class="loading">Loading…</div>
+
+  <h3 style="font-size:15px;margin:24px 0 8px;">📊 Scores</h3>
+  <div id="pending-scores-list" class="loading">Loading…</div>
+</section>
+
+<!-- TEAM & DEVICES -->
+<section id="section-team" class="dash-section">
+  <div class="section-header"><h2>👥 Team & Devices</h2></div>
+
+  <h3 style="font-size:15px;margin-bottom:8px;">Admin accounts</h3>
+  <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;" id="team-plan-note"></p>
+  <div id="team-list" class="loading">Loading…</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;max-width:420px;">
+    <input type="text" id="team-new-username" placeholder="Username" class="form-input" style="flex:1;min-width:120px;">
+    <input type="password" id="team-new-password" placeholder="Password (6+ chars)" class="form-input" style="flex:1;min-width:120px;">
+    <button class="btn btn-primary btn-sm" onclick="addTeamAdmin()">+ Add admin</button>
+  </div>
+
+  <h3 style="font-size:15px;margin:28px 0 8px;">Active sessions</h3>
+  <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;">Every device currently logged into this school's dashboard. Revoke any you don't recognize.</p>
+  <div id="sessions-list" class="loading">Loading…</div>
+</section>
+
+
 
 <!-- ════════════════════════════════════════════════════════════
      MODALS
@@ -6079,6 +6300,11 @@ Q: The sky is blue | A: True | B: False | ANS: A</pre>
 .badge-closed { background: #fee2e2; color: #991b1b; }
 
 /* Buttons */
+.btn { display: inline-block; padding: 9px 16px; font-size: 14px; font-weight: 600; border-radius: 8px; border: 1px solid transparent; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all .15s; text-align: center; }
+.btn-primary { background: var(--green, #1a7a4a); color: #fff; border-color: var(--green, #1a7a4a); }
+.btn-primary:hover { opacity: .9; }
+.btn-outline { background: #fff; color: var(--text, #111827); border-color: #e5e7eb; }
+.btn-outline:hover { background: #f9fafb; }
 .btn-sm { padding: 7px 14px; font-size: 13px; border-radius: 8px; }
 .btn-danger { background: #ef4444; color: #fff; border: none; cursor: pointer; border-radius: 8px; }
 .btn-danger:hover { background: #dc2626; }
