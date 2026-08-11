@@ -1736,6 +1736,82 @@ app.get('/api/admin/dashboard', requireSchool, async (req, res) => {
   ]);
   json(res, { school: req.school, students: students.rows[0].total, staff: staff.rows[0].total, conversations: messages.rows[0].total, outstanding_fees: fees.rows[0].outstanding, new_admissions: admissions.rows[0].total, signin: signin.rows });
 });
+
+// ── Branding & result customization ──
+app.get('/api/admin/branding', requireSchool, async (req, res) => {
+  json(res, {
+    branding: getSchoolBranding(req.school),
+    grading_scale: getSchoolGradingScale(req.school),
+    is_default_scale: !req.school.config?.grading_scale
+  });
+});
+
+app.post('/api/admin/branding', requireSchool, async (req, res) => {
+  try {
+    const { primary_color } = req.body;
+    if (!primary_color || !/^#[0-9a-fA-F]{6}$/.test(primary_color)) return bad(res, 'Provide a valid hex color, e.g. #1a7a4a', 400);
+    const config = { ...(req.school.config || {}), branding: { ...(req.school.config?.branding || {}), primary_color } };
+    await q(`UPDATE schools SET config=$1 WHERE id=$2`, [JSON.stringify(config), req.school.id]);
+    json(res, { ok: true, branding: getSchoolBranding({ config }) });
+  } catch (err) { bad(res, err.message, 500); }
+});
+
+app.post('/api/admin/branding/logo', requireSchool, async (req, res) => {
+  try {
+    const { image_data, mime_type } = req.body;
+    if (!image_data) return bad(res, 'image_data required', 400);
+
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+    if (!cloudName || !apiKey || !apiSecret) return bad(res, 'Logo upload is not configured yet', 400);
+
+    const timestamp = Math.round(Date.now() / 1000);
+    const folder = 'eduping/' + req.school.id + '/branding';
+    const sig = crypto.createHash('sha1').update('folder=' + folder + '&timestamp=' + timestamp + apiSecret).digest('hex');
+
+    const formData = new URLSearchParams();
+    formData.append('file', 'data:' + (mime_type || 'image/png') + ';base64,' + image_data);
+    formData.append('api_key', apiKey);
+    formData.append('timestamp', timestamp);
+    formData.append('folder', folder);
+    formData.append('signature', sig);
+
+    const uploadRes = await fetch('https://api.cloudinary.com/v1_1/' + cloudName + '/image/upload', { method: 'POST', body: formData });
+    const uploadData = await uploadRes.json();
+    if (uploadData.error) return bad(res, uploadData.error.message, 400);
+
+    const config = { ...(req.school.config || {}), branding: { ...(req.school.config?.branding || {}), logo_url: uploadData.secure_url } };
+    await q(`UPDATE schools SET config=$1 WHERE id=$2`, [JSON.stringify(config), req.school.id]);
+    json(res, { ok: true, logo_url: uploadData.secure_url });
+  } catch (err) { bad(res, err.message, 500); }
+});
+
+app.post('/api/admin/branding/grading-scale', requireSchool, async (req, res) => {
+  try {
+    const { scale } = req.body;
+    if (!Array.isArray(scale) || !scale.length) return bad(res, 'Provide at least one grade band', 400);
+    for (const b of scale) {
+      if (typeof b.min !== 'number' || b.min < 0 || b.min > 100 || !b.grade || typeof b.grade !== 'string') {
+        return bad(res, 'Each grade band needs a numeric min (0-100) and a grade label', 400);
+      }
+    }
+    const sorted = [...scale].sort((a, b) => b.min - a.min);
+    const config = { ...(req.school.config || {}), grading_scale: sorted };
+    await q(`UPDATE schools SET config=$1 WHERE id=$2`, [JSON.stringify(config), req.school.id]);
+    json(res, { ok: true, grading_scale: sorted });
+  } catch (err) { bad(res, err.message, 500); }
+});
+
+app.post('/api/admin/branding/grading-scale/reset', requireSchool, async (req, res) => {
+  try {
+    const config = { ...(req.school.config || {}) };
+    delete config.grading_scale;
+    await q(`UPDATE schools SET config=$1 WHERE id=$2`, [JSON.stringify(config), req.school.id]);
+    json(res, { ok: true, grading_scale: defaultGradingScale() });
+  } catch (err) { bad(res, err.message, 500); }
+});
+
 const crud = [
   ['students','name,class_name,parent_name,parent_phone,weekly_performance_score'], ['staff','name,role,subject,class,phone,performance_score'], ['admission_inquiries','parent_name,phone,child_name,class_applying,status'], ['school_events','title,event_date']
 ];
@@ -3462,10 +3538,12 @@ app.post('/api/results/verify', async (req, res) => {
   } catch(err) { bad(res, err.message, 500); }
 });
 
+const GRADE_COLOR_PALETTE = ['#1a7a4a', '#0055cc', '#f59e0b', '#f97316', '#e53935', '#b91c1c'];
+
 app.get('/results/:token', async (req, res) => {
   try {
     const record = await q(`SELECT rp.*, sr.subjects, sr.position, sr.remark, sr.term, sr.class_name,
-                             s.name as student_name, sch.name as school_name, sch.city
+                             s.name as student_name, sch.name as school_name, sch.city, sch.config
                              FROM result_pins rp
                              JOIN student_results sr ON sr.student_id=rp.student_id AND sr.term=rp.term
                              JOIN students s ON s.id=rp.student_id
@@ -3473,12 +3551,14 @@ app.get('/results/:token', async (req, res) => {
                              WHERE rp.access_token=$1`, [req.params.token]);
     if (!record.rows.length) return res.status(404).send('Result not found or link has expired.');
     const r = record.rows[0];
+    const scale = getSchoolGradingScale({ config: r.config });
+    const branding = getSchoolBranding({ config: r.config });
     const subjects = typeof r.subjects === 'string' ? JSON.parse(r.subjects) : r.subjects || {};
     const subjectRows = Object.entries(subjects).map(([subj, score]) => {
       const s = Number(score);
-      const grade = s>=70?'A':s>=60?'B':s>=50?'C':s>=40?'D':'F';
-      const gc = s>=70?'#1a7a4a':s>=60?'#0055cc':s>=50?'#f59e0b':s>=40?'#f97316':'#e53935';
-      const remark = s>=70?'Excellent':s>=60?'Very Good':s>=50?'Good':s>=40?'Average':'Needs Improvement';
+      const bandIndex = scale.findIndex(b => s >= b.min);
+      const { grade, remark } = gradeForScore(s, scale);
+      const gc = GRADE_COLOR_PALETTE[Math.min(Math.max(bandIndex, 0), GRADE_COLOR_PALETTE.length - 1)];
       return `<tr><td>${subj}</td><td style="text-align:center;">${score}</td><td style="text-align:center;font-weight:700;color:${gc};">${grade}</td><td>${remark}</td></tr>`;
     }).join('');
     const avg = Object.values(subjects).length ? Math.round(Object.values(subjects).reduce((a,b)=>a+Number(b),0)/Object.values(subjects).length) : 0;
@@ -3494,7 +3574,8 @@ app.get('/results/:token', async (req, res) => {
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'DM Sans',sans-serif;background:#f0f2f5;padding:24px 16px;}
 .result-card{background:white;max-width:700px;margin:0 auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08);}
-.result-header{background:#0d4a2c;color:white;padding:28px 32px;text-align:center;}
+.result-header{background:${branding.primary_color};color:white;padding:28px 32px;text-align:center;}
+.result-logo{max-height:56px;max-width:200px;margin:0 auto 10px;display:block;}
 .school-name{font-size:22px;font-weight:700;margin-bottom:4px;}
 .result-title{font-size:13px;opacity:.7;letter-spacing:1px;text-transform:uppercase;}
 .student-info{display:grid;grid-template-columns:repeat(3,1fr);gap:0;background:#f7f9f7;border-bottom:1px solid #e9edef;}
@@ -3508,15 +3589,15 @@ th{font-size:11px;font-weight:600;color:#667781;text-align:left;padding:10px 12p
 td{padding:12px 12px;border-bottom:1px solid #f0f2f5;color:#0f1a14;}
 .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:0 28px 24px;}
 .sum-box{background:#f7f9f7;border-radius:8px;padding:14px;text-align:center;}
-.sum-val{font-size:24px;font-weight:700;color:#1a7a4a;}
+.sum-val{font-size:24px;font-weight:700;color:${branding.primary_color};}
 .sum-label{font-size:11px;color:#667781;margin-top:3px;}
 .remarks-section{padding:0 28px 24px;}
 .remarks-title{font-size:12px;font-weight:600;color:#667781;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;}
 .remarks-box{background:#f7f9f7;border-radius:8px;padding:14px;font-size:14px;color:#374151;line-height:1.6;}
 .result-footer{background:#f7f9f7;padding:16px 28px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #e9edef;}
 .footer-brand{font-size:13px;color:#aab;}
-.footer-brand strong{color:#1a7a4a;}
-.print-btn{background:#1a7a4a;color:white;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+.footer-brand strong{color:${branding.primary_color};}
+.print-btn{background:${branding.primary_color};color:white;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
 @media print{
   body{background:white;padding:0;}
   .print-btn{display:none;}
@@ -3527,6 +3608,7 @@ td{padding:12px 12px;border-bottom:1px solid #f0f2f5;color:#0f1a14;}
 <body>
 <div class="result-card">
   <div class="result-header">
+    ${branding.logo_url ? `<img class="result-logo" src="${branding.logo_url}" alt="${r.school_name} logo">` : ''}
     <div class="school-name">${r.school_name}</div>
     <div class="result-title">${r.term} — Academic Result</div>
   </div>
@@ -3794,12 +3876,32 @@ async function migrateCBT() {
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
-function calcGrade(pct) {
-  if (pct >= 70) return 'A';
-  if (pct >= 60) return 'B';
-  if (pct >= 50) return 'C';
-  if (pct >= 45) return 'D';
-  return 'F';
+function defaultGradingScale() {
+  return [
+    { min: 70, grade: 'A', remark: 'Excellent' },
+    { min: 60, grade: 'B', remark: 'Very Good' },
+    { min: 50, grade: 'C', remark: 'Good' },
+    { min: 45, grade: 'D', remark: 'Average' },
+    { min: 0,  grade: 'F', remark: 'Needs Improvement' }
+  ];
+}
+
+function getSchoolGradingScale(school) {
+  const scale = school?.config?.grading_scale;
+  if (Array.isArray(scale) && scale.length && scale.every(b => typeof b.min === 'number' && b.grade)) {
+    return [...scale].sort((a, b) => b.min - a.min);
+  }
+  return defaultGradingScale();
+}
+
+function gradeForScore(pct, scale) {
+  const band = scale.find(b => pct >= b.min) || scale[scale.length - 1];
+  return { grade: band.grade, remark: band.remark || '' };
+}
+
+function getSchoolBranding(school) {
+  const b = school?.config?.branding || {};
+  return { logo_url: b.logo_url || null, primary_color: b.primary_color || '#0d4a2c' };
 }
 
 function shuffle(arr) {
@@ -3818,7 +3920,8 @@ function ordinal(n) {
 
 // ─── AUTO-MARK ────────────────────────────────────────────────────────────────
 
-async function autoMark(answers, assessmentId) {
+async function autoMark(answers, assessmentId, gradingScale) {
+  const scale = gradingScale || defaultGradingScale();
   const { rows: questions } = await q(
     `SELECT q.id, q.question_type, q.marks,
        json_agg(json_build_object('id',o.id,'option_text',o.option_text,'is_correct',o.is_correct)
@@ -3851,7 +3954,8 @@ async function autoMark(answers, assessmentId) {
   }
 
   const percentage = totalMarks > 0 ? Math.round((score / totalMarks) * 100) : 0;
-  return { score, totalMarks, percentage, grade: calcGrade(percentage), breakdown };
+  const { grade } = gradeForScore(percentage, scale);
+  return { score, totalMarks, percentage, grade, breakdown };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -4551,7 +4655,7 @@ app.get('/api/cbt/:token', async (req, res) => {
          a.title, a.subject, a.time_limit_minutes,
          a.status AS assessment_status, a.start_time, a.end_time,
          a.show_score_immediately,
-         sc.name AS school_name
+         sc.name AS school_name, sc.config
        FROM student_sessions ss
        JOIN students s  ON s.id  = ss.student_id
        JOIN assessments a ON a.id = ss.assessment_id
@@ -4559,15 +4663,20 @@ app.get('/api/cbt/:token', async (req, res) => {
        WHERE ss.access_token = $1`, [req.params.token]
     );
     if (!session) return bad(res, 'Invalid or expired exam link', 404);
+    const branding = getSchoolBranding({ config: session.config });
 
     if (session.status === 'submitted') {
+      const scale = getSchoolGradingScale({ config: session.config });
+      const { grade } = gradeForScore(session.percentage || 0, scale);
       return json(res, {
         already_submitted: true,
         student_name: session.student_name,
         score: session.score,
         total_marks: session.total_marks,
         percentage: session.percentage,
-        show_score: session.show_score_immediately
+        grade,
+        show_score: session.show_score_immediately,
+        branding
       });
     }
     if (session.assessment_status !== 'active') {
@@ -4583,7 +4692,8 @@ app.get('/api/cbt/:token', async (req, res) => {
       time_limit_minutes: session.time_limit_minutes,
       time_remaining_seconds: session.time_remaining_seconds || session.time_limit_minutes * 60,
       start_time: session.start_time,
-      end_time: session.end_time
+      end_time: session.end_time,
+      branding
     });
   } catch (e) { bad(res, e.message); }
 });
@@ -4666,7 +4776,7 @@ app.post('/api/cbt/:token/submit', async (req, res) => {
       `SELECT ss.*, a.show_score_immediately, a.time_limit_minutes, a.subject, a.title, a.term,
          a.status AS assessment_status,
          s.parent_phone, s.parent_name, s.name AS student_name,
-         sc.name AS school_name, sc.twilio_number
+         sc.name AS school_name, sc.twilio_number, sc.config
        FROM student_sessions ss
        JOIN assessments a ON a.id = ss.assessment_id
        JOIN students s    ON s.id = ss.student_id
@@ -4681,8 +4791,9 @@ app.post('/api/cbt/:token/submit', async (req, res) => {
       ? Math.round((Date.now() - new Date(session.started_at).getTime()) / 1000)
       : session.time_limit_minutes * 60 - (time_remaining_seconds || 0);
 
+    const gradingScale = getSchoolGradingScale({ config: session.config });
     const { score, totalMarks, percentage, grade, breakdown } =
-      await autoMark(finalAnswers, session.assessment_id);
+      await autoMark(finalAnswers, session.assessment_id, gradingScale);
 
     // Update session
     await q(
@@ -4731,6 +4842,7 @@ app.post('/api/cbt/:token/submit', async (req, res) => {
     const result = {
       submitted: true,
       show_score: session.show_score_immediately,
+      branding: getSchoolBranding({ config: session.config }),
       message: session.show_score_immediately
         ? null
         : 'Your answers have been submitted. Results will be released by your school.'
