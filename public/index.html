@@ -603,6 +603,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         <button class="subnav-btn" onclick="switchSection('cbt',this)">📝 CBT Exams</button>
         <button class="subnav-btn" onclick="switchSection('pending',this)">📥 Pending Review <span id="pending-badge" style="display:none;background:var(--danger);color:white;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></button>
         <button class="subnav-btn" onclick="switchSection('team',this)">👥 Team & Devices</button>
+        <button class="subnav-btn" onclick="switchSection('branding',this)">🎨 Branding & Results</button>
       </div>
 
       <!-- OVERVIEW -->
@@ -2257,6 +2258,7 @@ const switchSection = function(name, btn) {
     if (name === 'results') loadResults();
     if (name === 'pending') loadPendingReview();
     if (name === 'team') { loadTeam(); loadSessions(); }
+    if (name === 'branding') loadBranding();
   }, 120);
 };
 
@@ -3893,6 +3895,99 @@ async function loadSessions() {
 async function revokeSession(id) {
   try { await api('/api/admin/sessions/' + id + '/revoke', { method: 'POST' }); showToast('Device logged out'); loadSessions(); }
   catch(e) { showToast('Failed ❌'); }
+}
+
+// ── Branding & Results ───────────────────────────────────────
+let currentGradingScale = [];
+
+async function loadBranding() {
+  try {
+    const data = await api('/api/admin/branding');
+    if (data.branding.logo_url) {
+      document.getElementById('branding-logo-preview').src = data.branding.logo_url;
+      document.getElementById('branding-logo-preview').style.display = '';
+      document.getElementById('branding-logo-empty').style.display = 'none';
+    } else {
+      document.getElementById('branding-logo-preview').style.display = 'none';
+      document.getElementById('branding-logo-empty').style.display = '';
+    }
+    document.getElementById('branding-color-input').value = data.branding.primary_color;
+    currentGradingScale = data.grading_scale;
+    renderGradeRows();
+  } catch(e) { showToast('Could not load branding settings ❌'); }
+}
+
+async function uploadBrandingLogo() {
+  const file = document.getElementById('branding-logo-file').files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { showToast('Logo must be under 2MB'); return; }
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const base64 = reader.result.split(',')[1];
+    try {
+      const r = await api('/api/admin/branding/logo', { method: 'POST', body: JSON.stringify({ image_data: base64, mime_type: file.type }) });
+      document.getElementById('branding-logo-preview').src = r.logo_url;
+      document.getElementById('branding-logo-preview').style.display = '';
+      document.getElementById('branding-logo-empty').style.display = 'none';
+      showToast('✅ Logo updated');
+    } catch(e) { showToast(e.message || 'Upload failed ❌'); }
+  };
+  reader.readAsDataURL(file);
+}
+
+async function saveBrandingColor() {
+  const color = document.getElementById('branding-color-input').value;
+  try {
+    await api('/api/admin/branding', { method: 'POST', body: JSON.stringify({ primary_color: color }) });
+    showToast('✅ Brand color saved');
+  } catch(e) { showToast(e.message || 'Failed to save color ❌'); }
+}
+
+function renderGradeRows() {
+  const wrap = document.getElementById('grading-scale-rows');
+  wrap.innerHTML = currentGradingScale.map((band, i) => `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;max-width:520px;">
+      <input type="number" class="form-input" style="width:80px;" value="${band.min}" min="0" max="100" placeholder="Min %" onchange="updateGradeRow(${i},'min',this.value)">
+      <input type="text" class="form-input" style="width:70px;" value="${esc(band.grade)}" placeholder="Grade" onchange="updateGradeRow(${i},'grade',this.value)">
+      <input type="text" class="form-input" style="flex:1;" value="${esc(band.remark||'')}" placeholder="Remark" onchange="updateGradeRow(${i},'remark',this.value)">
+      <button class="btn btn-danger btn-sm" onclick="removeGradeRow(${i})">✕</button>
+    </div>`).join('');
+}
+
+function updateGradeRow(i, field, value) {
+  currentGradingScale[i][field] = field === 'min' ? Number(value) : value;
+}
+
+function addGradeRow() {
+  currentGradingScale.push({ min: 0, grade: '', remark: '' });
+  renderGradeRows();
+}
+
+function removeGradeRow(i) {
+  currentGradingScale.splice(i, 1);
+  renderGradeRows();
+}
+
+async function saveGradingScale() {
+  if (!currentGradingScale.length) { showToast('Add at least one grade band'); return; }
+  for (const b of currentGradingScale) {
+    if (!b.grade || b.min === undefined || b.min === null || b.min === '') { showToast('Every band needs a minimum % and a grade letter'); return; }
+  }
+  try {
+    await api('/api/admin/branding/grading-scale', { method: 'POST', body: JSON.stringify({ scale: currentGradingScale }) });
+    showToast('✅ Grading scale saved');
+    loadBranding();
+  } catch(e) { showToast(e.message || 'Failed to save ❌'); }
+}
+
+async function resetGradingScale() {
+  if (!confirm('Reset to the default grading scale (A/B/C/D/F)?')) return;
+  try {
+    const r = await api('/api/admin/branding/grading-scale/reset', { method: 'POST' });
+    currentGradingScale = r.grading_scale;
+    renderGradeRows();
+    showToast('Reset to default');
+  } catch(e) { showToast('Failed ❌'); }
 }
 
 async function loadFeeSetupClasses() {
@@ -6116,6 +6211,38 @@ async function generatePayLink(studentId, studentName) {
   <h3 style="font-size:15px;margin:28px 0 8px;">Active sessions</h3>
   <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;">Every device currently logged into this school's dashboard. Revoke any you don't recognize.</p>
   <div id="sessions-list" class="loading">Loading…</div>
+</section>
+
+<!-- BRANDING & RESULTS -->
+<section id="section-branding" class="dash-section">
+  <div class="section-header"><h2>🎨 Branding & Results</h2></div>
+  <p style="color:var(--text-muted);font-size:13px;margin-bottom:20px;">
+    Controls how your CBT exams and term result pages look to students and parents — your logo, colors, and grading scale.
+  </p>
+
+  <h3 style="font-size:15px;margin-bottom:8px;">Logo</h3>
+  <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
+    <img id="branding-logo-preview" src="" alt="Logo" style="height:56px;max-width:180px;object-fit:contain;border:1px solid var(--border-color,#eee);border-radius:8px;padding:6px;display:none;">
+    <div id="branding-logo-empty" style="font-size:13px;color:var(--text-muted);">No logo uploaded yet</div>
+    <input type="file" id="branding-logo-file" accept="image/*" style="display:none;" onchange="uploadBrandingLogo()">
+    <button class="btn btn-outline btn-sm" onclick="document.getElementById('branding-logo-file').click()">📤 Upload logo</button>
+  </div>
+
+  <h3 style="font-size:15px;margin-bottom:8px;">Brand color</h3>
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:24px;">
+    <input type="color" id="branding-color-input" value="#0d4a2c" style="width:48px;height:38px;border:1px solid var(--border-color,#eee);border-radius:6px;cursor:pointer;">
+    <button class="btn btn-primary btn-sm" onclick="saveBrandingColor()">Save color</button>
+    <span style="font-size:12px;color:var(--text-muted);">Used on exam screens and result pages</span>
+  </div>
+
+  <h3 style="font-size:15px;margin-bottom:8px;">Grading scale</h3>
+  <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;">Define your own grade bands — e.g. WAEC-style A1–F9, or simple A–F. Applies to CBT results and term report cards.</p>
+  <div id="grading-scale-rows"></div>
+  <div style="display:flex;gap:8px;margin-top:10px;">
+    <button class="btn btn-outline btn-sm" onclick="addGradeRow()">+ Add band</button>
+    <button class="btn btn-primary btn-sm" onclick="saveGradingScale()">Save grading scale</button>
+    <button class="btn btn-outline btn-sm" onclick="resetGradingScale()">Reset to default</button>
+  </div>
 </section>
 
 

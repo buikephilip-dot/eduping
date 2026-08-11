@@ -264,6 +264,7 @@
 <!-- LOBBY -->
 <div id="screen-lobby" class="screen">
   <div class="card">
+    <img id="lobby-logo" src="" alt="School logo" style="display:none;max-height:48px;max-width:180px;margin:0 auto 14px;">
     <span class="badge badge-blue">📝 EXAM</span>
     <div id="lobby-title"></div>
     <div id="lobby-student"></div>
@@ -353,11 +354,12 @@
   async function boot() {
     try {
       const data = await api('GET', `/api/cbt/${token}`);
+      applyBranding(data.branding);
       if (data.already_submitted) {
         if (data.show_score && data.percentage != null) {
           showResultScreen({
             score: data.score, total_marks: data.total_marks,
-            percentage: data.percentage
+            percentage: data.percentage, grade: data.grade
           });
         } else {
           show('screen-submitted');
@@ -374,6 +376,19 @@
       document.getElementById('header-student').textContent = data.student_name;
     } catch (e) {
       showError(e.message);
+    }
+  }
+
+  function applyBranding(branding) {
+    if (!branding) return;
+    if (branding.primary_color) {
+      document.documentElement.style.setProperty('--brand', branding.primary_color);
+      document.documentElement.style.setProperty('--brand-dark', branding.primary_color);
+    }
+    if (branding.logo_url) {
+      const logo = document.getElementById('lobby-logo');
+      logo.src = branding.logo_url;
+      logo.style.display = 'block';
     }
   }
 
@@ -571,6 +586,7 @@
         answers,
         time_remaining_seconds: timeRemaining
       });
+      applyBranding(data.branding);
       document.getElementById('nav-bar').style.display = 'none';
       if (data.show_score && data.percentage != null) {
         showResultScreen(data);
@@ -594,7 +610,7 @@
     document.getElementById('nav-bar').style.display = 'none';
 
     const pct = Math.round(data.percentage || 0);
-    const grade = calcGrade(pct);
+    const grade = data.grade || '';
     const icon = pct >= 70 ? '🎉' : pct >= 50 ? '👍' : '📚';
     document.querySelector('.result-icon').textContent = icon;
     document.getElementById('result-grade').textContent = grade;
@@ -633,14 +649,6 @@
     return String(s)
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-  }
-
-  function calcGrade(pct) {
-    if (pct >= 70) return 'A';
-    if (pct >= 60) return 'B';
-    if (pct >= 50) return 'C';
-    if (pct >= 45) return 'D';
-    return 'F';
   }
 
   // ── Prevent accidental navigation ────────────────────────────────────────────
