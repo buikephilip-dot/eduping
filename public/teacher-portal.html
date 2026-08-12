@@ -51,6 +51,15 @@
   .spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--brand); border-radius: 50%; animation: spin .8s linear infinite; margin: 30px auto; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .hidden { display: none !important; }
+  .student-report-card { transition: opacity .15s; }
+  .student-report-card.excluded { opacity: .45; }
+  .student-report-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .student-report-name { font-weight: 700; font-size: 15px; }
+  .exclude-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+  .exclude-toggle input { width: 16px; height: 16px; cursor: pointer; }
+  .report-textarea { min-height: 90px; }
+  .save-edit-btn { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600; color: var(--brand); cursor: pointer; margin-top: 10px; }
+  .save-status { font-size: 12px; color: var(--success); margin-top: 6px; display: none; }
 </style>
 </head>
 <body>
@@ -85,6 +94,7 @@
     <div class="tabs">
       <button class="tab-btn active" id="tab-q-btn" onclick="switchTab('question')">➕ Add Question</button>
       <button class="tab-btn" id="tab-s-btn" onclick="switchTab('score')">📊 Submit Score</button>
+      <button class="tab-btn hidden" id="tab-r-btn" onclick="switchTab('report')">📋 Weekly Report</button>
     </div>
 
     <div class="tab-panel active" id="tab-question">
@@ -130,6 +140,22 @@
         <button class="btn btn-primary" id="s-submit-btn" onclick="submitScore()">Submit for review</button>
         <div class="err" id="s-err"></div>
         <div class="ok" id="s-ok"></div>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-report">
+      <div class="card" id="report-summary-card">
+        <h2 style="font-size:16px;margin-bottom:8px;" id="report-title"></h2>
+        <p class="muted" id="report-class-insights" style="margin-bottom:0;"></p>
+      </div>
+
+      <div id="report-students-list"></div>
+
+      <div class="card">
+        <p class="muted" style="margin-bottom:0;">Excluded students won't receive a message this week — everyone else will, the moment you approve.</p>
+        <button class="btn btn-primary" id="approve-all-btn" onclick="approveAllReport()">✅ Approve All & Send</button>
+        <div class="err" id="report-err"></div>
+        <div class="ok" id="report-ok"></div>
       </div>
     </div>
 
@@ -213,6 +239,11 @@ function showMain() {
 
   renderOptions();
   renderRecent();
+
+  if (portalData.pending_weekly_report) {
+    document.getElementById('tab-r-btn').classList.remove('hidden');
+    loadWeeklyReport(portalData.pending_weekly_report.id);
+  }
 }
 
 function renderOptions() {
@@ -318,11 +349,97 @@ function renderRecent() {
 
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
+// ── Weekly Report review ─────────────────────────────────────
+let weeklyReport = null;
+
+async function loadWeeklyReport(reportId) {
+  try {
+    const r = await api(`/weekly-report/${reportId}`);
+    weeklyReport = r;
+    renderWeeklyReport();
+  } catch (e) {
+    document.getElementById('report-students-list').innerHTML = `<p class="err" style="display:block;">${escapeHtml(e.message)}</p>`;
+  }
+}
+
+function renderWeeklyReport() {
+  const data = weeklyReport.report_json;
+  document.getElementById('report-title').textContent = `${weeklyReport.class_id} — Week ${weeklyReport.week_number} Report`;
+  document.getElementById('report-class-insights').textContent = data.class_insights?.overall_performance || '';
+
+  const list = document.getElementById('report-students-list');
+  list.innerHTML = (data.students || []).map(s => `
+    <div class="card student-report-card ${s.excluded ? 'excluded' : ''}" id="student-card-${s.student_id}">
+      <div class="student-report-header">
+        <span class="student-report-name">${escapeHtml(s.student_name)}</span>
+        <label class="exclude-toggle">
+          <input type="checkbox" ${s.excluded ? 'checked' : ''} onchange="toggleExclude('${s.student_id}', this.checked)">
+          Exclude from this week's send
+        </label>
+      </div>
+      <textarea class="report-textarea" id="report-text-${s.student_id}">${escapeHtml(s.parent_report || '')}</textarea>
+      <button class="save-edit-btn" onclick="saveStudentEdit('${s.student_id}')">💾 Save edit</button>
+      <div class="save-status" id="save-status-${s.student_id}">Saved ✓</div>
+    </div>
+  `).join('');
+
+  if (weeklyReport.status !== 'generated') {
+    document.getElementById('approve-all-btn').disabled = true;
+    document.getElementById('approve-all-btn').textContent =
+      weeklyReport.status === 'approved' ? '✅ Already approved & sent' : weeklyReport.status;
+  }
+}
+
+function toggleExclude(studentId, excluded) {
+  document.getElementById(`student-card-${studentId}`).classList.toggle('excluded', excluded);
+  api(`/weekly-report/${weeklyReport.id}/student/${studentId}`, { method: 'POST', body: { excluded } })
+    .catch(() => showSaveStatus(studentId, false));
+}
+
+async function saveStudentEdit(studentId) {
+  const text = document.getElementById(`report-text-${studentId}`).value.trim();
+  if (!text) return;
+  try {
+    await api(`/weekly-report/${weeklyReport.id}/student/${studentId}`, { method: 'POST', body: { parent_report: text } });
+    showSaveStatus(studentId, true);
+  } catch (e) {
+    showSaveStatus(studentId, false);
+  }
+}
+
+function showSaveStatus(studentId, ok) {
+  const el = document.getElementById(`save-status-${studentId}`);
+  if (!el) return;
+  el.textContent = ok ? 'Saved ✓' : 'Could not save — try again';
+  el.style.color = ok ? 'var(--success)' : 'var(--danger)';
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 2500);
+}
+
+async function approveAllReport() {
+  if (!confirm("Approve this week's report? Everyone not excluded will be messaged immediately.")) return;
+  const btn = document.getElementById('approve-all-btn');
+  const errEl = document.getElementById('report-err'), okEl = document.getElementById('report-ok');
+  errEl.style.display = 'none'; okEl.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Sending…';
+  try {
+    const r = await api(`/weekly-report/${weeklyReport.id}/approve`, { method: 'POST' });
+    okEl.textContent = r.message; okEl.style.display = 'block';
+    btn.textContent = '✅ Sent';
+    weeklyReport.status = 'approved';
+  } catch (e) {
+    errEl.textContent = e.message; errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = '✅ Approve All & Send';
+  }
+}
+
 function switchTab(name) {
   document.getElementById('tab-question').classList.toggle('active', name === 'question');
   document.getElementById('tab-score').classList.toggle('active', name === 'score');
+  document.getElementById('tab-report').classList.toggle('active', name === 'report');
   document.getElementById('tab-q-btn').classList.toggle('active', name === 'question');
   document.getElementById('tab-s-btn').classList.toggle('active', name === 'score');
+  document.getElementById('tab-r-btn').classList.toggle('active', name === 'report');
 }
 
 load();

@@ -604,6 +604,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         <button class="subnav-btn" onclick="switchSection('pending',this)">📥 Pending Review <span id="pending-badge" style="display:none;background:var(--danger);color:white;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></button>
         <button class="subnav-btn" onclick="switchSection('team',this)">👥 Team & Devices</button>
         <button class="subnav-btn" onclick="switchSection('branding',this)">🎨 Branding & Results</button>
+        <button class="subnav-btn" onclick="switchSection('weeklyreports',this)">📋 Weekly Reports</button>
       </div>
 
       <!-- OVERVIEW -->
@@ -2259,6 +2260,7 @@ const switchSection = function(name, btn) {
     if (name === 'pending') loadPendingReview();
     if (name === 'team') { loadTeam(); loadSessions(); }
     if (name === 'branding') loadBranding();
+    if (name === 'weeklyreports') loadWeeklyReportsAdmin();
   }, 120);
 };
 
@@ -3988,6 +3990,83 @@ async function resetGradingScale() {
     renderGradeRows();
     showToast('Reset to default');
   } catch(e) { showToast('Failed ❌'); }
+}
+
+// ── Weekly Reports (admin visibility) ────────────────────────
+let wrClassesLoaded = false;
+
+const WR_STATUS_LABEL = {
+  pending: '⏳ Queued',
+  generated: '🟡 Awaiting teacher review',
+  approved: '✅ Approved & sent',
+  failed: '❌ Generation failed'
+};
+const WR_STATUS_PILL = {
+  pending: 'pill-gold',
+  generated: 'pill-gold',
+  approved: 'pill-green',
+  failed: 'pill-red'
+};
+
+async function loadWeeklyReportsAdmin() {
+  const list = document.getElementById('weekly-reports-list');
+  try {
+    if (!wrClassesLoaded) {
+      const classes = await api('/api/admin/reports/classes');
+      const sel = document.getElementById('wr-class-filter');
+      sel.innerHTML = '<option value="">All classes</option>' + classes.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+      wrClassesLoaded = true;
+    }
+
+    const classFilter = document.getElementById('wr-class-filter').value;
+    const url = '/api/admin/reports' + (classFilter ? '?class_id=' + encodeURIComponent(classFilter) : '');
+    const reports = await api(url);
+
+    if (!reports.length) { list.innerHTML = '<div class="loading">No reports generated yet — they run automatically every Friday at 3pm, or trigger one now above.</div>'; return; }
+
+    list.innerHTML = reports.map(r => {
+      const data = typeof r.report_json === 'string' ? JSON.parse(r.report_json) : r.report_json;
+      const studentCount = data?.students?.length || 0;
+      const excludedCount = data?.students?.filter(s => s.excluded).length || 0;
+      return `
+      <div class="dash-card" style="margin-bottom:10px;padding:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div>
+            <strong>${esc(r.class_id)}</strong> — Week ${r.week_number}, ${r.year}
+            <span class="pill ${WR_STATUS_PILL[r.status]||''}" style="margin-left:8px;">${WR_STATUS_LABEL[r.status]||r.status}</span>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="toggleReportDetail('${r.id}')">View details</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px;">
+          ${studentCount} student${studentCount===1?'':'s'}${excludedCount ? `, ${excludedCount} excluded` : ''}
+          ${r.reviewed_by_name ? ` · Reviewed by ${esc(r.reviewed_by_name)}` : ''}
+          ${r.error_log ? ` · <span style="color:var(--danger);">${esc(r.error_log)}</span>` : ''}
+        </div>
+        <div id="report-detail-${r.id}" style="display:none;margin-top:12px;border-top:1px solid var(--border-color,#eee);padding-top:12px;">
+          ${data?.class_insights?.overall_performance ? `<p style="font-size:13px;margin-bottom:10px;"><strong>Class summary:</strong> ${esc(data.class_insights.overall_performance)}</p>` : ''}
+          ${(data?.students||[]).map(s => `
+            <div style="padding:8px 0;border-bottom:1px solid var(--border-color,#f0f0f0);font-size:13px;${s.excluded?'opacity:.5;':''}">
+              <strong>${esc(s.student_name || s.student_id)}</strong>${s.excluded ? ' <span style="color:var(--danger);">(excluded)</span>' : ''}
+              <div style="color:var(--text-muted);margin-top:2px;">${esc(s.parent_report || '—')}</div>
+            </div>`).join('')}
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { list.innerHTML = '<div class="loading">Could not load reports</div>'; }
+}
+
+function toggleReportDetail(id) {
+  const el = document.getElementById('report-detail-' + id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function triggerWeeklyReportGeneration() {
+  if (!confirm('Generate this week\'s reports now? Class teachers will be notified to review as soon as each class is ready.')) return;
+  try {
+    const r = await api('/api/admin/reports/trigger', { method: 'POST' });
+    showToast(r.message || '✅ Generation started');
+    setTimeout(loadWeeklyReportsAdmin, 3000);
+  } catch(e) { showToast(e.message || 'Failed to trigger ❌'); }
 }
 
 async function loadFeeSetupClasses() {
@@ -6243,6 +6322,25 @@ async function generatePayLink(studentId, studentName) {
     <button class="btn btn-primary btn-sm" onclick="saveGradingScale()">Save grading scale</button>
     <button class="btn btn-outline btn-sm" onclick="resetGradingScale()">Reset to default</button>
   </div>
+</section>
+
+<!-- WEEKLY REPORTS -->
+<section id="section-weeklyreports" class="dash-section">
+  <div class="section-header"><h2>📋 Weekly Reports</h2></div>
+  <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">
+    AI-drafted weekly reports, generated every Friday. Each one needs the class teacher's approval before parents see it —
+    nothing here goes out until they've reviewed it via their portal link.
+  </p>
+
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
+    <select id="wr-class-filter" class="form-input" style="width:auto;" onchange="loadWeeklyReportsAdmin()">
+      <option value="">All classes</option>
+    </select>
+    <button class="btn btn-outline btn-sm" onclick="triggerWeeklyReportGeneration()">🚀 Generate now</button>
+    <button class="btn btn-outline btn-sm" onclick="loadWeeklyReportsAdmin()">🔄 Refresh</button>
+  </div>
+
+  <div id="weekly-reports-list" class="loading">Loading…</div>
 </section>
 
 
