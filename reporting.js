@@ -66,6 +66,8 @@ async function migrateReportingTables(q) {
       error_log   TEXT,
       generated_at      TIMESTAMPTZ DEFAULT now(),
       sent_to_parents   BOOLEAN DEFAULT false,
+      reviewed_by_staff_id UUID REFERENCES staff(id) ON DELETE SET NULL,
+      reviewed_at TIMESTAMPTZ,
       UNIQUE(school_id, week_number, year, class_id)
     );
     CREATE INDEX IF NOT EXISTS idx_weekly_reports_school
@@ -73,6 +75,9 @@ async function migrateReportingTables(q) {
     CREATE INDEX IF NOT EXISTS idx_weekly_reports_status
       ON weekly_reports(status);
   `);
+  // For deployments that already had this table before review columns existed
+  await q(`ALTER TABLE weekly_reports ADD COLUMN IF NOT EXISTS reviewed_by_staff_id UUID REFERENCES staff(id) ON DELETE SET NULL`).catch(() => {});
+  await q(`ALTER TABLE weekly_reports ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ`).catch(() => {});
 }
 
 // ── SYSTEM PROMPT ─────────────────────────────────────────────────
@@ -148,7 +153,7 @@ Return ONLY valid JSON. No preamble, no markdown, no explanation. Exact format:
 
 // ── CORE: Generate report for one school ──────────────────────────
 
-async function generateWeeklyReportForSchool(schoolId, { q, callAI, twilioSend }) {
+async function generateWeeklyReportForSchool(schoolId, { q, callAI, twilioSend, issueTeacherPortalToken }) {
   // Load school
   const schoolRes = await q(`SELECT * FROM schools WHERE id=$1`, [schoolId]);
   const school = schoolRes.rows[0];
@@ -189,7 +194,7 @@ async function generateWeeklyReportForSchool(schoolId, { q, callAI, twilioSend }
     try {
       // Gather all student data for this class in parallel
       const studentInputs = await Promise.all(classStudents.map(async student => {
-        const [scores, attendance, behaviour, homeworks] = await Promise.all([
+        const [scores, attendance, behaviour, homeworks, sickbay] = await Promise.all([
           q(`SELECT subject, score, uploaded_at FROM scores
              WHERE student_id=$1 AND school_id=$2 AND uploaded_at >= $3
              ORDER BY uploaded_at DESC LIMIT 20`,
@@ -205,7 +210,11 @@ async function generateWeeklyReportForSchool(schoolId, { q, callAI, twilioSend }
           q(`SELECT subject, description, due_date FROM homeworks
              WHERE school_id=$1 AND class_name=$2 AND created_at >= $3
              ORDER BY created_at DESC LIMIT 10`,
-            [schoolId, student.class_name, weekStart])
+            [schoolId, student.class_name, weekStart]),
+          q(`SELECT reason, action_taken, visited_at FROM sickbay_log
+             WHERE student_id=$1 AND school_id=$2 AND visited_at >= $3
+             ORDER BY visited_at DESC`,
+            [student.id, schoolId, weekStart])
         ]);
 
         return {
@@ -215,7 +224,8 @@ async function generateWeeklyReportForSchool(schoolId, { q, callAI, twilioSend }
           scores: scores.rows,
           attendance: attendance.rows,
           behaviour_notes: behaviour.rows,
-          homeworks_assigned: homeworks.rows
+          homeworks_assigned: homeworks.rows,
+          sickbay_visits: sickbay.rows
         };
       }));
 
@@ -269,7 +279,10 @@ ${JSON.stringify(studentInputs, null, 2)}`;
       report.class_id = classId;
       if (!Array.isArray(report.students)) report.students = [];
 
-      // Save report
+      // Every student starts unreviewed — teacher approves all or edits/excludes individuals
+      report.students = report.students.map(s => ({ ...s, approved: false, excluded: false }));
+
+      // Save report — awaiting teacher review before anything is sent
       await q(`
         UPDATE weekly_reports
         SET status='generated', report_json=$1, generated_at=now(), error_log=null
@@ -277,12 +290,25 @@ ${JSON.stringify(studentInputs, null, 2)}`;
       `, [JSON.stringify(report), schoolId, weekNumber, year, classId]);
 
       totalReports++;
-      console.log(`[Reports] ✅ ${school.name} — ${classId} — Week ${weekNumber} (${classStudents.length} students)`);
+      console.log(`[Reports] ✅ ${school.name} — ${classId} — Week ${weekNumber} (${classStudents.length} students) — awaiting teacher review`);
 
-      // ── Send WhatsApp reports to parents ──────────────────────
-      // Decouple: send after all classes are generated, rate-limited
-      // We queue here and send in a separate sweep below
-      // For now, mark them ready for sending
+      // ── Notify the class teacher their report is ready to review ──
+      // Reports never auto-send; a teacher must approve (or edit/exclude students) first.
+      if (issueTeacherPortalToken) {
+        try {
+          const { rows: teachers } = await q(
+            `SELECT * FROM staff WHERE school_id=$1 AND class=$2 AND phone IS NOT NULL`,
+            [schoolId, classId]
+          );
+          for (const teacher of teachers) {
+            await issueTeacherPortalToken(teacher, school, {
+              intro: `📋 Hi ${teacher.name}, this week's AI-drafted report for ${classId} is ready for your review. Approve, edit, or exclude any student before it's sent to parents:`
+            });
+          }
+        } catch (notifyErr) {
+          console.warn(`[Reports] Could not notify teacher for ${classId}:`, notifyErr.message);
+        }
+      }
     } catch (err) {
       // Log failure but don't crash — other classes continue
       console.error(`[Reports] ❌ ${school.name} — ${classId}:`, err.message);
@@ -297,70 +323,72 @@ ${JSON.stringify(studentInputs, null, 2)}`;
   return { school: school.name, classes: classEntries.length, generated: totalReports, students: students.length };
 }
 
-// ── SEND: Deliver parent reports via WhatsApp ─────────────────────
-// Called separately from generation — rate-limited at ~8 msg/sec
+// ── SEND: Deliver one already-approved report's messages via WhatsApp ─────
+// Never call this on an unreviewed ('generated') report — only on 'approved'.
+// Skips any student the teacher excluded during review.
+async function sendReportRow(reportRow, school, { q, twilioSend }) {
+  const report = typeof reportRow.report_json === 'string' ? JSON.parse(reportRow.report_json) : reportRow.report_json;
+  if (!report?.students?.length) return { sent: 0, failed: 0, excluded: 0 };
 
+  let sent = 0, failed = 0, excluded = 0;
+  for (const sr of report.students) {
+    if (sr.excluded) { excluded++; continue; }
+    if (!sr.parent_report) continue;
+
+    const studentRes = await q(`SELECT parent_phone, name FROM students WHERE id=$1`, [sr.student_id]);
+    const student = studentRes.rows[0];
+    if (!student?.parent_phone) continue;
+
+    const msg =
+      `📊 *Weekly Report — ${school.name}*\n\n` +
+      `${sr.parent_report}\n\n` +
+      `📚 Week ${reportRow.week_number} · ${school.current_term || 'Current Term'}\n` +
+      `Reply to ask EduPing any questions.\n${school.name} 🏫`;
+
+    try {
+      await twilioSend(student.parent_phone, school.twilio_number || process.env.TWILIO_DEFAULT_FROM, msg);
+      sent++;
+    } catch (e) {
+      console.warn(`[Reports] Send failed — ${student.name}:`, e.message);
+      failed++;
+    }
+    await sleep(125); // ~8 msg/sec — stays under Twilio WhatsApp limits
+  }
+
+  await q(`UPDATE weekly_reports SET sent_to_parents=true WHERE id=$1`, [reportRow.id]);
+  console.log(`[Reports] 📱 ${school.name} — ${reportRow.class_id} — Sent: ${sent}, Excluded: ${excluded}, Failed: ${failed}`);
+  return { sent, failed, excluded };
+}
+
+// School/week sweep — sends any already-approved reports that haven't gone out yet
+// (e.g. a retry after a prior send attempt partially failed). Never touches unreviewed reports.
 async function sendWeeklyReportMessages(schoolId, weekNumber, { q, twilioSend }) {
   const year = new Date().getFullYear();
-  const schoolRes = await q(`SELECT * FROM schools WHERE id=$1`, [schoolId]);
-  const school = schoolRes.rows[0];
-  if (!school) return;
+  const school = (await q(`SELECT * FROM schools WHERE id=$1`, [schoolId])).rows[0];
+  if (!school) return { sent: 0, failed: 0 };
 
   const reports = await q(`
     SELECT * FROM weekly_reports
     WHERE school_id=$1 AND week_number=$2 AND year=$3
-      AND status='generated' AND sent_to_parents=false
+      AND status='approved' AND sent_to_parents=false
   `, [schoolId, weekNumber, year]);
 
-  let sent = 0, failed = 0;
-
+  let totals = { sent: 0, failed: 0, excluded: 0 };
   for (const reportRow of reports.rows) {
-    const report = reportRow.report_json;
-    if (!report?.students?.length) continue;
-
-    for (const sr of report.students) {
-      if (!sr.parent_report) continue;
-
-      // Look up parent phone
-      const studentRes = await q(`SELECT parent_phone, name FROM students WHERE id=$1`, [sr.student_id]);
-      const student = studentRes.rows[0];
-      if (!student?.parent_phone) continue;
-
-      const msg =
-        `📊 *Weekly Report — ${school.name}*\n\n` +
-        `${sr.parent_report}\n\n` +
-        `📚 Week ${weekNumber} · ${school.current_term || 'Current Term'}\n` +
-        `Reply to ask EduPing any questions.\n${school.name} 🏫`;
-
-      try {
-        await twilioSend(student.parent_phone, school.twilio_number || process.env.TWILIO_DEFAULT_FROM, msg);
-        sent++;
-      } catch (e) {
-        console.warn(`[Reports] Send failed — ${student.name}:`, e.message);
-        failed++;
-      }
-
-      // Rate limit: ~8 messages/sec — stays under Twilio WhatsApp limits
-      await sleep(125);
-    }
-
-    // Mark this class report as sent
-    await q(`
-      UPDATE weekly_reports SET sent_to_parents=true
-      WHERE id=$1
-    `, [reportRow.id]);
+    const r = await sendReportRow(reportRow, school, { q, twilioSend });
+    totals.sent += r.sent; totals.failed += r.failed; totals.excluded += r.excluded;
   }
-
-  console.log(`[Reports] 📱 ${school.name} — Sent: ${sent}, Failed: ${failed}`);
-  return { sent, failed };
+  return totals;
 }
 
 // ── CRON: Full weekly sweep across all schools ────────────────────
 
 function scheduleReportingCron(cronLib, deps) {
-  const { q, callAI, twilioSend } = deps;
+  const { q, callAI, twilioSend, issueTeacherPortalToken } = deps;
 
   // ── STEP 1: Generate reports — Friday 3pm ─────────────────────
+  // Generation notifies each class teacher automatically (inside generateWeeklyReportForSchool)
+  // so there is no separate "send" step here — reports never go to parents until a teacher approves.
   cronLib.schedule('0 15 * * 5', async () => {
     console.log('[Reports] 🚀 Starting weekly report generation run...');
     const schools = (await q(`SELECT id, name FROM schools WHERE status='active'`)).rows;
@@ -369,7 +397,7 @@ function scheduleReportingCron(cronLib, deps) {
     const results = await withConcurrency(
       schools,
       school => withTimeout(
-        generateWeeklyReportForSchool(school.id, { q, callAI, twilioSend }),
+        generateWeeklyReportForSchool(school.id, { q, callAI, twilioSend, issueTeacherPortalToken }),
         120000,
         school.name
       ),
@@ -381,27 +409,42 @@ function scheduleReportingCron(cronLib, deps) {
     console.log(`[Reports] Generation complete — ✅ ${succeeded} schools done, ❌ ${failed} failed`);
   });
 
-  // ── STEP 2: Send messages — Friday 4pm (1hr after generation) ─
-  cronLib.schedule('0 16 * * 5', async () => {
-    console.log('[Reports] 📱 Starting weekly report delivery run...');
+  // ── STEP 2: Reminder for un-reviewed reports — Saturday 10am ──
+  // Reports still sitting at status='generated' a day later haven't been approved yet.
+  // Nudge the class teacher again rather than silently sending unreviewed content.
+  cronLib.schedule('0 10 * * 6', async () => {
+    console.log('[Reports] 🔔 Checking for un-reviewed reports...');
     const weekNumber = getISOWeek(new Date());
-    const schools = (await q(`SELECT id FROM schools WHERE status='active'`)).rows;
+    const year = new Date().getFullYear();
+    const pending = await q(
+      `SELECT DISTINCT school_id, class_id FROM weekly_reports
+       WHERE status='generated' AND week_number=$1 AND year=$2`,
+      [weekNumber, year]
+    );
+    if (!pending.rows.length) { console.log('[Reports] Nothing pending review'); return; }
 
-    // Sequential sends — don't blast Twilio with 100 parallel loops
-    for (const school of schools) {
+    for (const row of pending.rows) {
       try {
-        await sendWeeklyReportMessages(school.id, weekNumber, { q, twilioSend });
-      } catch(e) {
-        console.error(`[Reports] Send sweep failed for ${school.id}:`, e.message);
+        const school = (await q(`SELECT * FROM schools WHERE id=$1`, [row.school_id])).rows[0];
+        if (!school) continue;
+        const teachers = (await q(
+          `SELECT * FROM staff WHERE school_id=$1 AND class=$2 AND phone IS NOT NULL`,
+          [row.school_id, row.class_id]
+        )).rows;
+        for (const teacher of teachers) {
+          await issueTeacherPortalToken(teacher, school, {
+            intro: `🔔 Reminder: ${row.class_id}'s weekly report is still awaiting your review before it can go to parents:`
+          });
+        }
+      } catch (e) {
+        console.error(`[Reports] Reminder failed for ${row.school_id}/${row.class_id}:`, e.message);
       }
-      // Brief pause between schools
-      await sleep(2000);
+      await sleep(500);
     }
-
-    console.log('[Reports] 📱 Delivery run complete');
+    console.log(`[Reports] 🔔 Reminders sent for ${pending.rows.length} un-reviewed reports`);
   });
 
-  // ── STEP 3: Retry failed reports — Saturday 8am ───────────────
+  // ── STEP 3: Retry failed report generation — Saturday 8am ─────
   cronLib.schedule('0 8 * * 6', async () => {
     const weekNumber = getISOWeek(new Date());
     const year = new Date().getFullYear();
@@ -415,7 +458,7 @@ function scheduleReportingCron(cronLib, deps) {
 
     await withConcurrency(
       failed.rows,
-      row => generateWeeklyReportForSchool(row.school_id, { q, callAI, twilioSend }),
+      row => generateWeeklyReportForSchool(row.school_id, { q, callAI, twilioSend, issueTeacherPortalToken }),
       3
     );
   });
@@ -423,21 +466,25 @@ function scheduleReportingCron(cronLib, deps) {
 
 // ── API ROUTES ────────────────────────────────────────────────────
 
-function registerReportingRoutes(app, { requireSchool, q, callAI, twilioSend }) {
+function registerReportingRoutes(app, { requireSchool, q, callAI, twilioSend, issueTeacherPortalToken, requireUnlockedTeacherToken, getSchool }) {
 
   // GET /api/admin/reports — list reports for this school
+  // report_json is always visible to admin regardless of status — approval doesn't
+  // hide the audit trail of what was actually sent to parents.
   app.get('/api/admin/reports', requireSchool, async (req, res) => {
     try {
       const { week_number, year, class_id } = req.query;
       const currentYear = year || new Date().getFullYear();
-      let sql = `SELECT id, week_number, year, class_id, status, sent_to_parents, generated_at,
-                        CASE WHEN status='generated' THEN report_json ELSE null END as report_json,
-                        error_log
-                 FROM weekly_reports WHERE school_id=$1 AND year=$2`;
+      let sql = `SELECT wr.id, wr.week_number, wr.year, wr.class_id, wr.status, wr.sent_to_parents, wr.generated_at,
+                        wr.report_json, wr.error_log, wr.reviewed_at,
+                        st.name AS reviewed_by_name
+                 FROM weekly_reports wr
+                 LEFT JOIN staff st ON st.id = wr.reviewed_by_staff_id
+                 WHERE wr.school_id=$1 AND wr.year=$2`;
       const params = [req.school.id, currentYear];
-      if (week_number) { sql += ` AND week_number=$${params.length+1}`; params.push(week_number); }
-      if (class_id)    { sql += ` AND class_id=$${params.length+1}`;    params.push(class_id); }
-      sql += ` ORDER BY generated_at DESC LIMIT 100`;
+      if (week_number) { sql += ` AND wr.week_number=$${params.length+1}`; params.push(week_number); }
+      if (class_id)    { sql += ` AND wr.class_id=$${params.length+1}`;    params.push(class_id); }
+      sql += ` ORDER BY wr.generated_at DESC LIMIT 100`;
       res.json((await q(sql, params)).rows);
     } catch(err) { res.status(500).json({ error: err.message }); }
   });
@@ -454,36 +501,37 @@ function registerReportingRoutes(app, { requireSchool, q, callAI, twilioSend }) 
   app.post('/api/admin/reports/trigger', requireSchool, async (req, res) => {
     try {
       // Run async — don't block the HTTP response
-      generateWeeklyReportForSchool(req.school.id, { q, callAI, twilioSend })
+      generateWeeklyReportForSchool(req.school.id, { q, callAI, twilioSend, issueTeacherPortalToken })
         .then(result => console.log('[Reports] Manual trigger done:', result))
         .catch(err  => console.error('[Reports] Manual trigger failed:', err.message));
-      res.json({ ok: true, message: 'Report generation started. Check back in a few minutes.' });
+      res.json({ ok: true, message: 'Report generation started. Class teachers will be notified to review once ready.' });
     } catch(err) { res.status(500).json({ error: err.message }); }
   });
 
-  // POST /api/admin/reports/send — manually trigger delivery for this school
+  // POST /api/admin/reports/send — resend already-approved reports that haven't gone out yet
+  // (e.g. a prior send attempt partially failed). Cannot bypass teacher review —
+  // sendWeeklyReportMessages only ever touches status='approved' rows.
   app.post('/api/admin/reports/send', requireSchool, async (req, res) => {
     try {
       const weekNumber = req.body.week_number || getISOWeek(new Date());
       sendWeeklyReportMessages(req.school.id, weekNumber, { q, twilioSend })
         .then(r => console.log('[Reports] Manual send done:', r))
         .catch(e => console.error('[Reports] Manual send failed:', e.message));
-      res.json({ ok: true, message: 'Sending started. Parents will receive WhatsApp messages shortly.' });
+      res.json({ ok: true, message: 'Sending started for approved reports. Anything still awaiting teacher review will not be sent.' });
     } catch(err) { res.status(500).json({ error: err.message }); }
   });
 
-  // GET /api/admin/reports/student/:studentId — get all reports for one student
+  // GET /api/admin/reports/student/:studentId — full report history for one student, any status
   app.get('/api/admin/reports/student/:studentId', requireSchool, async (req, res) => {
     try {
-      // Pull student's class, then fetch relevant weekly_reports
       const studentRes = await q(`SELECT class_name FROM students WHERE id=$1 AND school_id=$2`, [req.params.studentId, req.school.id]);
       if (!studentRes.rows.length) return res.status(404).json({ error: 'Student not found' });
       const classId = studentRes.rows[0].class_name || 'General';
 
       const rows = await q(`
-        SELECT week_number, year, generated_at, report_json
+        SELECT week_number, year, status, sent_to_parents, generated_at, report_json
         FROM weekly_reports
-        WHERE school_id=$1 AND class_id=$2 AND status='generated'
+        WHERE school_id=$1 AND class_id=$2
         ORDER BY year DESC, week_number DESC LIMIT 20
       `, [req.school.id, classId]);
 
@@ -503,22 +551,101 @@ function registerReportingRoutes(app, { requireSchool, q, callAI, twilioSend }) 
       res.json(studentReports);
     } catch(err) { res.status(500).json({ error: err.message }); }
   });
+
+  // ── Teacher-facing review (via the same tokenized portal link) ──
+  // All guarded by requireUnlockedTeacherToken — same PIN + device-binding as
+  // the question/score submission flow. A teacher can only ever see/act on
+  // their own class's report.
+
+  app.get('/api/teacher/:token/weekly-report/:reportId', requireUnlockedTeacherToken, async (req, res) => {
+    try {
+      const t = req.teacherToken;
+      const { rows: [staff] } = await q(`SELECT class FROM staff WHERE id=$1`, [t.staff_id]);
+      const { rows: [report] } = await q(
+        `SELECT * FROM weekly_reports WHERE id=$1 AND school_id=$2 AND class_id=$3`,
+        [req.params.reportId, t.school_id, staff?.class]
+      );
+      if (!report) return res.status(404).json({ error: 'Report not found' });
+
+      // The AI output only carries student_id — attach names here so the review UI
+      // doesn't need a separate round trip or show anonymous IDs.
+      const data = typeof report.report_json === 'string' ? JSON.parse(report.report_json) : report.report_json;
+      if (data?.students?.length) {
+        const ids = data.students.map(s => s.student_id).filter(Boolean);
+        const { rows: names } = ids.length
+          ? await q(`SELECT id, name FROM students WHERE id = ANY($1)`, [ids])
+          : { rows: [] };
+        const nameMap = Object.fromEntries(names.map(n => [n.id, n.name]));
+        data.students = data.students.map(s => ({ ...s, student_name: nameMap[s.student_id] || 'Unknown student' }));
+      }
+
+      res.json({ ...report, report_json: data });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Edit one student's summary text and/or toggle whether they're excluded from this week's send
+  app.post('/api/teacher/:token/weekly-report/:reportId/student/:studentId', requireUnlockedTeacherToken, async (req, res) => {
+    try {
+      const t = req.teacherToken;
+      const { parent_report, excluded } = req.body;
+      const { rows: [staff] } = await q(`SELECT class FROM staff WHERE id=$1`, [t.staff_id]);
+      const { rows: [report] } = await q(
+        `SELECT * FROM weekly_reports WHERE id=$1 AND school_id=$2 AND class_id=$3 AND status='generated'`,
+        [req.params.reportId, t.school_id, staff?.class]
+      );
+      if (!report) return res.status(404).json({ error: 'Report not found or already sent' });
+
+      const data = typeof report.report_json === 'string' ? JSON.parse(report.report_json) : report.report_json;
+      const idx = (data.students || []).findIndex(s => s.student_id === req.params.studentId);
+      if (idx === -1) return res.status(404).json({ error: 'Student not found in this report' });
+
+      if (typeof parent_report === 'string' && parent_report.trim()) data.students[idx].parent_report = parent_report.trim();
+      if (typeof excluded === 'boolean') data.students[idx].excluded = excluded;
+
+      await q(`UPDATE weekly_reports SET report_json=$1 WHERE id=$2`, [JSON.stringify(data), report.id]);
+      res.json({ ok: true, student: data.students[idx] });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Approve the whole report (minus any excluded students) — sends immediately
+  app.post('/api/teacher/:token/weekly-report/:reportId/approve', requireUnlockedTeacherToken, async (req, res) => {
+    try {
+      const t = req.teacherToken;
+      const { rows: [staff] } = await q(`SELECT class FROM staff WHERE id=$1`, [t.staff_id]);
+      const { rows: [report] } = await q(
+        `SELECT * FROM weekly_reports WHERE id=$1 AND school_id=$2 AND class_id=$3 AND status='generated'`,
+        [req.params.reportId, t.school_id, staff?.class]
+      );
+      if (!report) return res.status(404).json({ error: 'Report not found or already reviewed' });
+
+      await q(
+        `UPDATE weekly_reports SET status='approved', reviewed_by_staff_id=$1, reviewed_at=now() WHERE id=$2`,
+        [t.staff_id, report.id]
+      );
+
+      const school = await getSchool(t.school_id);
+      const updated = (await q(`SELECT * FROM weekly_reports WHERE id=$1`, [report.id])).rows[0];
+      const result = await sendReportRow(updated, school, { q, twilioSend });
+
+      res.json({ ok: true, message: `Approved. Sent to ${result.sent} parent${result.sent === 1 ? '' : 's'}${result.excluded ? `, ${result.excluded} excluded` : ''}.`, ...result });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+  });
 }
 
 // ── INIT: Wire everything up ──────────────────────────────────────
 
-async function initReporting({ app, requireSchool, q, callAI, twilioSend, cron: cronLib }) {
+async function initReporting({ app, requireSchool, q, callAI, twilioSend, cron: cronLib, issueTeacherPortalToken, requireUnlockedTeacherToken, getSchool }) {
   // Run DB migration
   await migrateReportingTables(q);
   console.log('✅ Reporting tables ready');
 
   // Register API routes
-  registerReportingRoutes(app, { requireSchool, q, callAI, twilioSend });
+  registerReportingRoutes(app, { requireSchool, q, callAI, twilioSend, issueTeacherPortalToken, requireUnlockedTeacherToken, getSchool });
   console.log('✅ Reporting routes registered');
 
   // Schedule crons
-  scheduleReportingCron(cronLib, { q, callAI, twilioSend });
-  console.log('✅ Reporting crons scheduled (Gen: Fri 3pm | Send: Fri 4pm | Retry: Sat 8am)');
+  scheduleReportingCron(cronLib, { q, callAI, twilioSend, issueTeacherPortalToken });
+  console.log('✅ Reporting crons scheduled (Gen: Fri 3pm | Review reminder: Sat 10am | Retry: Sat 8am)');
 }
 
 module.exports = {

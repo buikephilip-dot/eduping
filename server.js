@@ -109,7 +109,7 @@ setInterval(() => {
 
 function hasAi() { return Boolean(process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY); }
 function hasTextAi() { return Boolean(process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY); }
-function hasVisionAi() { return Boolean(process.env.ANTHROPIC_API_KEY); }
+function hasVisionAi() { return Boolean(process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY); }
 function hasTwilio() { return Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN); }
 function normalisePhone(phone = '') {
   let raw = String(phone).replace('whatsapp:', '').trim();
@@ -148,6 +148,9 @@ async function migrate() {
   // Add gesture-challenge columns to signin_log for schools that already have the table
   await q(`ALTER TABLE signin_log ADD COLUMN IF NOT EXISTS gesture TEXT`).catch(() => {});
   await q(`ALTER TABLE signin_log ADD COLUMN IF NOT EXISTS gesture_verified BOOLEAN DEFAULT false`).catch(() => {});
+
+  // Cumulative (year-to-date) results support
+  await q(`ALTER TABLE student_results ADD COLUMN IF NOT EXISTS session_year TEXT`).catch(() => {});
 
   await q(`
     CREATE TABLE IF NOT EXISTS schools (
@@ -746,20 +749,42 @@ async function callAI(system, userText, imageBase64, history = []) {
 }
 
 async function callClaudeVision(system, userText, imageBase64) {
-  if (!hasVisionAi()) return 'Image analysis is not enabled yet. Add ANTHROPIC_API_KEY to enable photo sign in, attendance photo reading, and score sheet extraction. EduPing 🏫';
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const content = [
-    { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 } },
-    { type: 'text', text: userText || 'Analyze this image.' }
-  ];
-  const response = await client.messages.create({
-    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+  if (!hasVisionAi()) return 'Image analysis is not enabled yet. Add ANTHROPIC_API_KEY or OPENAI_API_KEY to enable photo sign in, attendance photo reading, and score sheet extraction. EduPing 🏫';
+
+  // Prefer Anthropic if configured; otherwise fall back to OpenAI's vision-capable model.
+  if (process.env.ANTHROPIC_API_KEY) {
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const content = [
+      { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 } },
+      { type: 'text', text: userText || 'Analyze this image.' }
+    ];
+    const response = await client.messages.create({
+      model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+      max_tokens: 900,
+      temperature: 0.2,
+      system: applyResponseRules(system),
+      messages: [{ role: 'user', content }]
+    });
+    return response.content?.[0]?.text || 'I could not process that image yet. Please try again with a clearer photo.';
+  }
+
+  const openai = getOpenAiClient();
+  const response = await openai.chat.completions.create({
+    model: process.env.OPENAI_VISION_MODEL || 'gpt-4o',
     max_tokens: 900,
     temperature: 0.2,
-    system: applyResponseRules(system),
-    messages: [{ role: 'user', content }]
+    messages: [
+      { role: 'system', content: applyResponseRules(system) },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: userText || 'Analyze this image.' },
+          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64}` } }
+        ]
+      }
+    ]
   });
-  return response.content?.[0]?.text || 'I could not process that image yet. Please try again with a clearer photo.';
+  return response.choices?.[0]?.message?.content || 'I could not process that image yet. Please try again with a clearer photo.';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1999,24 +2024,17 @@ app.post('/api/admin/students/import-photo', requireSchool, async (req, res) => 
   try {
     const { image, mimeType } = req.body;
     if (!image) return res.status(400).json({ error: 'No image provided' });
-    if (!hasVisionAi()) return res.status(400).json({ error: 'Vision AI not configured. Add ANTHROPIC_API_KEY to use photo import.' });
+    if (!hasVisionAi()) return res.status(400).json({ error: 'Vision AI not configured. Add ANTHROPIC_API_KEY or OPENAI_API_KEY to use photo import.' });
 
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2000,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: mimeType || 'image/jpeg', data: image } },
-          { type: 'text', text: 'This is a school student register. Extract ALL student records you can see. Return ONLY a JSON array with no explanation: [{"name":"Full Name","class_name":"Class e.g. JSS2A","parent_name":"Parent name if visible","parent_phone":"Phone if visible"}]. If handwriting is unclear for a field use empty string. Do not include markdown or code blocks.' }
-        ]
-      }]
-    });
+    const raw = await callClaudeVision(
+      'You are a data extraction assistant for school student registers.',
+      'This is a school student register. Extract ALL student records you can see. Return ONLY a JSON array with no explanation: [{"name":"Full Name","class_name":"Class e.g. JSS2A","parent_name":"Parent name if visible","parent_phone":"Phone if visible"}]. If handwriting is unclear for a field use empty string. Do not include markdown or code blocks.',
+      image
+    );
 
     let students = [];
     try {
-      const text = response.content[0].text.replace(/```json|```/g, '').trim();
+      const text = raw.replace(/```json|```/g, '').trim();
       students = JSON.parse(text);
     } catch(e) { return res.status(400).json({ error: 'Could not parse register. Please ensure photo is clear.' }); }
 
@@ -3354,13 +3372,14 @@ app.post('/api/admin/results', requireSchool, async (req, res) => {
   try {
     const { student_id, class_name, term, subjects, position, remark } = req.body;
     if (!student_id) return bad(res, 'student_id required');
+    const sessionYear = req.body.session_year || extractSessionYear(term) || extractSessionYear(req.school.current_term);
     const existing = await q('SELECT id FROM student_results WHERE student_id=$1 AND school_id=$2 AND term=$3', [student_id, req.school.id, term]);
     if (existing.rows.length) {
-      await q('UPDATE student_results SET subjects=$1, position=$2, remark=$3, class_name=$4, updated_at=NOW() WHERE id=$5',
-        [JSON.stringify(subjects||{}), position||null, remark||null, class_name, existing.rows[0].id]);
+      await q('UPDATE student_results SET subjects=$1, position=$2, remark=$3, class_name=$4, session_year=$5, updated_at=NOW() WHERE id=$6',
+        [JSON.stringify(subjects||{}), position||null, remark||null, class_name, sessionYear, existing.rows[0].id]);
     } else {
-      await q('INSERT INTO student_results (school_id,student_id,class_name,term,subjects,position,remark) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-        [req.school.id, student_id, class_name, term, JSON.stringify(subjects||{}), position||null, remark||null]);
+      await q('INSERT INTO student_results (school_id,student_id,class_name,term,subjects,position,remark,session_year) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+        [req.school.id, student_id, class_name, term, JSON.stringify(subjects||{}), position||null, remark||null, sessionYear]);
     }
     json(res, { ok: true });
   } catch(err) { bad(res, err.message, 500); }
@@ -3542,7 +3561,7 @@ const GRADE_COLOR_PALETTE = ['#1a7a4a', '#0055cc', '#f59e0b', '#f97316', '#e5393
 
 app.get('/results/:token', async (req, res) => {
   try {
-    const record = await q(`SELECT rp.*, sr.subjects, sr.position, sr.remark, sr.term, sr.class_name,
+    const record = await q(`SELECT rp.*, sr.id AS result_id, sr.subjects, sr.position, sr.remark, sr.term, sr.class_name, sr.session_year, sr.created_at AS result_created_at,
                              s.name as student_name, sch.name as school_name, sch.city, sch.config
                              FROM result_pins rp
                              JOIN student_results sr ON sr.student_id=rp.student_id AND sr.term=rp.term
@@ -3562,6 +3581,47 @@ app.get('/results/:token', async (req, res) => {
       return `<tr><td>${subj}</td><td style="text-align:center;">${score}</td><td style="text-align:center;font-weight:700;color:${gc};">${grade}</td><td>${remark}</td></tr>`;
     }).join('');
     const avg = Object.values(subjects).length ? Math.round(Object.values(subjects).reduce((a,b)=>a+Number(b),0)/Object.values(subjects).length) : 0;
+
+    // Cumulative (year-to-date) view — only released terms in the same session, excluding this one
+    const priorTerms = await getCumulativeResults(r.school_id, r.student_id, r.session_year, r.result_id);
+    const allTerms = [...priorTerms.map(t => ({ ...t, subjects: typeof t.subjects === 'string' ? JSON.parse(t.subjects) : t.subjects })),
+                       { term: r.term, subjects, created_at: r.result_created_at }]
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+    let cumulativeHtml = '';
+    if (allTerms.length > 1) {
+      const allSubjects = [...new Set(allTerms.flatMap(t => Object.keys(t.subjects || {})))].sort();
+      const termLabels = allTerms.map(t => t.term);
+      const subjectTrendRows = allSubjects.map(subj => {
+        const scores = allTerms.map(t => t.subjects?.[subj]);
+        const nums = scores.filter(s => s !== undefined && s !== null).map(Number);
+        const subjAvg = nums.length ? Math.round(nums.reduce((a,b)=>a+b,0)/nums.length) : null;
+        const cells = scores.map(s => `<td style="text-align:center;">${s !== undefined && s !== null ? s : '—'}</td>`).join('');
+        return `<tr><td>${subj}</td>${cells}<td style="text-align:center;font-weight:700;color:${branding.primary_color};">${subjAvg !== null ? subjAvg : '—'}</td></tr>`;
+      }).join('');
+      const overallAvgs = allTerms.map(t => {
+        const vals = Object.values(t.subjects || {}).map(Number).filter(n => !isNaN(n));
+        return vals.length ? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length) : null;
+      });
+      const yearAvg = overallAvgs.filter(v => v !== null).length
+        ? Math.round(overallAvgs.filter(v => v !== null).reduce((a,b)=>a+b,0) / overallAvgs.filter(v => v !== null).length)
+        : null;
+
+      cumulativeHtml = `
+      <div class="remarks-section">
+        <div class="remarks-title">📈 This Year So Far (${r.session_year || 'Cumulative'})</div>
+        <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>Subject</th>${termLabels.map(t => `<th style="text-align:center;">${t}</th>`).join('')}<th style="text-align:center;">Year Avg</th></tr></thead>
+          <tbody>${subjectTrendRows}</tbody>
+        </table>
+        </div>
+        <div class="remarks-box" style="margin-top:14px;">
+          Overall year-to-date average across ${allTerms.length} released terms: <strong style="color:${branding.primary_color};">${yearAvg !== null ? yearAvg + '%' : '—'}</strong>.
+          This view helps put any single term in context — a one-off dip reads differently than a pattern repeated across terms.
+        </div>
+      </div>`;
+    }
 
     res.send(`<!DOCTYPE html>
 <html lang="en">
@@ -3629,6 +3689,7 @@ td{padding:12px 12px;border-bottom:1px solid #f0f2f5;color:#0f1a14;}
     <div class="sum-box"><div class="sum-val">${Object.keys(subjects).length}</div><div class="sum-label">Subjects</div></div>
   </div>
   ${r.remark ? `<div class="remarks-section"><div class="remarks-title">Class Teacher's Remark</div><div class="remarks-box">${r.remark}</div></div>` : ''}
+  ${cumulativeHtml}
   <div class="result-footer">
     <div class="footer-brand">Powered by <strong>EduPing</strong> · eduping.org</div>
     <button class="print-btn" onclick="window.print()">🖨 Print Result</button>
@@ -3652,7 +3713,7 @@ app.use((err, req, res, next) => { console.error(err); res.status(500).json({ er
   await migrateCBT().catch(e => console.error('[migrateCBT]', e.message));
   await migratePaystack().catch(e => console.error('[migratePaystack]', e.message));
   await seedIfEmpty();
-  await initReporting({ app, requireSchool, q, callAI, twilioSend, cron });
+  await initReporting({ app, requireSchool, q, callAI, twilioSend, cron, bcrypt, issueTeacherPortalToken, requireUnlockedTeacherToken, getSchool });
   app.listen(PORT, () => {
     console.log(`EduPing multi tenant server running on ${PORT}`);
     console.log(`🤖 AI providers: DeepSeek=${Boolean(process.env.DEEPSEEK_API_KEY)} | OpenAI=${Boolean(process.env.OPENAI_API_KEY)} | Anthropic=${Boolean(process.env.ANTHROPIC_API_KEY)}`);
@@ -3902,6 +3963,29 @@ function gradeForScore(pct, scale) {
 function getSchoolBranding(school) {
   const b = school?.config?.branding || {};
   return { logo_url: b.logo_url || null, primary_color: b.primary_color || '#0d4a2c' };
+}
+
+// Terms are free text but schools conventionally include the session, e.g. "Second Term 2025/2026".
+// Auto-derive the session from that so cumulative results work with zero extra admin input.
+function extractSessionYear(text) {
+  const m = String(text || '').match(/(\d{4}\/\d{4})/);
+  return m ? m[1] : null;
+}
+
+// Only pulls terms the school has actually released to parents (i.e. has a result_pins row) —
+// never surfaces an unreleased term's scores through the cumulative view.
+async function getCumulativeResults(schoolId, studentId, sessionYear, excludeResultId) {
+  if (!sessionYear) return [];
+  const { rows } = await q(
+    `SELECT sr.id, sr.term, sr.subjects, sr.position, sr.remark, sr.created_at
+     FROM student_results sr
+     JOIN result_pins rp ON rp.student_id = sr.student_id AND rp.term = sr.term AND rp.school_id = sr.school_id
+     WHERE sr.school_id=$1 AND sr.student_id=$2 AND sr.session_year=$3
+     GROUP BY sr.id
+     ORDER BY sr.created_at ASC`,
+    [schoolId, studentId, sessionYear]
+  );
+  return rows.filter(r => r.id !== excludeResultId);
 }
 
 function shuffle(arr) {
@@ -4426,29 +4510,39 @@ const TEACHER_LINK_TTL_HOURS = 48;
 function generatePin() { return String(Math.floor(1000 + Math.random() * 9000)); }
 
 // Admin-triggered: issue a fresh link + PIN and send both via WhatsApp
+// Reusable: issue a fresh teacher-portal token + PIN and send both via WhatsApp.
+// Used by the manual admin "Send Portal Link" button AND by the weekly reporting
+// cron, which auto-notifies a class teacher when their report is ready to review.
+async function issueTeacherPortalToken(staff, school, opts = {}) {
+  if (!staff.phone) return { ok: false, reason: 'No WhatsApp number on file' };
+
+  const token = crypto.randomBytes(24).toString('base64url');
+  const pin = generatePin();
+  const pinHash = await bcrypt.hash(pin, 10);
+
+  await q(
+    `INSERT INTO teacher_portal_tokens (school_id, staff_id, token, pin_hash, expires_at)
+     VALUES ($1,$2,$3,$4, now() + interval '${TEACHER_LINK_TTL_HOURS} hours')`,
+    [school.id, staff.id, token, pinHash]
+  );
+
+  const link = `${CBT_BASE_URL}/teacher/${token}`;
+  if (hasTwilio()) {
+    const intro = opts.intro || `📋 Hi ${staff.name}, here's your EduPing submission link for questions & scores:`;
+    await twilioSend(staff.phone, school.twilio_number, `${intro}\n${link}\n\nThis link expires in ${TEACHER_LINK_TTL_HOURS}h. A PIN is coming in the next message — enter it once to unlock.`);
+    await twilioSend(staff.phone, school.twilio_number, `🔐 Your EduPing PIN: ${pin}\n\nDo not share this. Enter it on the page to unlock.`);
+  }
+  return { ok: true, link, sent: hasTwilio(), token };
+}
+
 app.post('/api/admin/staff/:id/portal-link', requireSchool, async (req, res) => {
   try {
     const { rows: [staff] } = await q(`SELECT * FROM staff WHERE id=$1 AND school_id=$2`, [req.params.id, req.school.id]);
     if (!staff) return bad(res, 'Staff member not found', 404);
-    if (!staff.phone) return bad(res, 'This staff member has no WhatsApp number on file', 400);
 
-    const token = crypto.randomBytes(24).toString('base64url');
-    const pin = generatePin();
-    const pinHash = await bcrypt.hash(pin, 10);
-
-    await q(
-      `INSERT INTO teacher_portal_tokens (school_id, staff_id, token, pin_hash, expires_at)
-       VALUES ($1,$2,$3,$4, now() + interval '${TEACHER_LINK_TTL_HOURS} hours')`,
-      [req.school.id, staff.id, token, pinHash]
-    );
-
-    const link = `${CBT_BASE_URL}/teacher/${token}`;
-    if (hasTwilio()) {
-      await twilioSend(staff.phone, req.school.twilio_number, `📋 Hi ${staff.name}, here's your EduPing submission link for questions & scores:\n${link}\n\nThis link expires in ${TEACHER_LINK_TTL_HOURS}h. A PIN is coming in the next message — enter it once to unlock.`);
-      await twilioSend(staff.phone, req.school.twilio_number, `🔐 Your EduPing PIN: ${pin}\n\nDo not share this. Enter it on the page to unlock your submission form.`);
-    }
-
-    json(res, { ok: true, link, sent: hasTwilio() });
+    const result = await issueTeacherPortalToken(staff, req.school);
+    if (!result.ok) return bad(res, result.reason, 400);
+    json(res, result);
   } catch (err) { bad(res, err.message, 500); }
 });
 
@@ -4480,6 +4574,15 @@ app.get('/api/teacher/:token', async (req, res) => {
       [t.staff_id]
     );
 
+    // Is there a weekly AI report for this teacher's class awaiting their review?
+    const pendingReport = await q(
+      `SELECT id, week_number, year, class_id, generated_at
+       FROM weekly_reports
+       WHERE school_id=$1 AND class_id=$2 AND status='generated'
+       ORDER BY generated_at DESC LIMIT 1`,
+      [t.school_id, t.class_name]
+    );
+
     json(res, {
       unlocked: Boolean(t.unlocked_at),
       staff_name: t.staff_name,
@@ -4487,7 +4590,8 @@ app.get('/api/teacher/:token', async (req, res) => {
       subject: t.subject,
       school_name: school?.name,
       assessments: assessments.rows,
-      recent_submissions: recent.rows
+      recent_submissions: recent.rows,
+      pending_weekly_report: pendingReport.rows[0] || null
     });
   } catch (err) { bad(res, err.message, 500); }
 });
