@@ -3776,14 +3776,16 @@ function exportSigninLog() {
 async function loadPendingReview() {
   const qList = document.getElementById('pending-questions-list');
   const sList = document.getElementById('pending-scores-list');
+  const trList = document.getElementById('pending-term-results-list');
   try {
-    const [questions, scores] = await Promise.all([
+    const [questions, scores, termResults] = await Promise.all([
       api('/api/admin/pending-questions'),
-      api('/api/admin/pending-scores')
+      api('/api/admin/pending-scores'),
+      api('/api/admin/pending-term-results')
     ]);
 
     const badge = document.getElementById('pending-badge');
-    const total = questions.length + scores.length;
+    const total = questions.length + scores.length + termResults.length;
     if (total > 0) { badge.textContent = total; badge.style.display = ''; } else { badge.style.display = 'none'; }
 
     qList.innerHTML = questions.length ? questions.map(q => `
@@ -3818,9 +3820,33 @@ async function loadPendingReview() {
           </div>
         </div>
       </div>`).join('') : '<div class="loading">No pending scores</div>';
+
+    trList.innerHTML = termResults.length ? termResults.map(r => {
+      const subjects = r.subjects && typeof r.subjects === 'object' ? r.subjects : {};
+      const subjectSummary = Object.entries(subjects).map(([subj, score]) => `${subj}: ${score}`).join(' · ') || 'No subjects';
+      return `
+      <div class="dash-card" style="margin-bottom:10px;padding:14px;">
+        <div style="display:flex;justify-content:space-between;gap:8px;">
+          <div>
+            <div style="font-weight:600;font-size:14px;">${esc(r.student_name)} — ${esc(r.term)}</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+              ${esc(r.staff_name||'Unknown teacher')} · ${esc(r.class_name||'—')}${r.position ? ' · Position: ' + esc(String(r.position)) : ''}
+            </div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${esc(subjectSummary)}</div>
+            ${r.remark ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;font-style:italic;">“${esc(r.remark)}”</div>` : ''}
+            ${!r.student_id ? '<span style="color:var(--danger);font-size:12px;"> · ⚠️ No matching student found</span>' : ''}
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0;">
+            <button class="btn btn-primary btn-sm" onclick="approvePendingTermResult('${r.id}')">✅ Approve</button>
+            <button class="btn btn-danger btn-sm" onclick="rejectPendingTermResult('${r.id}')">✕</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('') : '<div class="loading">No pending term results</div>';
   } catch(e) {
     qList.innerHTML = '<div class="loading">Could not load pending questions</div>';
     sList.innerHTML = '<div class="loading">Could not load pending scores</div>';
+    trList.innerHTML = '<div class="loading">Could not load pending term results</div>';
   }
 }
 
@@ -3842,6 +3868,15 @@ async function approvePendingScore(id) {
 async function rejectPendingScore(id) {
   if (!confirm('Reject this score?')) return;
   try { await api('/api/admin/pending-scores/' + id + '/reject', { method: 'POST' }); showToast('Score rejected'); loadPendingReview(); }
+  catch(e) { showToast('Failed ❌'); }
+}
+async function approvePendingTermResult(id) {
+  try { await api('/api/admin/pending-term-results/' + id + '/approve', { method: 'POST' }); showToast('✅ Term result approved and saved to report card'); loadPendingReview(); }
+  catch(e) { showToast(e.message || 'Failed to approve ❌'); }
+}
+async function rejectPendingTermResult(id) {
+  if (!confirm('Reject this term result? The teacher will need to resubmit if it was a mistake.')) return;
+  try { await api('/api/admin/pending-term-results/' + id + '/reject', { method: 'POST' }); showToast('Term result rejected'); loadPendingReview(); }
   catch(e) { showToast('Failed ❌'); }
 }
 
@@ -6272,6 +6307,9 @@ async function generatePayLink(studentId, studentName) {
 
   <h3 style="font-size:15px;margin:24px 0 8px;">📊 Scores</h3>
   <div id="pending-scores-list" class="loading">Loading…</div>
+
+  <h3 style="font-size:15px;margin:24px 0 8px;">📝 Term Results</h3>
+  <div id="pending-term-results-list" class="loading">Loading…</div>
 </section>
 
 <!-- TEAM & DEVICES -->

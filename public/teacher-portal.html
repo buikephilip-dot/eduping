@@ -42,12 +42,19 @@
   .opt-row input[type=text] { flex: 1; }
   .opt-row input[type=radio], .opt-row input[type=checkbox] { width: 20px; height: 20px; flex-shrink: 0; }
   .add-opt-btn { background: none; border: 1px dashed var(--border); border-radius: 8px; padding: 8px; width: 100%; margin-top: 8px; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .subject-row input[type=text] { flex: 1; }
+  .subject-row input[type=number] { max-width: 84px; flex: none; }
+  .remove-row-btn { background: none; border: none; color: var(--danger); font-size: 18px; line-height: 1; cursor: pointer; flex-shrink: 0; padding: 4px 6px; }
+  .tr-load-row { display: flex; gap: 8px; align-items: flex-end; }
+  .tr-load-row > div { flex: 1; }
+  .tr-load-row .btn { margin-top: 0; width: auto; padding: 12px 16px; white-space: nowrap; }
   .submission { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
   .submission:last-child { border-bottom: none; }
   .pill { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; margin-left: 8px; }
   .pill-pending { background: #fef3c7; color: #92400e; }
   .pill-approved { background: #d1fae5; color: #065f46; }
   .pill-rejected { background: #fee2e2; color: #991b1b; }
+  .pill-gray { background: #e5e7eb; color: #374151; }
   .spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--brand); border-radius: 50%; animation: spin .8s linear infinite; margin: 30px auto; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .hidden { display: none !important; }
@@ -94,6 +101,7 @@
     <div class="tabs">
       <button class="tab-btn active" id="tab-q-btn" onclick="switchTab('question')">➕ Add Question</button>
       <button class="tab-btn" id="tab-s-btn" onclick="switchTab('score')">📊 Submit Score</button>
+      <button class="tab-btn" id="tab-tr-btn" onclick="switchTab('termresult')">📝 Term Result</button>
       <button class="tab-btn hidden" id="tab-r-btn" onclick="switchTab('report')">📋 Weekly Report</button>
     </div>
 
@@ -141,6 +149,21 @@
         <div class="err" id="s-err"></div>
         <div class="ok" id="s-ok"></div>
       </div>
+    </div>
+
+    <div class="tab-panel" id="tab-termresult">
+      <div class="card">
+        <h2 style="font-size:16px;margin-bottom:4px;">📝 Submit Term Result</h2>
+        <p class="muted" style="margin-bottom:14px;">Fill in every subject, position, and remark per student. Each submission goes to your admin for approval before it appears on the report card.</p>
+        <label>Term</label>
+        <div class="tr-load-row">
+          <div><input type="text" id="tr-term" placeholder="e.g. First Term 2026"></div>
+          <button class="btn btn-primary" id="tr-load-btn" onclick="loadTermResults()">Load Class</button>
+        </div>
+        <div class="err" id="tr-load-err"></div>
+      </div>
+
+      <div id="tr-students-list"></div>
     </div>
 
     <div class="tab-panel" id="tab-report">
@@ -231,6 +254,7 @@ function showMain() {
   document.getElementById('welcome-text').textContent = `Hi ${portalData.staff_name} 👋`;
   document.getElementById('welcome-sub').textContent = `${portalData.class_name || ''} ${portalData.subject ? '· ' + portalData.subject : ''}`;
   document.getElementById('s-subject').value = portalData.subject || '';
+  document.getElementById('tr-term').value = portalData.current_term || '';
 
   const sel = document.getElementById('q-assessment');
   sel.innerHTML = portalData.assessments.length
@@ -339,11 +363,122 @@ async function submitScore() {
   }
 }
 
+// ── Term Result submission ───────────────────────────────────
+let termResultStudents = [];
+let termResultExisting = {};
+
+async function loadTermResults() {
+  const errEl = document.getElementById('tr-load-err');
+  errEl.style.display = 'none';
+  const term = document.getElementById('tr-term').value.trim();
+  if (!term) { errEl.textContent = 'Enter the term first.'; errEl.style.display = 'block'; return; }
+
+  const btn = document.getElementById('tr-load-btn');
+  btn.disabled = true; btn.textContent = 'Loading…';
+  try {
+    const r = await api(`/class-students?term=${encodeURIComponent(term)}`);
+    termResultStudents = r.students || [];
+    termResultExisting = r.results || {};
+    renderTermResultStudents();
+  } catch (e) {
+    errEl.textContent = e.message; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Load Class';
+  }
+}
+
+function renderTermResultStudents() {
+  const list = document.getElementById('tr-students-list');
+  if (!termResultStudents.length) {
+    list.innerHTML = '<div class="card"><p class="muted" style="margin-bottom:0;">No students found in your class.</p></div>';
+    return;
+  }
+  list.innerHTML = termResultStudents.map(s => {
+    const existing = termResultExisting[s.id];
+    const subjects = existing?.subjects && typeof existing.subjects === 'object' ? existing.subjects : {};
+    const subjectEntries = Object.entries(subjects);
+    const status = existing?.status;
+    const rowsHtml = (subjectEntries.length ? subjectEntries : [['', '']])
+      .map(([subj, score]) => subjectRowHtml(subj, score)).join('');
+    return `
+      <div class="card student-report-card" id="tr-card-${s.id}">
+        <div class="student-report-header">
+          <span class="student-report-name">${escapeHtml(s.name)}</span>
+          ${status ? `<span class="pill pill-${status}" id="tr-status-${s.id}">${status}</span>` : `<span class="pill pill-gray" id="tr-status-${s.id}">not submitted</span>`}
+        </div>
+        <label>Subjects & scores</label>
+        <div id="tr-subjects-${s.id}">${rowsHtml}</div>
+        <button type="button" class="add-opt-btn" onclick="addSubjectRow('${s.id}')">+ Add subject</button>
+
+        <label>Position</label>
+        <input type="number" min="1" id="tr-position-${s.id}" value="${existing?.position ?? ''}" placeholder="e.g. 3">
+
+        <label>Class teacher's remark</label>
+        <textarea id="tr-remark-${s.id}" placeholder="e.g. A hardworking, consistent student.">${escapeHtml(existing?.remark || '')}</textarea>
+
+        <button class="btn btn-primary" onclick="submitTermResult('${s.id}')">Submit for review</button>
+        <div class="err" id="tr-err-${s.id}"></div>
+        <div class="ok" id="tr-ok-${s.id}"></div>
+      </div>`;
+  }).join('');
+}
+
+function subjectRowHtml(subject, score) {
+  return `<div class="opt-row subject-row">
+    <input type="text" placeholder="Subject (e.g. Mathematics)" value="${escapeHtml(subject || '')}">
+    <input type="number" min="0" max="100" placeholder="Score" value="${score ?? ''}">
+    <button type="button" class="remove-row-btn" onclick="this.parentElement.remove()">✕</button>
+  </div>`;
+}
+
+function addSubjectRow(studentId) {
+  const wrap = document.getElementById(`tr-subjects-${studentId}`);
+  wrap.insertAdjacentHTML('beforeend', subjectRowHtml('', ''));
+}
+
+async function submitTermResult(studentId) {
+  const errEl = document.getElementById(`tr-err-${studentId}`), okEl = document.getElementById(`tr-ok-${studentId}`);
+  errEl.style.display = 'none'; okEl.style.display = 'none';
+
+  const term = document.getElementById('tr-term').value.trim();
+  if (!term) { errEl.textContent = 'Enter the term first.'; errEl.style.display = 'block'; return; }
+
+  const subjects = {};
+  document.querySelectorAll(`#tr-subjects-${studentId} .subject-row`).forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    const name = inputs[0].value.trim();
+    const score = inputs[1].value;
+    if (name && score !== '') subjects[name] = Number(score);
+  });
+  if (!Object.keys(subjects).length) { errEl.textContent = 'Add at least one subject with a score.'; errEl.style.display = 'block'; return; }
+
+  const position = document.getElementById(`tr-position-${studentId}`).value;
+  const remark = document.getElementById(`tr-remark-${studentId}`).value.trim();
+
+  const card = document.getElementById(`tr-card-${studentId}`);
+  const btn = card.querySelector('.btn-primary');
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  try {
+    const r = await api('/term-results', { method: 'POST', body: { student_id: studentId, term, subjects, position: position || null, remark: remark || null } });
+    okEl.textContent = r.message; okEl.style.display = 'block';
+    const statusEl = document.getElementById(`tr-status-${studentId}`);
+    statusEl.textContent = 'pending';
+    statusEl.className = 'pill pill-pending';
+    portalData = await api('');
+    renderRecent();
+  } catch (e) {
+    errEl.textContent = e.message; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Submit for review';
+  }
+}
+
 function renderRecent() {
   const list = document.getElementById('recent-list');
   const items = portalData.recent_submissions || [];
+  const icon = k => k === 'question' ? '❓' : k === 'score' ? '📊' : '📝';
   list.innerHTML = items.length
-    ? items.map(i => `<div class="submission"><span>${i.kind === 'question' ? '❓' : '📊'} ${escapeHtml(i.label)}</span><span class="pill pill-${i.status}">${i.status}</span></div>`).join('')
+    ? items.map(i => `<div class="submission"><span>${icon(i.kind)} ${escapeHtml(i.label)}</span><span class="pill pill-${i.status}">${i.status}</span></div>`).join('')
     : '<p class="muted" style="font-size:13px">No submissions yet.</p>';
 }
 
@@ -436,9 +571,11 @@ async function approveAllReport() {
 function switchTab(name) {
   document.getElementById('tab-question').classList.toggle('active', name === 'question');
   document.getElementById('tab-score').classList.toggle('active', name === 'score');
+  document.getElementById('tab-termresult').classList.toggle('active', name === 'termresult');
   document.getElementById('tab-report').classList.toggle('active', name === 'report');
   document.getElementById('tab-q-btn').classList.toggle('active', name === 'question');
   document.getElementById('tab-s-btn').classList.toggle('active', name === 'score');
+  document.getElementById('tab-tr-btn').classList.toggle('active', name === 'termresult');
   document.getElementById('tab-r-btn').classList.toggle('active', name === 'report');
 }
 
