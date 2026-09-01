@@ -152,6 +152,23 @@ async function migrate() {
   // Cumulative (year-to-date) results support
   await q(`ALTER TABLE student_results ADD COLUMN IF NOT EXISTS session_year TEXT`).catch(() => {});
 
+  // Accounts portal — bursar/accountant fee-payment submissions awaiting admin approval
+  await q(`CREATE TABLE IF NOT EXISTS pending_fee_payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+    staff_id UUID REFERENCES staff(id) ON DELETE SET NULL,
+    student_id UUID REFERENCES students(id) ON DELETE SET NULL,
+    student_name TEXT,
+    class_name TEXT,
+    term TEXT NOT NULL,
+    amount_paid NUMERIC NOT NULL,
+    payment_method TEXT DEFAULT 'cash',
+    note TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    reviewed_at TIMESTAMPTZ
+  )`);
+
   await q(`
     CREATE TABLE IF NOT EXISTS schools (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name TEXT NOT NULL, city TEXT, landmark_description TEXT,
@@ -256,41 +273,10 @@ async function migrate() {
       name TEXT NOT NULL, class_name TEXT, parent_name TEXT, parent_phone TEXT, weekly_performance_score NUMERIC DEFAULT 0,
       student_of_week_count INT DEFAULT 0, created_at TIMESTAMPTZ DEFAULT now()
     );
-    CREATE TABLE IF NOT EXISTS pending_term_results (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
-      staff_id UUID REFERENCES staff(id) ON DELETE SET NULL,
-      student_id UUID REFERENCES students(id) ON DELETE CASCADE,
-      student_name TEXT,
-      class_name TEXT,
-      term TEXT NOT NULL,
-      subjects JSONB DEFAULT '{}'::jsonb,
-      position INTEGER, remark TEXT,
-      status TEXT NOT NULL DEFAULT 'pending',
-      created_at TIMESTAMPTZ DEFAULT now(),
-      reviewed_at TIMESTAMPTZ
-    );
-    CREATE INDEX IF NOT EXISTS idx_pending_term_results_school ON pending_term_results(school_id, status);
-    CREATE INDEX IF NOT EXISTS idx_pending_term_results_staff ON pending_term_results(staff_id, term);
     CREATE TABLE IF NOT EXISTS attendance (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
       student_id UUID REFERENCES students(id) ON DELETE CASCADE, date DATE NOT NULL, status TEXT NOT NULL
     );
-    -- Audit trail for teacher -> parent photo shares (WhatsApp "photo: Name - note").
-    -- Required for NDPA accountability: who sent a child's image, to which parent, when, and why.
-    CREATE TABLE IF NOT EXISTS teacher_photo_shares (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
-      staff_id UUID REFERENCES staff(id) ON DELETE SET NULL,
-      student_id UUID REFERENCES students(id) ON DELETE SET NULL,
-      student_name TEXT,
-      parent_phone TEXT,
-      category TEXT,
-      note TEXT,
-      photo_url TEXT,
-      sent_at TIMESTAMPTZ DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_teacher_photo_shares_school ON teacher_photo_shares(school_id, sent_at DESC);
     CREATE TABLE IF NOT EXISTS scores (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
       student_id UUID REFERENCES students(id) ON DELETE CASCADE, subject TEXT NOT NULL, score NUMERIC NOT NULL, term TEXT, uploaded_at TIMESTAMPTZ DEFAULT now()
@@ -875,31 +861,6 @@ async function fetchTwilioMediaBase64(mediaUrl) {
   return buf.toString('base64');
 }
 
-// Twilio's incoming MediaUrl0 is auth-walled and expires — re-host on Cloudinary (same signed-upload
-// pattern as branding logos) so we get a public, durable URL that can be handed back to Twilio to
-// forward to a parent's WhatsApp.
-async function uploadBase64ToCloudinary(base64Data, mimeType, folder) {
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-  const apiKey = process.env.CLOUDINARY_API_KEY;
-  const apiSecret = process.env.CLOUDINARY_API_SECRET;
-  if (!cloudName || !apiKey || !apiSecret) throw new Error('Photo hosting is not configured yet');
-
-  const timestamp = Math.round(Date.now() / 1000);
-  const sig = crypto.createHash('sha1').update('folder=' + folder + '&timestamp=' + timestamp + apiSecret).digest('hex');
-
-  const formData = new URLSearchParams();
-  formData.append('file', 'data:' + (mimeType || 'image/jpeg') + ';base64,' + base64Data);
-  formData.append('api_key', apiKey);
-  formData.append('timestamp', timestamp);
-  formData.append('folder', folder);
-  formData.append('signature', sig);
-
-  const uploadRes = await fetch('https://api.cloudinary.com/v1_1/' + cloudName + '/image/upload', { method: 'POST', body: formData });
-  const uploadData = await uploadRes.json();
-  if (uploadData.error) throw new Error(uploadData.error.message);
-  return uploadData.secure_url;
-}
-
 // Ask Claude Vision whether the photo shows a live selfie performing the given gesture.
 async function verifyGesturePhoto(gesture, imageBase64) {
   if (!hasVisionAi()) {
@@ -1058,12 +1019,10 @@ Conversation rules:
 - Never mention EduPing by name in the conversation — you are simply the school assistant`;
 }
 
-async function twilioSend(to, from, body, mediaUrl) {
+async function twilioSend(to, from, body) {
   if (!hasTwilio()) return { skipped: true, reason: 'Twilio credentials missing' };
   const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-  const payload = { to: `whatsapp:${normalisePhone(to)}`, from: from?.startsWith('whatsapp:') ? from : `whatsapp:${normalisePhone(from || process.env.TWILIO_DEFAULT_FROM)}`, body };
-  if (mediaUrl) payload.mediaUrl = Array.isArray(mediaUrl) ? mediaUrl : [mediaUrl];
-  return client.messages.create(payload);
+  return client.messages.create({ to: `whatsapp:${normalisePhone(to)}`, from: from?.startsWith('whatsapp:') ? from : `whatsapp:${normalisePhone(from || process.env.TWILIO_DEFAULT_FROM)}`, body });
 }
 
 async function handleIncomingWhatsApp(req, res) {
@@ -1228,14 +1187,6 @@ async function processTeacher(school, staff, body, mediaUrl, mediaType) {
   const isImage = mediaUrl && (mediaType || '').includes('image');
   const wantsSignIn = lower.includes('sign in') || lower.includes('good morning');
 
-  // ── Step 0: photo captioned "photo: <student> - <note>" — forward straight to the parent ──
-  // Checked before the sign-in gesture flow below so a captioned photo never gets treated as
-  // (and rejected by) gesture verification.
-  const photoShareMatch = isImage ? String(body || '').match(/^photo\s*[:\-]\s*([^,\-–:]+)[-–:]\s*(.+)$/i) : null;
-  if (photoShareMatch) {
-    return await handleTeacherPhotoShare(school, staff, mediaUrl, photoShareMatch[1].trim(), photoShareMatch[2].trim());
-  }
-
   // ── Step 1: teacher asks to sign in (no photo yet) — issue/resend today's gesture challenge ──
   if (wantsSignIn && !isImage) {
     const challenge = await getOrCreateChallenge(school, staff);
@@ -1371,59 +1322,14 @@ async function processTeacher(school, staff, body, mediaUrl, mediaType) {
     return `✅ ${saved} score${saved !== 1 ? 's' : ''} saved for ${term}.${failNote}\n\n📊 These will appear in *Friday's weekly report* to parents.\n\n${school.name} 🏫`;
   }
 
-  // ── Attendance update — writes to the attendance table, same regex-and-lookup pattern as scores above ──
-  const isAttendanceMsg = lower.includes('absent') || lower.includes('present') || lower.includes('late') || lower.includes('attendance') || lower.includes('roll call');
+  if (lower.includes('behaviour') || lower.includes('behavior') || lower.includes('disrupt') || lower.includes('absent') || lower.includes('late') || lower.includes('noted')) {
+    return `📝 Noted, ${staff.name.split(' ')[0]}. Log detailed behaviour notes from the dashboard under the student's profile.
 
-  if (isAttendanceMsg) {
-    const attDate = new Date().toISOString().slice(0,10);
-    const statusRx = /\b(absent|present|late)\b/i;
-    // Split on commas/newlines for bulk entry, then strip the status word (and a stray "is") off
-    // each segment so whatever's left is just the student's name.
-    const segments = String(body || '').split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
-
-    const toProcess = [];
-    for (const seg of segments) {
-      const statusM = seg.match(statusRx);
-      if (!statusM) continue;
-      const name = seg.replace(statusRx, '').replace(/\bis\b/i, '').replace(/[:\-]/g, ' ').trim();
-      if (!name || /^(attendance|roll\s*call|today|class)$/i.test(name)) continue;
-      toProcess.push({ name, status: statusM[1].toLowerCase() });
-    }
-
-    if (!toProcess.length) {
-      return `✅ Got it, ${staff.name.split(' ')[0]}! To log attendance, use:\n\n*"Chidinma absent"*\nor bulk: *"Chidinma absent, Tobi present, Ngozi late"*\n\n${school.name} 🏫`;
-    }
-
-    let saved = 0;
-    const failed = [];
-    for (const entry of toProcess) {
-      const studentRes = await q(
-        `SELECT id, name FROM students
-          WHERE school_id=$1
-            AND (name ILIKE $2 OR split_part(name,' ',1) ILIKE $3)
-            AND (class_name=$4 OR $4='')
-          LIMIT 1`,
-        [school.id, `%${entry.name}%`, entry.name, staff.class || '']
-      );
-      if (!studentRes.rows.length) { failed.push(entry.name + ' (not found in class)'); continue; }
-      const studentId = studentRes.rows[0].id;
-      try {
-        const existing = await q(`SELECT id FROM attendance WHERE school_id=$1 AND student_id=$2 AND date=$3`, [school.id, studentId, attDate]);
-        if (existing.rows.length) {
-          await q(`UPDATE attendance SET status=$1 WHERE id=$2`, [entry.status, existing.rows[0].id]);
-        } else {
-          await q(`INSERT INTO attendance (school_id, student_id, date, status) VALUES ($1,$2,$3,$4)`, [school.id, studentId, attDate, entry.status]);
-        }
-        saved++;
-      } catch(e) { failed.push(entry.name); }
-    }
-
-    const failNote = failed.length ? `\n⚠️ Could not find: ${failed.join(', ')}` : '';
-    return `✅ Attendance saved for ${saved} student${saved !== 1 ? 's' : ''} today (${attDate}).${failNote}\n\n${school.name} 🏫`;
+${school.name} 🏫`;
   }
 
-  if (lower.includes('behaviour') || lower.includes('behavior') || lower.includes('disrupt') || lower.includes('noted')) {
-    return `📝 Noted, ${staff.name.split(' ')[0]}. Log detailed behaviour notes from the dashboard under the student's profile.
+  if (lower.includes('attendance') || lower.includes('present') || lower.includes('roll call')) {
+    return `✅ Attendance noted, ${staff.name.split(' ')[0]}. Please update class attendance from the dashboard to keep records accurate.
 
 ${school.name} 🏫`;
   }
@@ -1435,71 +1341,6 @@ Keep responses SHORT (under 100 words), practical, and clearly directed at the t
 Never send parent-style responses. End with ${school.name} 🏫`;
 
   return await callAI(teacherSystem, body || 'Hello', null);
-}
-
-// Teacher sends a photo captioned "photo: <student name> - <note>" (uniform issue, behaviour,
-// a personal moment, etc). We re-host it on Cloudinary, forward it straight to that student's
-// parent on WhatsApp, and log the send for accountability — see teacher_photo_shares above.
-function categorizePhotoNote(note) {
-  const n = String(note || '').toLowerCase();
-  if (/uniform|dress|attire/.test(n)) return { label: 'Uniform', emoji: '👔' };
-  if (/behaviour|behavior|disrupt|fight|rude|misbehav/.test(n)) return { label: 'Behaviour', emoji: '📝' };
-  if (/sick|hurt|injur|health|clinic|sickbay/.test(n)) return { label: 'Health', emoji: '🏥' };
-  return { label: 'Note from teacher', emoji: '📸' };
-}
-
-async function handleTeacherPhotoShare(school, staff, mediaUrl, studentNameRaw, note) {
-  const firstName = staff.name.split(' ')[0];
-  if (!studentNameRaw || !note) {
-    return `📸 To send a photo to a parent, caption it like:\n\n*"photo: Chidinma - torn sleeve, needs a new uniform"*\n\n${school.name} 🏫`;
-  }
-
-  const matches = await q(
-    `SELECT id, name, parent_phone FROM students
-      WHERE school_id=$1
-        AND (name ILIKE $2 OR split_part(name,' ',1) ILIKE $3)
-        AND (class_name=$4 OR $4='')`,
-    [school.id, `%${studentNameRaw}%`, studentNameRaw, staff.class || '']
-  );
-
-  if (!matches.rowCount) {
-    return `⚠️ Couldn't find "${studentNameRaw}" in your class, ${firstName}. Please check the spelling and try again.\n\n${school.name} 🏫`;
-  }
-  if (matches.rowCount > 1) {
-    return `⚠️ More than one student matches "${studentNameRaw}" in your class, ${firstName} — please use their full name so the right parent gets this.\n\n${school.name} 🏫`;
-  }
-  const student = matches.rows[0];
-  if (!student.parent_phone) {
-    return `⚠️ No parent phone number on file for ${student.name}. Please ask the school office to add one before sending photos for this student.\n\n${school.name} 🏫`;
-  }
-
-  let photoUrl;
-  try {
-    const imageBase64 = await fetchTwilioMediaBase64(mediaUrl);
-    photoUrl = await uploadBase64ToCloudinary(imageBase64, 'image/jpeg', `eduping/${school.id}/photo-shares`);
-  } catch (e) {
-    console.error('[photo-share] upload failed:', e.message);
-    return `⚠️ Couldn't process that photo, ${firstName} — please try sending it again.\n\n${school.name} 🏫`;
-  }
-
-  const category = categorizePhotoNote(note);
-  const fromNumber = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
-  const parentMsg = `${category.emoji} *${category.label} — ${school.name}*\n\nDear parent of *${student.name}*, ${staff.name} shared this:\n\n"${note}"\n\nReply to this number if you have any questions.\n\n${school.name} 🏫`;
-
-  try {
-    await twilioSend(student.parent_phone, fromNumber, parentMsg, photoUrl);
-  } catch (e) {
-    console.error('[photo-share] send failed:', e.message);
-    return `⚠️ Photo processed but couldn't be delivered to the parent — please try again shortly.\n\n${school.name} 🏫`;
-  }
-
-  await q(
-    `INSERT INTO teacher_photo_shares (school_id, staff_id, student_id, student_name, parent_phone, category, note, photo_url)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-    [school.id, staff.id, student.id, student.name, student.parent_phone, category.label, note, photoUrl]
-  );
-
-  return `✅ Sent to ${student.name}'s parent, ${firstName}.\n\n${school.name} 🏫`;
 }
 
 function requireSuper(req, res, next) {
@@ -1643,10 +1484,15 @@ app.post('/api/onboarding', async (req, res) => {
   try {
     const d = req.body;
     if (!d.school_id) return json(res, { error: 'school_id required' }, 400);
-    const school = await q(`SELECT id, whatsapp_number FROM schools WHERE id=$1`, [d.school_id]);
+    const school = await q(`SELECT id, whatsapp_number, config FROM schools WHERE id=$1`, [d.school_id]);
     if (!school.rows.length) return json(res, { error: 'School not found' }, 404);
 
+    // Merge onto existing config rather than overwrite — otherwise re-running onboarding
+    // (or a reused onboarding link) silently wipes out branding/grading-scale settings,
+    // which live in this same JSONB column but aren't part of the onboarding form.
+    const existingConfig = school.rows[0].config || {};
     const config = JSON.stringify({
+      ...existingConfig,
       grading: d.grading, subjects: d.subjects,
       working_hours: d.working_hours,
       homework_frequency: d.homework_frequency,
@@ -1677,16 +1523,28 @@ app.post('/api/onboarding', async (req, res) => {
          d.landmark_description, config, d.school_id]);
     }
 
+    // Events are a nice-to-have on top of the core profile above — a bad date shouldn't
+    // fail the whole onboarding submission when the important fields already saved.
+    let eventsWarning = null;
     if (d.events && d.events.length) {
-      await q(`DELETE FROM school_events WHERE school_id=$1`, [d.school_id]);
-      for (const ev of d.events) {
-        if (ev.title && ev.date) {
+      try {
+        await q(`DELETE FROM school_events WHERE school_id=$1`, [d.school_id]);
+        let skipped = 0;
+        for (const ev of d.events) {
+          if (!ev.title || !ev.date) { skipped++; continue; }
+          const parsedDate = new Date(ev.date);
+          if (isNaN(parsedDate.getTime())) { skipped++; continue; }
           await q(`INSERT INTO school_events (school_id, title, event_date) VALUES ($1,$2,$3)`,
             [d.school_id, ev.title, ev.date]);
         }
+        if (skipped > 0) eventsWarning = `${skipped} event${skipped === 1 ? '' : 's'} skipped due to a missing or invalid date.`;
+      } catch (eventsErr) {
+        console.error('[onboarding] Events save failed (non-fatal):', eventsErr.message);
+        eventsWarning = 'Your school profile saved, but events could not be saved: ' + eventsErr.message;
       }
     }
-    json(res, { ok: true, whatsapp_number: school.rows[0].whatsapp_number });
+
+    json(res, { ok: true, whatsapp_number: school.rows[0].whatsapp_number, warning: eventsWarning });
   } catch(err) { json(res, { error: err.message }, 500); }
 });
 app.get('/health', async (req, res) => { await q('SELECT 1'); json(res, { ok: true, db: true, ai: hasAi(), text_ai: hasTextAi(), vision_ai: hasVisionAi(), provider: process.env.DEEPSEEK_API_KEY ? 'deepseek' : (process.env.OPENAI_API_KEY ? 'openai' : (process.env.ANTHROPIC_API_KEY ? 'anthropic-vision-only' : 'demo')), twilio: hasTwilio() }); });
@@ -2105,6 +1963,10 @@ for (const [table, fields] of crud) {
     const orderBy = table === 'sickbay_log' ? 'visited_at' : 'created_at';
     json(res, (await q(`SELECT * FROM ${table} WHERE school_id=$1 ORDER BY ${orderBy} DESC LIMIT 200`, [req.school.id])).rows);
   });
+  // 'students' has its own richer POST handler below (phone normalization + auto fee-record
+  // creation) — registering a generic one here would silently shadow it, since Express always
+  // dispatches to the first-registered handler for a given method+path.
+  if (table === 'students') continue;
   app.post(`/api/admin/${table}`, requireSchool, async (req, res) => {
     const f = fields.split(',').filter(k => req.body[k] !== undefined);
     const vals = f.map(k => req.body[k]);
@@ -3151,19 +3013,6 @@ app.get('/api/admin/attendance', requireSchool, async (req, res) => {
     if (student_id) { params.push(student_id); sql += ` AND a.student_id = $${params.length}`; }
     sql += ' ORDER BY a.date DESC LIMIT 2000';
     json(res, (await q(sql, params)).rows);
-  } catch(err) { bad(res, err.message, 500); }
-});
-
-// Audit trail for teacher -> parent WhatsApp photo shares (NDPA accountability).
-app.get('/api/admin/photo-shares', requireSchool, async (req, res) => {
-  try {
-    const rows = await q(
-      `SELECT tps.*, st.name AS staff_name
-       FROM teacher_photo_shares tps LEFT JOIN staff st ON st.id = tps.staff_id
-       WHERE tps.school_id=$1 ORDER BY tps.sent_at DESC LIMIT 500`,
-      [req.school.id]
-    );
-    json(res, rows.rows);
   } catch(err) { bad(res, err.message, 500); }
 });
 
@@ -4741,7 +4590,7 @@ app.get('/teacher/:token', (req, res) => res.sendFile(path.join(__dirname, 'publ
 app.get('/api/teacher/:token', async (req, res) => {
   try {
     const { rows: [t] } = await q(
-      `SELECT tpt.*, st.name AS staff_name, st.class AS class_name, st.subject
+      `SELECT tpt.*, st.name AS staff_name, st.class AS class_name, st.subject, st.role AS staff_role
        FROM teacher_portal_tokens tpt JOIN staff st ON st.id = tpt.staff_id
        WHERE tpt.token=$1`,
       [req.params.token]
@@ -4750,6 +4599,8 @@ app.get('/api/teacher/:token', async (req, res) => {
     if (new Date(t.expires_at) < new Date()) return bad(res, 'This link has expired. Ask your admin to send a new one.', 410);
 
     const school = await getSchool(t.school_id);
+    const isAccountant = /account|bursar|finance/i.test(t.staff_role || '');
+
     const assessments = await q(
       `SELECT id, title, subject, status FROM assessments
        WHERE school_id=$1 AND class_name=$2 AND status IN ('draft','active') ORDER BY created_at DESC`,
@@ -4759,8 +4610,8 @@ app.get('/api/teacher/:token', async (req, res) => {
       `SELECT 'question' AS kind, question_text AS label, status, created_at FROM pending_questions WHERE staff_id=$1
        UNION ALL
        SELECT 'score' AS kind, student_name || ' — ' || subject AS label, status, created_at FROM pending_scores WHERE staff_id=$1
-       UNION ALL
-       SELECT 'term_result' AS kind, student_name || ' — ' || term AS label, status, created_at FROM pending_term_results WHERE staff_id=$1
+       ${isAccountant ? `UNION ALL
+       SELECT 'fee_payment' AS kind, student_name || ' — ₦' || amount_paid AS label, status, created_at FROM pending_fee_payments WHERE staff_id=$1` : ''}
        ORDER BY created_at DESC LIMIT 10`,
       [t.staff_id]
     );
@@ -4774,13 +4625,20 @@ app.get('/api/teacher/:token', async (req, res) => {
       [t.school_id, t.class_name]
     );
 
+    // Accountants see every student in the school (fees aren't scoped to one class)
+    const allStudents = isAccountant
+      ? await q(`SELECT id, name, class_name FROM students WHERE school_id=$1 ORDER BY class_name, name`, [t.school_id])
+      : { rows: [] };
+
     json(res, {
       unlocked: Boolean(t.unlocked_at),
       staff_name: t.staff_name,
       class_name: t.class_name,
       subject: t.subject,
+      is_accountant: isAccountant,
+      all_students: allStudents.rows,
+      current_term: school?.current_term || null,
       school_name: school?.name,
-      current_term: school?.current_term || '',
       assessments: assessments.rows,
       recent_submissions: recent.rows,
       pending_weekly_report: pendingReport.rows[0] || null
@@ -4867,67 +4725,34 @@ app.post('/api/teacher/:token/scores', requireUnlockedTeacherToken, async (req, 
   } catch (err) { bad(res, err.message, 500); }
 });
 
-// Roster for the teacher's own class, plus any of their own pending/approved/rejected
-// term-result submissions already on file for the given term (so a re-opened tab or an
-// edit-before-approval flow can prefill instead of starting blank).
-app.get('/api/teacher/:token/class-students', requireUnlockedTeacherToken, async (req, res) => {
+// Accountant/bursar submits a fee payment — requires the same unlocked, device-bound
+// token as questions/scores. Looks the student up directly by id since the accounts
+// portal shows a searchable school-wide list, not just one class.
+app.post('/api/teacher/:token/fee-payment', requireUnlockedTeacherToken, async (req, res) => {
   try {
     const t = req.teacherToken;
-    const term = (req.query.term || '').trim();
-
-    const students = await q(
-      `SELECT id, name FROM students WHERE school_id=$1 AND class_name=$2 ORDER BY name`,
-      [t.school_id, t.class_name]
-    );
-
-    let results = {};
-    if (term) {
-      const rows = await q(
-        `SELECT DISTINCT ON (student_id) student_id, subjects, position, remark, status
-         FROM pending_term_results
-         WHERE school_id=$1 AND staff_id=$2 AND class_name=$3 AND term=$4
-         ORDER BY student_id, created_at DESC`,
-        [t.school_id, t.staff_id, t.class_name, term]
-      );
-      rows.rows.forEach(r => { results[r.student_id] = r; });
+    const { rows: [staff] } = await q(`SELECT role FROM staff WHERE id=$1`, [t.staff_id]);
+    if (!/account|bursar|finance/i.test(staff?.role || '')) {
+      return bad(res, 'This link is not authorized for fee entry.', 403);
     }
 
-    json(res, { class_name: t.class_name, students: students.rows, results });
-  } catch (err) { bad(res, err.message, 500); }
-});
-
-app.post('/api/teacher/:token/term-results', requireUnlockedTeacherToken, async (req, res) => {
-  try {
-    const t = req.teacherToken;
-    const { student_id, term, subjects, position, remark } = req.body;
-    if (!student_id || !term) return bad(res, 'Missing student or term', 400);
-    if (!subjects || !Object.keys(subjects).length) return bad(res, 'Add at least one subject and score', 400);
+    const { student_id, term, amount_paid, payment_method, note } = req.body;
+    if (!student_id || !term || !amount_paid || Number(amount_paid) <= 0) {
+      return bad(res, 'Missing student, term, or a valid amount', 400);
+    }
 
     const { rows: [student] } = await q(
-      `SELECT id, name FROM students WHERE id=$1 AND school_id=$2 AND class_name=$3`,
-      [student_id, t.school_id, t.class_name]
+      `SELECT name, class_name FROM students WHERE id=$1 AND school_id=$2`,
+      [student_id, t.school_id]
     );
-    if (!student) return bad(res, 'Student not found in your class', 404);
+    if (!student) return bad(res, 'Student not found', 404);
 
-    // If this teacher already has a pending submission for this student/term, revise it in
-    // place rather than piling up duplicates — same edit-before-approval idea as the weekly report tab.
-    const { rows: [existing] } = await q(
-      `SELECT id FROM pending_term_results WHERE school_id=$1 AND staff_id=$2 AND student_id=$3 AND term=$4 AND status='pending'`,
-      [t.school_id, t.staff_id, student_id, term]
+    await q(
+      `INSERT INTO pending_fee_payments (school_id, staff_id, student_id, student_name, class_name, term, amount_paid, payment_method, note)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [t.school_id, t.staff_id, student_id, student.name, student.class_name, term, Number(amount_paid), payment_method || 'cash', note || null]
     );
-    if (existing) {
-      await q(
-        `UPDATE pending_term_results SET subjects=$1, position=$2, remark=$3, created_at=now() WHERE id=$4`,
-        [JSON.stringify(subjects), position || null, remark || null, existing.id]
-      );
-    } else {
-      await q(
-        `INSERT INTO pending_term_results (school_id, staff_id, student_id, student_name, class_name, term, subjects, position, remark)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [t.school_id, t.staff_id, student_id, student.name, t.class_name, term, JSON.stringify(subjects), position || null, remark || null]
-      );
-    }
-    json(res, { ok: true, message: 'Submitted — awaiting admin review.' });
+    json(res, { ok: true, message: 'Payment submitted — awaiting admin approval before it reflects on the fee record.' });
   } catch (err) { bad(res, err.message, 500); }
 });
 
@@ -5002,40 +4827,47 @@ app.post('/api/admin/pending-scores/:id/reject', requireSchool, async (req, res)
   json(res, { ok: true });
 });
 
-app.get('/api/admin/pending-term-results', requireSchool, async (req, res) => {
+app.get('/api/admin/pending-fee-payments', requireSchool, async (req, res) => {
   const rows = await q(
-    `SELECT ptr.*, st.name AS staff_name
-     FROM pending_term_results ptr LEFT JOIN staff st ON st.id = ptr.staff_id
-     WHERE ptr.school_id=$1 AND ptr.status='pending' ORDER BY ptr.created_at DESC`,
+    `SELECT pfp.*, st.name AS staff_name
+     FROM pending_fee_payments pfp LEFT JOIN staff st ON st.id = pfp.staff_id
+     WHERE pfp.school_id=$1 AND pfp.status='pending' ORDER BY pfp.created_at DESC`,
     [req.school.id]
   );
   json(res, rows.rows);
 });
 
-app.post('/api/admin/pending-term-results/:id/approve', requireSchool, async (req, res) => {
+app.post('/api/admin/pending-fee-payments/:id/approve', requireSchool, async (req, res) => {
   try {
-    const { rows: [ptr] } = await q(`SELECT * FROM pending_term_results WHERE id=$1 AND school_id=$2 AND status='pending'`, [req.params.id, req.school.id]);
-    if (!ptr) return bad(res, 'Pending term result not found', 404);
-    if (!ptr.student_id) return bad(res, 'No matching student found — reject this and ask the teacher to resubmit.', 400);
+    const { rows: [p] } = await q(`SELECT * FROM pending_fee_payments WHERE id=$1 AND school_id=$2 AND status='pending'`, [req.params.id, req.school.id]);
+    if (!p) return bad(res, 'Pending payment not found', 404);
 
-    // Same upsert-into-student_results logic as the admin's own direct entry route (/api/admin/results),
-    // so an approved teacher submission becomes indistinguishable from one the admin typed in themselves.
-    const sessionYear = extractSessionYear(ptr.term) || extractSessionYear(req.school.current_term);
-    const existing = await q('SELECT id FROM student_results WHERE student_id=$1 AND school_id=$2 AND term=$3', [ptr.student_id, req.school.id, ptr.term]);
-    if (existing.rows.length) {
-      await q('UPDATE student_results SET subjects=$1, position=$2, remark=$3, class_name=$4, session_year=$5, updated_at=NOW() WHERE id=$6',
-        [JSON.stringify(ptr.subjects || {}), ptr.position, ptr.remark, ptr.class_name, sessionYear, existing.rows[0].id]);
-    } else {
-      await q('INSERT INTO student_results (school_id,student_id,class_name,term,subjects,position,remark,session_year) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
-        [req.school.id, ptr.student_id, ptr.class_name, ptr.term, JSON.stringify(ptr.subjects || {}), ptr.position, ptr.remark, sessionYear]);
-    }
-    await q(`UPDATE pending_term_results SET status='approved', reviewed_at=now() WHERE id=$1`, [ptr.id]);
-    json(res, { ok: true });
+    const sid = req.school.id;
+    // Same incremental-payment logic as the admin-entered /api/admin/fees/payment route,
+    // so a payment submitted by an accountant behaves identically once approved.
+    await q(`INSERT INTO fees (school_id,student_id,term,amount_due,amount_paid,status)
+             VALUES ($1,$2,$3,0,0,'unpaid')
+             ON CONFLICT (school_id,student_id,term) DO NOTHING`,
+      [sid, p.student_id, p.term]).catch(() => {});
+
+    const { rows: [fee] } = await q(`SELECT * FROM fees WHERE school_id=$1 AND student_id=$2 AND term=$3 LIMIT 1`, [sid, p.student_id, p.term]);
+    const newPaid = Number(fee.amount_paid || 0) + Number(p.amount_paid);
+    const newStatus = newPaid <= 0 ? 'unpaid'
+      : newPaid >= Number(fee.amount_due || 0) && Number(fee.amount_due || 0) > 0 ? 'paid'
+      : 'partial';
+
+    await q(`UPDATE fees SET amount_paid=$1, status=$2, updated_at=now() WHERE id=$3`, [newPaid, newStatus, fee.id]);
+    await q(`INSERT INTO fee_payments (school_id,student_id,fee_id,amount,payment_method,payment_date,note)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [sid, p.student_id, fee.id, Number(p.amount_paid), p.payment_method, new Date().toISOString().slice(0,10), p.note]);
+
+    await q(`UPDATE pending_fee_payments SET status='approved', reviewed_at=now() WHERE id=$1`, [p.id]);
+    json(res, { ok: true, amount_paid: newPaid, status: newStatus });
   } catch (err) { bad(res, err.message, 500); }
 });
 
-app.post('/api/admin/pending-term-results/:id/reject', requireSchool, async (req, res) => {
-  await q(`UPDATE pending_term_results SET status='rejected', reviewed_at=now() WHERE id=$1 AND school_id=$2`, [req.params.id, req.school.id]);
+app.post('/api/admin/pending-fee-payments/:id/reject', requireSchool, async (req, res) => {
+  await q(`UPDATE pending_fee_payments SET status='rejected', reviewed_at=now() WHERE id=$1 AND school_id=$2`, [req.params.id, req.school.id]);
   json(res, { ok: true });
 });
 
