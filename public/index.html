@@ -2748,202 +2748,20 @@ const templates = {
   award: `🌟 Congratulations to this week's Students of the Week! Well done to these outstanding students! ${schoolData?.name||'Your School'} 🏫`,
   pta: `Dear Parent, the PTA meeting is coming up soon. Your presence is important. ${schoolData?.name||'Your School'} 🏫`
 };
-function useTemplate(key) { document.getElementById('broadcast-msg').value = templates[key] || ''; }
 
 // sendBroadcast defined below
 
 // ── Documents / AI Training ───────────────────────────────
-async function loadDocuments() {
-  const el = document.getElementById('documents-list');
-  try {
-    const docs = await api('/api/admin/documents');
-    if (!docs.length) {
-      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">No documents uploaded yet.<br>Upload your school handbook to make EduPing smarter.</div>';
-      return;
-    }
-    el.innerHTML = docs.map(d => `
-      <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid #f5f5f5;">
-        <div style="width:36px;height:36px;background:var(--green-pale);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">
-          ${{handbook:'📖',calendar:'📅',fees:'💰',admission:'📋',rules:'⚖️',other:'📄'}[d.doc_type]||'📄'}
-        </div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:600;font-size:13px;">${d.name}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${d.doc_type} · Uploaded ${new Date(d.uploaded_at).toLocaleDateString()}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.preview}...</div>
-        </div>
-        <button class="action-btn" onclick="deleteDocument('${d.id}','${d.name}')" style="flex-shrink:0;color:var(--danger);border-color:var(--danger);">Delete</button>
-      </div>`).join('');
-  } catch(e) { el.innerHTML = '<div class="loading">Could not load documents</div>'; }
-}
 
-async function uploadDocument() {
-  const name = document.getElementById('doc-name').value.trim();
-  const content = document.getElementById('doc-content').value.trim();
-  const doc_type = document.getElementById('doc-type').value;
-  if (!name || !content) { showToast('Please fill document name and content ❌'); return; }
-  try {
-    await api('/api/admin/documents', { method:'POST', body:JSON.stringify({ name, content, doc_type }) });
-    showToast('✅ Document uploaded! EduPing is now trained on ' + name);
-    document.getElementById('doc-name').value = '';
-    document.getElementById('doc-content').value = '';
-    loadDocuments();
-  } catch(e) { showToast('Upload failed ❌'); }
-}
 
-async function deleteDocument(id, name) {
-  if (!confirm('Delete "' + name + '"? EduPing will no longer use this document.')) return;
-  try {
-    await api('/api/admin/documents/' + id, { method:'DELETE' });
-    showToast(name + ' deleted');
-    loadDocuments();
-  } catch(e) { showToast('Error deleting ❌'); }
-}
 
 // ── Appraisal ─────────────────────────────────────────────
-async function loadAppraisal() {
-  const el = document.getElementById('appraisal-content');
-  const weightsEl = document.getElementById('appraisal-weights');
-  try {
-    const data = await api('/api/admin/appraisal');
-    if (!data.staff || !data.staff.length) {
-      el.innerHTML = '<div class="loading">No staff data yet. Add staff and their activity will be tracked automatically.</div>';
-      return;
-    }
-
-    // Weights display
-    const w = data.weights;
-    weightsEl.innerHTML = Object.entries(w).map(([k, v]) => `
-      <div style="background:var(--gray-bg);border-radius:8px;padding:10px 16px;text-align:center;">
-        <div style="font-size:20px;font-weight:700;color:var(--green);">${v}%</div>
-        <div style="font-size:11px;color:var(--text-muted);text-transform:capitalize;">${k.replace('_',' ')}</div>
-      </div>`).join('');
-
-    // Staff table
-    el.innerHTML = `<table class="data-table">
-      <thead><tr>
-        <th>Staff Member</th><th>Role</th>
-        <th>Punctuality</th><th>Attendance Sub.</th>
-        <th>Scores Uploaded</th><th>Homework Set</th>
-        <th>Overall Score</th><th>Grade</th>
-      </tr></thead>
-      <tbody>${data.staff.map(s => {
-        const scoreColor = s.overall_score >= 85 ? 'var(--green)' : s.overall_score >= 70 ? 'var(--info)' : s.overall_score >= 55 ? 'var(--warning)' : 'var(--danger)';
-        const gradeColor = s.grade === 'Excellent' ? 'pill-green' : s.grade === 'Good' ? 'pill-blue' : s.grade === 'Satisfactory' ? 'pill-gold' : 'pill-red';
-        return `<tr>
-          <td><strong>${s.name}</strong></td>
-          <td>${s.role}${s.subject?' — '+s.subject:''}</td>
-          <td>${s.punctuality.on_time}/${s.punctuality.total} days (${s.punctuality.percent}%)</td>
-          <td>${s.submissions.attendance}</td>
-          <td>${s.submissions.scores}</td>
-          <td>${s.submissions.homework}</td>
-          <td><strong style="color:${scoreColor};font-size:16px;">${s.overall_score}/100</strong></td>
-          <td><span class="pill ${gradeColor}">${s.grade}</span></td>
-        </tr>`;
-      }).join('')}</tbody>
-    </table>
-    <div style="margin-top:14px;font-size:12px;color:var(--text-muted);">
-      Generated: ${new Date(data.generated_at).toLocaleString('en-NG')} · Scores are weighted based on your appraisal configuration set during onboarding.
-    </div>`;
-  } catch(e) { el.innerHTML = '<div class="loading">Could not load appraisal data</div>'; }
-}
 
 // ── Message Usage ─────────────────────────────────────────
-async function loadUsage() {
-  try {
-    const data = await api('/api/admin/usage');
-    document.getElementById('usage-used').textContent = data.used.toLocaleString();
-    document.getElementById('usage-limit').textContent = data.limit.toLocaleString();
-    document.getElementById('usage-remaining').textContent = data.remaining.toLocaleString();
-    document.getElementById('usage-label').textContent = data.used + ' of ' + data.limit + ' messages used in ' + data.month;
-    document.getElementById('usage-pct').textContent = data.percent + '%';
-    const bar = document.getElementById('usage-bar');
-    bar.style.width = data.percent + '%';
-    bar.style.background = data.percent >= 90 ? 'var(--danger)' : data.percent >= 70 ? 'var(--warning)' : 'var(--green)';
-
-    // History chart
-    const history = data.history || [];
-    const histEl = document.getElementById('usage-history');
-    if (history.length) {
-      const max = Math.max(...history.map(h => h.count), 1);
-      histEl.innerHTML = history.reverse().map(h => `
-        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end;">
-          <div style="font-size:10px;color:var(--green);font-weight:600;">${h.count}</div>
-          <div style="width:100%;background:var(--green-pale);border-radius:4px 4px 0 0;position:relative;height:90px;">
-            <div style="position:absolute;bottom:0;left:0;right:0;background:var(--green);border-radius:4px 4px 0 0;height:${Math.round((h.count/max)*100)}%;"></div>
-          </div>
-          <div style="font-size:10px;color:var(--text-muted);">${h.month.slice(5)}</div>
-        </div>`).join('');
-    } else {
-      histEl.innerHTML = '<div class="loading">No history yet</div>';
-    }
-  } catch(e) { console.log('Usage error:', e); }
-}
 
 // ── PDF import ────────────────────────────────────────────
-async function importFromPDF() {
-  const pdfText = document.getElementById('pdf-text-input').value.trim();
-  if (!pdfText || pdfText.length < 20) { showToast('Please paste PDF text first ❌'); return; }
-  const btn = event.target;
-  btn.textContent = '🔍 Extracting students...';
-  btn.disabled = true;
-  const resultEl = document.getElementById('pdf-import-result');
-  resultEl.style.display = 'none';
-  try {
-    const result = await api('/api/admin/students/import-pdf', {
-      method: 'POST',
-      body: JSON.stringify({ pdfText, fee_settings: getFeeImportSettings() })
-    });
-    resultEl.style.display = 'block';
-    resultEl.style.background = 'var(--green-pale)';
-    resultEl.style.color = 'var(--green)';
-    resultEl.innerHTML = '✅ <strong>' + result.imported + ' students imported</strong> from PDF!' +
-      (result.skipped ? ' ' + result.skipped + ' rows skipped.' : '') +
-      (result.total ? ' (' + result.total + ' total detected)' : '');
-    document.getElementById('pdf-text-input').value = '';
-    loadStudents();
-  } catch(e) {
-    resultEl.style.display = 'block';
-    resultEl.style.background = '#fee2e2';
-    resultEl.style.color = 'var(--danger)';
-    resultEl.textContent = '❌ ' + (e.message || 'Could not import. Try the text paste method instead.');
-  }
-  btn.textContent = '📄 Extract & Import Students';
-  btn.disabled = false;
-}
 
 // ── Text paste import ──────────────────────────────────────
-async function importFromText() {
-  const text = document.getElementById('text-import-input').value.trim();
-  const class_name = document.getElementById('text-import-class').value.trim();
-  if (!text || text.length < 2) { showToast('Please type or paste student names first ❌'); return; }
-  const btn = event.target;
-  btn.textContent = '⏳ Importing...';
-  btn.disabled = true;
-  const resultEl = document.getElementById('text-import-result');
-  resultEl.style.display = 'none';
-  try {
-    const feeSettings = getFeeImportSettings();
-    const result = await api('/api/admin/students/import-text', {
-      method: 'POST',
-      body: JSON.stringify({ text, class_name, fee_settings: feeSettings })
-    });
-    resultEl.style.display = 'block';
-    resultEl.style.background = 'var(--green-pale)';
-    resultEl.style.color = 'var(--green)';
-    resultEl.innerHTML = '✅ <strong>' + result.imported + ' students imported</strong>!' +
-      (result.skipped ? ' ' + result.skipped + ' skipped (duplicates or blank lines).' : '') +
-      (result.errors && result.errors.length ? '<br>⚠️ Could not parse: ' + result.errors.join(', ') : '');
-    document.getElementById('text-import-input').value = '';
-    loadStudents();
-  } catch(e) {
-    resultEl.style.display = 'block';
-    resultEl.style.background = '#fee2e2';
-    resultEl.style.color = 'var(--danger)';
-    resultEl.textContent = '❌ ' + (e.message || 'Import failed. Please check your format.');
-  }
-  btn.textContent = '➕ Import Students';
-  btn.disabled = false;
-}
 
 // ── Parent Chats ──────────────────────────────────────────
 let allMessages = [];
@@ -3122,7 +2940,6 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
-function useTemplate(key) { document.getElementById('broadcast-msg').value = templates[key] || ''; }
 
 // sendBroadcast defined below
 
@@ -3469,11 +3286,6 @@ async function openChat(phone, silent) {
       'Could not load messages: ' + e.message + '</div>';
   }
 }
-function filterChats() {
-  const q = document.getElementById('chat-search').value.toLowerCase();
-  const filtered = allMessages.filter(m => m.from_number.includes(q) || (m.user_message||'').toLowerCase().includes(q));
-  renderChatList(filtered);
-}
 
 async function sendAdminReply() {
   const msg = document.getElementById('admin-reply-input').value.trim();
@@ -3604,86 +3416,6 @@ async function loadAbsentees() {
 }
 
 // ── Student Profile Panel ─────────────────────────────────
-async function openProfile(studentId) {
-  document.getElementById('profile-panel').classList.add('open');
-  document.getElementById('profile-overlay').classList.add('show');
-  document.getElementById('profile-name').textContent = 'Loading...';
-  document.getElementById('profile-class').textContent = '';
-  document.getElementById('profile-body').innerHTML = '<div class="loading" style="padding:40px;">Loading profile...</div>';
-  try {
-    const data = await api('/api/admin/students/' + studentId + '/profile');
-    const s = data.student;
-    document.getElementById('profile-name').textContent = s.name;
-    document.getElementById('profile-class').textContent = (s.class_name||'') + ' — ' + (s.parent_name||'');
-    
-    const fee = data.fees && data.fees.length ? data.fees[0] : null;
-    const feeStatus = fee ? fee.status : 'no record';
-    const feePill = feeStatus === 'paid' ? 'pill-green' : feeStatus === 'partial' ? 'pill-gold' : 'pill-red';
-    
-    // Attendance dots (last 10 days)
-    const attDots = (data.attendance || []).slice(0, 10).map(a =>
-      '<div class="attend-dot ' + a.status + '" title="' + a.date + '">' + (a.status === 'present' ? 'P' : 'A') + '</div>'
-    ).join('');
-
-    // Scores by subject
-    const subjects = {};
-    (data.scores || []).forEach(sc => {
-      if (!subjects[sc.subject]) subjects[sc.subject] = [];
-      subjects[sc.subject].push(Number(sc.score));
-    });
-    const scoresHtml = Object.entries(subjects).map(([subj, vals]) => {
-      const avg = Math.round(vals.reduce((a,b) => a+b,0)/vals.length);
-      const color = avg >= 70 ? 'var(--green)' : avg >= 50 ? 'var(--info)' : 'var(--danger)';
-      return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f5f5f5;font-size:13px;">' +
-        '<span>' + subj + '</span><strong style="color:' + color + ';">' + avg + '%</strong></div>';
-    }).join('') || '<div class="loading">No scores recorded</div>';
-
-    const risk = data.risk;
-    const riskHtml = risk ? '<div style="background:' + (risk.risk_level === 'critical' ? '#fee2e2' : risk.risk_level === 'high' ? '#fef3c7' : '#f0fdf4') + ';border-radius:8px;padding:12px;font-size:13px;margin-top:8px;">' +
-      '<strong>Risk Level: ' + risk.risk_level.toUpperCase() + '</strong>' +
-      (risk.plan_text ? '<div style="margin-top:8px;font-size:12px;color:var(--text-muted);white-space:pre-wrap;">' + risk.plan_text.slice(0,300) + '...</div>' : '') +
-      '</div>' : '<div style="color:var(--text-muted);font-size:13px;">No risk assessment yet</div>';
-
-    document.getElementById('profile-body').innerHTML =
-      '<div class="profile-section">' +
-        '<div class="profile-section-title">Overview</div>' +
-        '<div class="profile-stat-row">' +
-          '<div class="profile-stat"><div class="profile-stat-val">' + (data.attendance_pct !== null ? data.attendance_pct + '%' : '—') + '</div><div class="profile-stat-label">Attendance</div></div>' +
-          '<div class="profile-stat"><div class="profile-stat-val">' + (data.hw_completion !== null ? data.hw_completion + '%' : '—') + '</div><div class="profile-stat-label">HW Completion</div></div>' +
-          '<div class="profile-stat"><div class="profile-stat-val"><span class="pill ' + feePill + '">' + feeStatus + '</span></div><div class="profile-stat-label">Fee Status</div></div>' +
-        '</div>' +
-        '<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Last 10 school days attendance:</div>' +
-        '<div class="attend-mini">' + (attDots || '<div class="loading" style="font-size:12px;">No attendance data</div>') + '</div>' +
-      '</div>' +
-      '<div class="profile-section">' +
-        '<div class="profile-section-title">Contact Info</div>' +
-        '<div style="font-size:13px;display:flex;flex-direction:column;gap:8px;">' +
-          '<div><strong>Parent:</strong> ' + (s.parent_name||'—') + '</div>' +
-          '<div style="display:flex;align-items:center;gap:8px;"><strong>Phone:</strong> <span id="profile-phone">' + (s.parent_phone||'—') + '</span>' +
-          '<button class="action-btn" onclick="editParentPhone(\'' + s.id + '\')">Edit</button></div>' +
-        '</div>' +
-      '</div>' +
-      '<div class="profile-section">' +
-        '<div class="profile-section-title">Score History</div>' +
-        scoresHtml +
-      '</div>' +
-      '<div class="profile-section">' +
-        '<div class="profile-section-title">Fees</div>' +
-        (fee ? '<div style="font-size:13px;display:flex;flex-direction:column;gap:6px;">' +
-          '<div><strong>Amount Due:</strong> ₦' + Number(fee.amount_due).toLocaleString() + '</div>' +
-          '<div><strong>Amount Paid:</strong> ₦' + Number(fee.amount_paid).toLocaleString() + '</div>' +
-          '<div><strong>Balance:</strong> ₦' + (Number(fee.amount_due) - Number(fee.amount_paid)).toLocaleString() + '</div>' +
-          '<button class="broadcast-btn" style="margin-top:8px;" onclick="openPaymentModal(\'' + s.id + '\',\'' + s.name.replace(/'/g,'') + '\')">💳 Record Payment</button>' +
-          '</div>' : '<div style="font-size:13px;color:var(--text-muted);">No fee record. <button class="action-btn" onclick="openPaymentModal(\'' + s.id + '\',\'' + s.name.replace(/'/g,'') + '\')">Add payment</button></div>') +
-      '</div>' +
-      '<div class="profile-section">' +
-        '<div class="profile-section-title">Risk & Intervention</div>' +
-        riskHtml +
-      '</div>';
-  } catch(e) {
-    document.getElementById('profile-body').innerHTML = '<div class="loading" style="padding:40px;">Could not load profile: ' + e.message + '</div>';
-  }
-}
 
 function closeProfile() {
   document.getElementById('profile-panel').classList.remove('open');
@@ -4323,36 +4055,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 // ── Attendance Trend Chart ────────────────────────────────
-async function loadAttendanceTrend() {
-  const chart = document.getElementById('attend-trend-chart');
-  const labels = document.getElementById('attend-trend-labels');
-  if (!chart) return;
-  try {
-    const rows = await api('/api/admin/attendance?from=' + new Date(Date.now() - 29*86400000).toISOString().slice(0,10));
-    const days = [];
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(Date.now() - i*86400000);
-      days.push({ date: d.toISOString().slice(0,10), label: d.toLocaleDateString('en-NG',{day:'numeric',month:'short'}) });
-    }
-    const byDate = {};
-    (rows || []).forEach(r => {
-      if (!byDate[r.date]) byDate[r.date] = { present: 0, total: 0 };
-      byDate[r.date].total++;
-      if (r.status === 'present') byDate[r.date].present++;
-    });
-    const maxTotal = Math.max(...days.map(d => (byDate[d.date]?.total || 0)), 1);
-    chart.innerHTML = days.map(d => {
-      const data = byDate[d.date];
-      const pct = data ? Math.round((data.present/data.total)*100) : 0;
-      const height = data ? Math.max(4, Math.round((data.present/maxTotal)*56)) : 2;
-      const color = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--gold)' : 'var(--danger)';
-      return '<div class="trend-bar" style="height:' + height + 'px;background:' + color + ';" data-tip="' + d.label + ': ' + pct + '%"></div>';
-    }).join('');
-    labels.innerHTML = days.map((d, i) => '<div class="trend-label">' + (i % 5 === 0 ? d.label : '') + '</div>').join('');
-  } catch(e) {
-    if (chart) chart.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:10px;">No attendance data yet</div>';
-  }
-}
 
 // ── Top Performing Students (Leaderboard) ─────────────────
 async function loadLeaderboard() {
@@ -4426,19 +4128,6 @@ function filterHomeworkHistory() {
 }
 
 // ── Score Bar Chart ───────────────────────────────────────
-function renderScoreChart(subjects) {
-  const entries = Object.entries(subjects);
-  if (!entries.length) return '<div style="color:var(--text-muted);font-size:13px;">No scores recorded</div>';
-  const sorted = entries.sort((a,b) => b[1].avg - a[1].avg);
-  return '<div class="chart-bar-wrap">' + sorted.map(([subj, data]) => {
-    const avg = data.avg;
-    const fillClass = avg >= 70 ? '' : avg >= 50 ? 'gold' : 'danger';
-    return '<div class="chart-bar-row">' +
-      '<div class="chart-bar-label" title="' + subj + '">' + subj + '</div>' +
-      '<div class="chart-bar-track"><div class="chart-bar-fill ' + fillClass + '" style="width:' + avg + '%;"></div></div>' +
-      '<div class="chart-bar-val">' + avg + '%</div></div>';
-  }).join('') + '</div>';
-}
 
 // ── Send Message to Parent ────────────────────────────────
 let _currentProfilePhone = '';
@@ -4817,7 +4506,7 @@ function showGalleryUploader(eventId, eventName) {
     '<div class="upload-zone" onclick="document.getElementById(\'photo-input-' + eventId + '\').click()" ' +
     'ondragover="this.classList.add(\'dragover\');event.preventDefault()" ' +
     'ondragleave="this.classList.remove(\'dragover\')" ' +
-    'ondrop="handlePhotoDrop(event,\'' + eventId + '\')">' +
+    'ondrop="handleEventPhotoDrop(event,\'' + eventId + '\')">' +
     '<div class="upload-zone-icon">📷</div>' +
     '<div class="upload-zone-text">Click or drag photos here to upload<br><span style="font-size:11px;">JPG, PNG — multiple files supported</span></div>' +
     '</div>' +
@@ -4851,7 +4540,7 @@ async function uploadPhotos(files, eventId) {
   loadGalleries();
 }
 
-function handlePhotoDrop(event, eventId) {
+function handleEventPhotoDrop(event, eventId) {
   event.preventDefault();
   event.currentTarget.classList.remove('dragover');
   uploadPhotos(event.dataTransfer.files, eventId);
