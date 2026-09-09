@@ -2989,11 +2989,12 @@ app.get('/api/admin/students/:id/profile', requireSchool, async (req, res) => {
     const attendancePct = attendanceArr.length ? Math.round((presentCount / attendanceArr.length) * 100) : null;
 
     json(res, {
-      ...s,
+      student: s,
       scores: scores.rows,
       fees: fees.rows,
       attendance: attendanceArr,
       attendance_pct: attendancePct,
+      hw_completion: null, // not tracked yet — no table records per-student homework completion, only what was assigned
       sickbay: sickbay.rows,
       homeworks: homeworks.rows,
       behaviour: behaviour.rows,
