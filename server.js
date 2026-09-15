@@ -62,6 +62,7 @@ app.use('/webhooks/', webhookLimiter);
 if (process.env.SENTRY_DSN) app.use(Sentry.Handlers.requestHandler());
 // Serve landing page at root — before static middleware
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'landing.html')));
+app.get('/privacy', (req, res) => res.sendFile(path.join(__dirname, 'public', 'privacy.html')));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.use(express.static(path.join(__dirname, 'public')));
 
