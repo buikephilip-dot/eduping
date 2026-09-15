@@ -118,6 +118,14 @@ function normalisePhone(phone = '') {
   if (raw.startsWith('234')) raw = '+' + raw;
   return raw;
 }
+// A Cloud API Phone Number ID is a long digit-only string (e.g. "1310160585515916").
+// Twilio numbers are always stored with a leading "+". This lets every existing
+// call site that passes school.twilio_number as a "from" value route correctly
+// to either provider without being rewritten.
+function isCloudNumber(v) {
+  return /^\d{9,20}$/.test(String(v || ''));
+}
+function hasWhatsAppCloud() { return Boolean(process.env.WHATSAPP_ACCESS_TOKEN); }
 function uuid() { return crypto.randomUUID(); }
 function maxAdminsForPlan(plan) { return plan === 'starter' ? 1 : 5; }
 function createToken(payload) {
@@ -144,6 +152,10 @@ async function migrate() {
 
   // Drop old unique constraint on twilio_number if it exists (allows empty values)
   await q(`ALTER TABLE schools DROP CONSTRAINT IF EXISTS schools_twilio_number_key`).catch(() => {});
+
+  // WhatsApp Cloud API support — a school's "twilio_number" column can now hold either
+  // a real Twilio number (e.g. +2347...) or a Meta Cloud API Phone Number ID (long digit
+  // string, no +). isCloudNumber() below tells the two apart at send/route time.
 
   // Add gesture-challenge columns to signin_log for schools that already have the table
   await q(`ALTER TABLE signin_log ADD COLUMN IF NOT EXISTS gesture TEXT`).catch(() => {});
@@ -861,6 +873,38 @@ async function fetchTwilioMediaBase64(mediaUrl) {
   return buf.toString('base64');
 }
 
+// WhatsApp Cloud API media arrives as an opaque media ID — resolve it to a short-lived
+// URL, then download it, both authenticated with the System User's access token.
+async function fetchCloudMediaBase64(mediaId) {
+  const metaRes = await fetch(`https://graph.facebook.com/v26.0/${mediaId}`, {
+    headers: { Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}` }
+  });
+  if (!metaRes.ok) throw new Error(`Failed to resolve Cloud media (${metaRes.status})`);
+  const meta = await metaRes.json();
+  const fileRes = await fetch(meta.url, { headers: { Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}` } });
+  if (!fileRes.ok) throw new Error(`Failed to download Cloud media (${fileRes.status})`);
+  const buf = Buffer.from(await fileRes.arrayBuffer());
+  return { base64: buf.toString('base64'), mimeType: meta.mime_type || '' };
+}
+
+// Sends a text message via WhatsApp Cloud API. `phoneNumberId` is the sending
+// number's Meta Phone Number ID (the school's schools.twilio_number value).
+async function cloudSend(to, phoneNumberId, body) {
+  if (!hasWhatsAppCloud()) return { skipped: true, reason: 'WhatsApp Cloud API token missing' };
+  const toDigits = normalisePhone(to).replace(/^\+/, '');
+  const res = await fetch(`https://graph.facebook.com/v26.0/${phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaging_product: 'whatsapp', to: toDigits, type: 'text', text: { body } })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error('[cloudSend]', JSON.stringify(data));
+    throw new Error(data?.error?.message || `Cloud API send failed (${res.status})`);
+  }
+  return data;
+}
+
 // Ask Claude Vision whether the photo shows a live selfie performing the given gesture.
 async function verifyGesturePhoto(gesture, imageBase64) {
   if (!hasVisionAi()) {
@@ -1020,6 +1064,9 @@ Conversation rules:
 }
 
 async function twilioSend(to, from, body) {
+  // Route to WhatsApp Cloud API transparently if "from" is a Cloud Phone Number ID
+  // rather than a Twilio number — every existing call site keeps working unchanged.
+  if (isCloudNumber(from)) return cloudSend(to, from, body);
   if (!hasTwilio()) return { skipped: true, reason: 'Twilio credentials missing' };
   const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
   return client.messages.create({ to: `whatsapp:${normalisePhone(to)}`, from: from?.startsWith('whatsapp:') ? from : `whatsapp:${normalisePhone(from || process.env.TWILIO_DEFAULT_FROM)}`, body });
@@ -1145,11 +1192,7 @@ How can I help you today? You can ask about attendance, results, fees, homework,
       const isEscalation = escalationPhrases.some(p => (reply||'').toLowerCase().includes(p));
       if (isEscalation && school.admin_phone) {
         try {
-          const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-          await twilioClient.messages.create({
-            from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
-            to: `whatsapp:${school.admin_phone}`,
-            body: `⚠️ *EduPing Alert — Parent needs follow-up*
+          await twilioSend(school.admin_phone, school.twilio_number || process.env.TWILIO_WHATSAPP_NUMBER, `⚠️ *EduPing Alert — Parent needs follow-up*
 
 From: ${from}
 Student: ${student.rows[0].name}
@@ -1157,8 +1200,7 @@ Message: "${body}"
 
 EduPing could not fully answer this. Please follow up directly.
 
-${school.name} 🏫`
-          });
+${school.name} 🏫`);
         } catch(e) { console.warn('Admin escalation notify failed:', e.message); }
       }
     } else {
@@ -1174,7 +1216,174 @@ ${school.name} 🏫`
   return res.type('text/xml').send(twiml.toString());
 }
 
-async function processTeacher(school, staff, body, mediaUrl, mediaType) {
+// WhatsApp Cloud API inbound handler — mirrors handleIncomingWhatsApp's logic above,
+// but parses Meta's JSON payload shape instead of Twilio's form fields, downloads
+// media via the Graph API instead of Twilio's media URLs, and acks with a plain 200
+// instead of TwiML (Cloud API is not TwiML-based).
+async function handleIncomingWhatsAppCloud(req, res) {
+  try {
+    const value = req.body?.entry?.[0]?.changes?.[0]?.value;
+    // Delivery/read status callbacks (and anything with no actual message) — just ack.
+    if (!value?.messages?.length) return res.sendStatus(200);
+
+    const phoneNumberId = value.metadata?.phone_number_id; // acts as the "to" routing key
+    const message = value.messages[0];
+    const from = normalisePhone(message.from);
+    const to = phoneNumberId;
+
+    let body = '';
+    let mediaType = '';
+    let mediaBase64 = null;
+    let mediaUrl = null; // truthy placeholder only — real bytes come via mediaBase64
+
+    if (message.type === 'text') {
+      body = message.text?.body || '';
+    } else if (message.type === 'image' || message.type === 'audio') {
+      const mediaObj = message[message.type];
+      mediaType = mediaObj?.mime_type || (message.type === 'image' ? 'image/jpeg' : 'audio/ogg');
+      mediaUrl = mediaObj?.id || 'cloud-media';
+      body = mediaObj?.caption || '';
+      try {
+        const dl = await fetchCloudMediaBase64(mediaObj?.id);
+        mediaBase64 = dl.base64;
+        mediaType = dl.mimeType || mediaType;
+      } catch (e) {
+        console.warn('[cloud media download]', e.message);
+      }
+    } else {
+      body = '';
+    }
+
+    const school = await getSchoolByTwilio(to);
+    if (!school || school.status !== 'active') {
+      if (school?.twilio_number) await cloudSend(from, to, 'School account is not active. Please contact EduPing support.').catch(() => {});
+      return res.sendStatus(200);
+    }
+    if (school.twilio_number) {
+      const sharedRisk = await q(
+        `SELECT COUNT(*) FROM schools WHERE status='active' AND twilio_number=$1 AND id != $2`,
+        [school.twilio_number, school.id]
+      );
+      if (Number(sharedRisk.rows[0].count) > 0) {
+        console.error(`[MULTITENANCY] twilio_number ${school.twilio_number} shared by multiple schools — message routing ambiguous`);
+        return res.sendStatus(200);
+      }
+    }
+
+    let reply = '';
+    const last9 = String(from).replace(/\D/g,'').slice(-9);
+    const staffLookup = await q(
+      `SELECT * FROM staff WHERE school_id=$1 AND (phone=$2 OR right(regexp_replace(phone,'[^0-9]','','g'),9)=$3) LIMIT 1`,
+      [school.id, from, last9]
+    );
+    const staff = staffLookup;
+    if (staff.rowCount) {
+      if (await isAiSuppressed(school.id, from)) {
+        await q(`INSERT INTO messages (school_id,from_number,channel,user_message,assistant_reply) VALUES ($1,$2,'teacher',$3,$4)`,
+          [school.id, from, body, '[AI suppressed — admin active in thread]']);
+        return res.sendStatus(200);
+      }
+      reply = await processTeacher(school, staff.rows[0], body, mediaUrl, mediaType, mediaBase64);
+      await q(`INSERT INTO messages (school_id,from_number,channel,user_message,assistant_reply) VALUES ($1,$2,'teacher',$3,$4)`,
+        [school.id, from, body, reply]).catch(e => console.warn('[teacher-log]', e.message));
+    } else {
+      const student = await q(
+        `SELECT * FROM students WHERE school_id=$1 AND (parent_phone=$2 OR right(regexp_replace(parent_phone,'[^0-9]','','g'),9)=$3) ORDER BY created_at ASC`,
+        [school.id, from, last9]
+      );
+      let siblings = [];
+      if (student.rows.length > 1) {
+        const bodyLower = String(body || '').toLowerCase();
+        const named = student.rows.find(s => String(s.name).toLowerCase().split(/\s+/).some(p => p.length > 2 && bodyLower.includes(p)));
+        if (named) student.rows = [named, ...student.rows.filter(s => s.id !== named.id)];
+        siblings = student.rows.slice(1).map(s => `${s.name}${s.class_name ? ' (' + s.class_name + ')' : ''}`);
+      }
+      if (student.rowCount) {
+        const lower = body.toLowerCase().trim();
+        const first = (await q(`SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1`, [school.id, from])).rowCount === 0;
+
+        if (first) {
+          reply = `👋 Welcome to ${school.name}'s AI assistant, powered by EduPing!
+
+Before we continue:
+📋 Your conversations and your child's data are processed by AI to answer your questions.
+🔒 Your data is private and never sold to third parties.
+🤖 For urgent matters, please contact the school directly.
+
+By sending any message, you agree to this.
+
+How can I help you today? You can ask about attendance, results, fees, homework, or school events. ${school.name} 🏫`;
+
+          await q(`INSERT INTO messages (school_id,from_number,student_id,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)`, [school.id, from, student.rows[0].id, body, reply]);
+          await cloudSend(from, to, reply).catch(e => console.warn('[cloud send]', e.message));
+          return res.sendStatus(200);
+        }
+
+        if (lower === 'tutor' || lower === 'i want a tutor' || lower === 'get tutor') {
+          const riskRow = await q(`SELECT weak_subjects FROM student_risk_scores WHERE student_id=$1 AND school_id=$2`, [student.rows[0].id, school.id]);
+          const enriched = { ...student.rows[0], weak_subjects: riskRow.rows[0]?.weak_subjects || [] };
+          reply = await handleTutorRequest(school, enriched, from);
+          await q(`UPDATE intervention_plans SET tutor_requested=true WHERE student_id=$1 AND tutor_requested=false`, [student.rows[0].id]);
+        }
+        else if (lower === 'yes' || lower === 'ok' || lower === 'okay' || lower === 'sure') {
+          const pending = await q(`SELECT ip.*, s.name student_name FROM intervention_plans ip JOIN students s ON s.id=ip.student_id WHERE ip.student_id=$1 AND s.school_id=$2 AND ip.parent_acknowledged=false ORDER BY ip.created_at DESC LIMIT 1`, [student.rows[0].id, school.id]);
+          if (pending.rowCount) {
+            await q(`UPDATE intervention_plans SET parent_acknowledged=true WHERE id=$1`, [pending.rows[0].id]);
+            reply = `✅ Great! We've noted that you're on board with ${pending.rows[0].student_name}'s study plan.\n\nReply *TUTOR* anytime if you'd like us to connect you with a private tutor.\n\n${school.name} 🏫`;
+          } else {
+            const ctx = await buildStudentContext(school, student.rows[0], from);
+            ctx.siblings = siblings;
+            reply = await callAI(parentPrompt(ctx, first), body || 'Hello', null, ctx.history);
+          }
+        }
+        else {
+          const suppressed = await isAiSuppressed(school.id, from);
+          if (suppressed) {
+            await q(`INSERT INTO messages (school_id,from_number,student_id,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)`,
+              [school.id, from, student.rows[0].id, body, '[AI suppressed — admin active in thread]']);
+            return res.sendStatus(200);
+          }
+          const ctx = await buildStudentContext(school, student.rows[0], from);
+          ctx.siblings = siblings;
+          reply = await callAI(parentPrompt(ctx, first), body || 'Hello', null, ctx.history);
+        }
+
+        await q(`INSERT INTO messages (school_id,from_number,student_id,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)`, [school.id, from, student.rows[0].id, body, reply]);
+
+        const escalationPhrases = ['pass your question', 'contact the school directly', 'reach out directly', 'speak to the school', 'please contact'];
+        const isEscalation = escalationPhrases.some(p => (reply||'').toLowerCase().includes(p));
+        if (isEscalation && school.admin_phone) {
+          try {
+            await twilioSend(school.admin_phone, school.twilio_number, `⚠️ *EduPing Alert — Parent needs follow-up*
+
+From: ${from}
+Student: ${student.rows[0].name}
+Message: "${body}"
+
+EduPing could not fully answer this. Please follow up directly.
+
+${school.name} 🏫`);
+          } catch(e) { console.warn('Admin escalation notify failed:', e.message); }
+        }
+      } else {
+        const first = (await q(`SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1`, [school.id, from])).rowCount === 0;
+        const system = `You are EduPing for ${school.name}. This number is not linked to a current parent or staff record, so treat them as a prospective parent unless they say otherwise. Capture parent name, phone, child name, class applying, and next action. Keep it short. ${first ? 'Start with the first message privacy disclaimer.' : ''}`;
+        reply = await callAI(system, body || 'Admission inquiry', null);
+        await q(`INSERT INTO admission_inquiries (school_id,phone,status) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, [school.id, from, 'new']);
+        await q(`INSERT INTO messages (school_id,from_number,user_message,assistant_reply) VALUES ($1,$2,$3,$4)`, [school.id, from, body, reply]);
+      }
+    }
+
+    await cloudSend(from, to, reply).catch(e => console.warn('[cloud send]', e.message));
+    return res.sendStatus(200);
+  } catch (e) {
+    console.error('[whatsapp-cloud webhook]', e);
+    // Always 200 so Meta doesn't retry-storm us on an internal error.
+    if (!res.headersSent) return res.sendStatus(200);
+  }
+}
+
+async function processTeacher(school, staff, body, mediaUrl, mediaType, mediaBase64) {
   const lower = String(body || '').toLowerCase();
   const today = new Date().toISOString().slice(0,10);
 
@@ -1210,7 +1419,7 @@ async function processTeacher(school, staff, body, mediaUrl, mediaType) {
 
     let verification;
     try {
-      const imageBase64 = await fetchTwilioMediaBase64(mediaUrl);
+      const imageBase64 = mediaBase64 || await fetchTwilioMediaBase64(mediaUrl);
       verification = await verifyGesturePhoto(challenge.gesture, imageBase64);
     } catch (e) {
       console.error('[signin] verification error:', e.message);
@@ -1636,6 +1845,34 @@ app.post('/api/admin/reply', requireSchool, async (req, res) => {
 });
 
 app.post('/webhook/whatsapp', (req, res, next) => handleIncomingWhatsApp(req, res).catch(next));
+
+// ── WhatsApp Cloud API webhook (Meta) — separate from the Twilio route above ──
+// GET: verification handshake Meta performs once when you save the webhook config.
+app.get('/webhook/whatsapp-cloud', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+    return res.status(200).send(challenge);
+  }
+  return res.sendStatus(403);
+});
+// POST: actual inbound messages/status updates. Verifies Meta's signature before processing.
+app.post('/webhook/whatsapp-cloud', (req, res, next) => {
+  if (process.env.WHATSAPP_APP_SECRET) {
+    const signature = req.headers['x-hub-signature-256'] || '';
+    const expected = 'sha256=' + crypto.createHmac('sha256', process.env.WHATSAPP_APP_SECRET)
+      .update(req.rawBody || Buffer.from(JSON.stringify(req.body)))
+      .digest('hex');
+    const sigBuf = Buffer.from(signature);
+    const expBuf = Buffer.from(expected);
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      console.warn('[whatsapp-cloud] invalid webhook signature');
+      return res.sendStatus(401);
+    }
+  }
+  return handleIncomingWhatsAppCloud(req, res).catch(next);
+});
 
 app.post('/api/super/login', (req, res) => json(res, { ok: req.body.password === process.env.SUPER_ADMIN_PASSWORD }));
 app.get('/api/super/overview', requireSuper, async (req, res) => {
