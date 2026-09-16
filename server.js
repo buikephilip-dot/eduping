@@ -455,6 +455,7 @@ async function migrate() {
     ALTER TABLE schools ADD COLUMN IF NOT EXISTS term_start DATE;
     ALTER TABLE schools ADD COLUMN IF NOT EXISTS term_end DATE;
     ALTER TABLE schools ADD COLUMN IF NOT EXISTS events_enabled BOOLEAN DEFAULT true;
+    ALTER TABLE schools ADD COLUMN IF NOT EXISTS student_limit INTEGER;
 
     -- School events: extended columns used by events hub
     ALTER TABLE school_events ADD COLUMN IF NOT EXISTS name TEXT;
@@ -1885,20 +1886,36 @@ app.get('/api/super/overview', requireSuper, async (req, res) => {
   ]);
   json(res, { schools: schools.rows[0], students: students.rows[0].total, conversations: messages.rows[0].total, mrr: mrr.rows[0].mrr });
 });
-app.get('/api/super/schools', requireSuper, async (req, res) => json(res, (await q('SELECT * FROM schools ORDER BY created_at DESC')).rows));
+app.get('/api/super/schools', requireSuper, async (req, res) => {
+  const rows = (await q(`
+    SELECT s.*,
+      COALESCE(p.registered_parents, 0) AS registered_parents,
+      COALESCE(p.total_students, 0) AS total_students
+    FROM schools s
+    LEFT JOIN (
+      SELECT school_id,
+        COUNT(DISTINCT parent_phone) FILTER (WHERE parent_phone IS NOT NULL AND parent_phone != '') AS registered_parents,
+        COUNT(*) AS total_students
+      FROM students
+      GROUP BY school_id
+    ) p ON p.school_id = s.id
+    ORDER BY s.created_at DESC
+  `)).rows;
+  json(res, rows);
+});
 app.post('/api/super/schools', requireSuper, async (req, res) => {
   const b = req.body;
   if (b.twilio_number) {
     const conflict = await q(`SELECT name FROM schools WHERE twilio_number=$1 AND status='active' LIMIT 1`, [b.twilio_number]);
     if (conflict.rows.length) console.warn(`[MULTITENANCY] twilio_number ${b.twilio_number} already assigned to ${conflict.rows[0].name} — WhatsApp routing will be ambiguous`);
   }
-  const r = await q(`INSERT INTO schools (name,city,landmark_description,fees,fee_deadline,current_term,whatsapp_number,twilio_number,admin_password,plan,status,billing_start,monthly_retainer,setup_fee)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'active',$11,$12,$13) RETURNING *`,
-    [b.name,b.city,b.landmark_description||'',b.fees||'',b.fee_deadline||'',b.current_term||'',b.whatsapp_number||'',b.twilio_number||null,b.admin_password || uuid().slice(0,8),b.plan || 'starter',b.billing_start || new Date(),b.monthly_retainer || 0,b.setup_fee || 0]);
+  const r = await q(`INSERT INTO schools (name,city,landmark_description,fees,fee_deadline,current_term,whatsapp_number,twilio_number,admin_password,plan,status,billing_start,monthly_retainer,setup_fee,student_limit)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'active',$11,$12,$13,$14) RETURNING *`,
+    [b.name,b.city,b.landmark_description||'',b.fees||'',b.fee_deadline||'',b.current_term||'',b.whatsapp_number||'',b.twilio_number||null,b.admin_password || uuid().slice(0,8),b.plan || 'starter',b.billing_start || new Date(),b.monthly_retainer || 0,b.setup_fee || 0,b.student_limit || null]);
   json(res, r.rows[0], 201);
 });
 app.patch('/api/super/schools/:id', requireSuper, async (req, res) => {
-  const allowed = ['name','city','status','plan','admin_password','monthly_retainer','setup_fee','twilio_number','whatsapp_number','current_term','fees','fee_deadline'];
+  const allowed = ['name','city','status','plan','admin_password','monthly_retainer','setup_fee','twilio_number','whatsapp_number','current_term','fees','fee_deadline','student_limit'];
   const keys = Object.keys(req.body).filter(k => allowed.includes(k));
   if (!keys.length) return bad(res, 'No valid fields');
   const sets = keys.map((k,i) => `${k}=$${i+1}`).join(',');
@@ -2218,6 +2235,8 @@ app.post('/api/admin/students', requireSchool, async (req, res) => {
             fee_amount, fee_paid, fee_term, fee_status, date_of_birth } = req.body;
     if (!name) return bad(res, 'name required');
     const sid = req.school.id;
+    const limitCheck = await checkStudentLimit(req.school);
+    if (limitCheck.limited && limitCheck.remaining < 1) return bad(res, studentLimitError(limitCheck), 403);
     const phone = parent_phone ? (parent_phone.startsWith('+') ? parent_phone : '+234' + String(parent_phone).replace(/^0/, '')) : '';
     const st = await q(
       `INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,date_of_birth,weekly_performance_score)
@@ -2270,6 +2289,19 @@ async function createFeeRecord(schoolId, studentId, feeSettings, perStudentFee) 
     [schoolId, studentId, term, amountDue, amountPaid, status, dueDate]);
 }
 
+// Billing is per-student, so schools with a student_limit set can't exceed it.
+// No limit set (null) means unlimited — used for legacy/beta schools.
+async function checkStudentLimit(school) {
+  if (!school.student_limit) return { limited: false, remaining: Infinity, current: null, limit: null };
+  const countRes = await q(`SELECT COUNT(*) FROM students WHERE school_id=$1`, [school.id]);
+  const current = Number(countRes.rows[0].count);
+  const remaining = Math.max(school.student_limit - current, 0);
+  return { limited: true, limit: school.student_limit, current, remaining };
+}
+function studentLimitError(check) {
+  return `Student limit reached (${check.current}/${check.limit}). Contact EduPing to increase your plan's student limit before adding more students.`;
+}
+
 app.post('/api/admin/students/import-bulk', requireSchool, async (req, res) => {
   try {
     const { students, fee_settings } = req.body;
@@ -2277,7 +2309,9 @@ app.post('/api/admin/students/import-bulk', requireSchool, async (req, res) => {
     const sid = req.school.id;
     const term = fee_settings?.term || req.school.current_term;
     const feeSettingsWithTerm = fee_settings ? { ...fee_settings, term } : null;
-    let imported = 0, skipped = 0;
+    const limitCheck = await checkStudentLimit(req.school);
+    let remainingSlots = limitCheck.remaining;
+    let imported = 0, skipped = 0, limitBlocked = 0;
     for (const s of students) {
       if (!s.name) { skipped++; continue; }
       const phone = s.parent_phone ? (s.parent_phone.startsWith('+') ? s.parent_phone : '+234' + String(s.parent_phone).replace(/^0/, '')) : '';
@@ -2286,13 +2320,17 @@ app.post('/api/admin/students/import-bulk', requireSchool, async (req, res) => {
         if (s.amount_due) await createFeeRecord(sid, existing.rows[0].id, feeSettingsWithTerm, s);
         skipped++; continue;
       }
+      if (limitCheck.limited && remainingSlots < 1) { limitBlocked++; continue; }
       const dob = s.date_of_birth || null;
       const st = await q(`INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,date_of_birth,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
         [sid, s.name, s.class_name||'', s.parent_name||'', phone, dob, 0]);
       await createFeeRecord(sid, st.rows[0].id, feeSettingsWithTerm, s);
       imported++;
+      if (limitCheck.limited) remainingSlots--;
     }
-    res.json({ imported, skipped });
+    const response = { imported, skipped };
+    if (limitBlocked > 0) response.error = `${limitBlocked} student(s) not imported — ${studentLimitError({...limitCheck, current: limitCheck.limit - remainingSlots})}`;
+    res.json(response);
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2315,17 +2353,23 @@ app.post('/api/admin/students/import-photo', requireSchool, async (req, res) => 
     } catch(e) { return res.status(400).json({ error: 'Could not parse register. Please ensure photo is clear.' }); }
 
     const sid = req.school.id;
-    let imported = 0, skipped = 0;
+    const limitCheck = await checkStudentLimit(req.school);
+    let remainingSlots = limitCheck.remaining;
+    let imported = 0, skipped = 0, limitBlocked = 0;
     const classes = {};
     for (const s of students) {
       if (!s.name || s.name.length < 2) { skipped++; continue; }
+      if (limitCheck.limited && remainingSlots < 1) { limitBlocked++; continue; }
       try {
         await q(`INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`, [sid, s.name, s.class_name||'', s.parent_name||'', s.parent_phone||'', 0]);
         imported++;
+        if (limitCheck.limited) remainingSlots--;
         if (s.class_name) classes[s.class_name] = (classes[s.class_name]||0) + 1;
       } catch(e) { skipped++; }
     }
-    res.json({ imported, skipped, classes });
+    const response = { imported, skipped, classes };
+    if (limitBlocked > 0) response.error = `${limitBlocked} student(s) not imported — ${studentLimitError({...limitCheck, current: limitCheck.limit - remainingSlots})}`;
+    res.json(response);
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2347,7 +2391,9 @@ app.post('/api/admin/students/import-pdf', requireSchool, async (req, res) => {
     const sid = req.school.id;
     const term = fee_settings?.term || req.school.current_term;
     const feeSettingsWithTerm = fee_settings ? { ...fee_settings, term } : null;
-    let imported = 0, skipped = 0;
+    const limitCheck = await checkStudentLimit(req.school);
+    let remainingSlots = limitCheck.remaining;
+    let imported = 0, skipped = 0, limitBlocked = 0;
     for (const s of students) {
       if (!s.name || s.name.length < 2) { skipped++; continue; }
       try {
@@ -2356,13 +2402,17 @@ app.post('/api/admin/students/import-pdf', requireSchool, async (req, res) => {
         else if (phone.startsWith('234')) phone = '+' + phone;
         const existing = await q(`SELECT id FROM students WHERE school_id=$1 AND name=$2 LIMIT 1`, [sid, s.name.trim()]);
         if (existing.rows.length) { skipped++; continue; }
+        if (limitCheck.limited && remainingSlots < 1) { limitBlocked++; continue; }
         const st = await q(`INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
           [sid, s.name.trim(), s.class_name||'', s.parent_name||'', phone, 0]);
         await createFeeRecord(sid, st.rows[0].id, feeSettingsWithTerm, null);
         imported++;
+        if (limitCheck.limited) remainingSlots--;
       } catch(e) { skipped++; }
     }
-    res.json({ ok: true, imported, skipped, total: students.length });
+    const response = { ok: true, imported, skipped, total: students.length };
+    if (limitBlocked > 0) response.error = `${limitBlocked} student(s) not imported — ${studentLimitError({...limitCheck, current: limitCheck.limit - remainingSlots})}`;
+    res.json(response);
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2380,6 +2430,8 @@ app.post('/api/admin/students/add-manual', requireSchool, async (req, res) => {
     }
     const existing = await q(`SELECT id FROM students WHERE school_id=$1 AND name=$2 AND class_name=$3 LIMIT 1`, [sid, name.trim(), class_name||'']);
     if (existing.rows.length) return res.status(409).json({ error: 'A student with this name and class already exists' });
+    const limitCheck = await checkStudentLimit(req.school);
+    if (limitCheck.limited && limitCheck.remaining < 1) return res.status(403).json({ error: studentLimitError(limitCheck) });
     const result = await q(
       'INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id,name,class_name,parent_name,parent_phone',
       [sid, name.trim(), class_name||'', parent_name||'', phone, 0]
@@ -2394,7 +2446,9 @@ app.post('/api/admin/students/import-text', requireSchool, async (req, res) => {
     if (!text || text.trim().length < 2) return res.status(400).json({ error: 'No text provided' });
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 1);
     const sid = req.school.id;
-    let imported = 0, skipped = 0, errors = [];
+    const limitCheck = await checkStudentLimit(req.school);
+    let remainingSlots = limitCheck.remaining;
+    let imported = 0, skipped = 0, errors = [], limitBlocked = 0;
     for (const line of lines) {
       try {
         const parts = line.split(/[,\t|]/).map(p => p.trim());
@@ -2407,14 +2461,18 @@ app.post('/api/admin/students/import-text', requireSchool, async (req, res) => {
         else if (parent_phone && !parent_phone.startsWith('+')) parent_phone = '+234' + parent_phone;
         const existing = await q(`SELECT id FROM students WHERE school_id=$1 AND name=$2 LIMIT 1`, [sid, name]);
         if (existing.rows.length) { skipped++; continue; }
+        if (limitCheck.limited && remainingSlots < 1) { limitBlocked++; continue; }
         const st2 = await q(`INSERT INTO students (school_id,name,class_name,parent_name,parent_phone,weekly_performance_score) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
           [sid, name, class_name||'', parent_name, parent_phone, 0]);
         const fsTerm = fee_settings?.term || req.school.current_term;
         await createFeeRecord(sid, st2.rows[0].id, fee_settings ? {...fee_settings, term: fsTerm} : null, null);
         imported++;
+        if (limitCheck.limited) remainingSlots--;
       } catch(e) { errors.push(line); skipped++; }
     }
-    res.json({ ok: true, imported, skipped, errors: errors.slice(0, 10) });
+    const response = { ok: true, imported, skipped, errors: errors.slice(0, 10) };
+    if (limitBlocked > 0) response.error = `${limitBlocked} student(s) not imported — ${studentLimitError({...limitCheck, current: limitCheck.limit - remainingSlots})}`;
+    res.json(response);
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
