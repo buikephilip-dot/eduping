@@ -217,6 +217,7 @@ tr:hover td{background:rgba(255,255,255,.02);}
           </div>
           <div class="form-group"><label class="form-label">Twilio Number (for WhatsApp routing)</label><input class="form-input" id="ns-twilio" placeholder="+14155238886"><div style="font-size:11px;color:var(--text-muted);margin-top:4px;">The Twilio number assigned to this school. Parents WhatsApp this number.</div></div>
           <div class="form-group"><label class="form-label">Temporary Password (optional)</label><input class="form-input" id="ns-password" placeholder="Leave blank — school sets their own via onboarding link"><div style="font-size:11px;color:var(--text-muted);margin-top:4px;">If left blank, the school creates their password during onboarding. You can also set one manually here.</div></div>
+          <div class="form-group"><label class="form-label">Student Limit *</label><input class="form-input" id="ns-student-limit" type="number" min="1" placeholder="e.g. 300"><div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Billing is per student. Leave blank only for unlimited/legacy accounts — new schools should always have a limit set.</div></div>
           <div style="background:rgba(26,122,74,.1);border:1px solid rgba(26,122,74,.3);border-radius:8px;padding:12px;font-size:12px;color:#4ade80;line-height:1.8;">
             ℹ️ <strong>Everything else</strong> (fees, term, grading, events, staff rules, AI tone) is filled by the school through their onboarding link. Just add the school here, then send them the link.
           </div>
@@ -391,7 +392,7 @@ async function loadSchoolsOverview() {
   try {
     const schools = await sapi('/api/super/schools');
     if (!schools.length) { el.innerHTML = '<div class="loading">No schools yet. Add your first school.</div>'; return; }
-    el.innerHTML = `<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">School</th><th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">Plan</th><th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">Status</th><th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">MRR</th></tr></thead><tbody>${schools.map(s => `<tr><td style="padding:12px 16px;font-size:13px;border-bottom:1px solid rgba(255,255,255,.04);"><div><strong>${s.name}</strong></div><div class="school-sub">${s.city||''} · ID: ${s.id.slice(0,8)}...</div></td><td style="padding:12px 16px;font-size:12px;border-bottom:1px solid rgba(255,255,255,.04);">${s.plan}</td><td style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.04);"><span class="pill ${s.status==='active'?'pill-green':'pill-red'}"><span class="pill-dot"></span>${s.status}</span></td><td style="padding:12px 16px;font-size:13px;color:#4ade80;font-weight:600;border-bottom:1px solid rgba(255,255,255,.04);">₦${Number(s.monthly_retainer||0).toLocaleString()}</td></tr>`).join('')}</tbody></table>`;
+    el.innerHTML = `<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">School</th><th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">Plan</th><th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">Students</th><th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">Status</th><th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">MRR</th></tr></thead><tbody>${schools.map(s => `<tr><td style="padding:12px 16px;font-size:13px;border-bottom:1px solid rgba(255,255,255,.04);"><div><strong>${s.name}</strong></div><div class="school-sub">${s.city||''} · ID: ${s.id.slice(0,8)}...</div></td><td style="padding:12px 16px;font-size:12px;border-bottom:1px solid rgba(255,255,255,.04);">${s.plan}</td><td style="padding:12px 16px;font-size:12px;border-bottom:1px solid rgba(255,255,255,.04);">${studentCountCell(s)}</td><td style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.04);"><span class="pill ${s.status==='active'?'pill-green':'pill-red'}"><span class="pill-dot"></span>${s.status}</span></td><td style="padding:12px 16px;font-size:13px;color:#4ade80;font-weight:600;border-bottom:1px solid rgba(255,255,255,.04);">₦${Number(s.monthly_retainer||0).toLocaleString()}</td></tr>`).join('')}</tbody></table>`;
   } catch(e) { el.innerHTML = '<div class="loading">Error loading schools</div>'; }
 }
 
@@ -407,6 +408,7 @@ async function loadSchools() {
         <th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">School</th>
         <th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">School ID (for admin login)</th>
         <th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">Plan</th>
+        <th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">Students</th>
         <th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">Status</th>
         <th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">MRR</th>
         <th style="text-align:left;padding:10px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);">Actions</th>
@@ -415,11 +417,13 @@ async function loadSchools() {
         <td style="padding:12px 16px;font-size:13px;border-bottom:1px solid rgba(255,255,255,.04);"><strong>${s.name}</strong><div class="school-sub">${s.city||''}</div></td>
         <td style="padding:12px 16px;font-size:11px;border-bottom:1px solid rgba(255,255,255,.04);font-family:monospace;color:var(--text-muted);" onclick="copyId('${s.id}')" style="cursor:pointer;" title="Click to copy">${s.id} 📋</td>
         <td style="padding:12px 16px;font-size:12px;border-bottom:1px solid rgba(255,255,255,.04);">${s.plan}</td>
+        <td style="padding:12px 16px;font-size:12px;border-bottom:1px solid rgba(255,255,255,.04);">${studentCountCell(s)}</td>
         <td style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.04);"><span class="pill ${s.status==='active'?'pill-green':s.status==='suspended'?'pill-red':'pill-gold'}"><span class="pill-dot"></span>${s.status}</span></td>
         <td style="padding:12px 16px;font-size:13px;color:#4ade80;font-weight:600;border-bottom:1px solid rgba(255,255,255,.04);">₦${Number(s.monthly_retainer||0).toLocaleString()}/mo</td>
         <td style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.04);">
           <div style="display:flex;gap:6px;">
             <button class="action-btn" onclick="copyId('${s.id}')">Copy ID</button>
+            <button class="action-btn" onclick="editStudentLimit('${s.id}','${s.name}',${s.student_limit ?? 'null'})">🎓 Limit</button>
             <button class="action-btn" onclick="generateLink('${s.id}','${s.name}')">🔗 Onboarding link</button>
             <button class="action-btn" onclick="suspendSchool('${s.id}','${s.name}','${s.status}')">
               ${s.status==='active'?'Suspend':'Activate'}
@@ -429,6 +433,27 @@ async function loadSchools() {
         </td>
       </tr>`).join('')}</tbody></table>`;
   } catch(e) { el.innerHTML = '<div class="loading">Error loading schools</div>'; }
+}
+
+function studentCountCell(s) {
+  const total = Number(s.total_students || 0);
+  const limit = s.student_limit;
+  if (!limit) return `${total} <span style="color:var(--text-muted);">/ Unlimited</span>`;
+  const pct = total / limit;
+  const color = pct >= 1 ? '#f87171' : pct >= 0.85 ? 'var(--gold)' : '#4ade80';
+  return `<span style="color:${color};font-weight:600;">${total} / ${limit}</span>`;
+}
+
+async function editStudentLimit(id, name, currentLimit) {
+  const val = prompt(`Set student limit for ${name}\n(billing is per student — leave blank for unlimited):`, currentLimit ?? '');
+  if (val === null) return; // cancelled
+  const parsed = val.trim() === '' ? null : parseInt(val, 10);
+  if (val.trim() !== '' && (isNaN(parsed) || parsed < 1)) { showToast('Enter a valid number ❌'); return; }
+  try {
+    await sapi('/api/super/schools/' + id, { method:'PATCH', body:JSON.stringify({ student_limit: parsed }) });
+    showToast(`✅ Student limit updated for ${name}`);
+    loadSchools();
+  } catch(e) { showToast('Error updating limit ❌'); }
 }
 
 function copyId(id) {
@@ -482,11 +507,13 @@ async function addSchool() {
       plan: document.getElementById('ns-plan').value,
       setup_fee: parseInt(document.getElementById('ns-setup').value) || 0,
       monthly_retainer: parseInt(document.getElementById('ns-monthly').value) || 0,
-      billing_start: document.getElementById('ns-billing').value
+      billing_start: document.getElementById('ns-billing').value,
+      student_limit: document.getElementById('ns-student-limit').value ? parseInt(document.getElementById('ns-student-limit').value) : null
     })});
     showToast('✅ ' + name + ' added! Copy their school ID from the schools list.');
     document.getElementById('ns-name').value = '';
     document.getElementById('ns-password').value = '';
+    document.getElementById('ns-student-limit').value = '';
     loadOverview();
     setTimeout(() => showSection('schools', null), 1500);
   } catch(e) { showToast('Error adding school ❌ ' + e.message); }
