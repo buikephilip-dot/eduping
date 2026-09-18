@@ -1012,6 +1012,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
             <div style="display:flex;gap:10px;align-items:center;">
               <button class="broadcast-btn" onclick="sendBroadcast()" style="max-width:220px;">📤 Send via WhatsApp</button>
               <button class="action-btn" onclick="previewBroadcast()">👁 Preview</button>
+              <button class="action-btn" onclick="saveBroadcastPreset()">💾 Save as Preset</button>
               <div id="broadcast-sending" style="display:none;font-size:13px;color:var(--green);">Sending...</div>
             </div>
           </div>
@@ -1030,6 +1031,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
                 <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('result')">📊 Results are ready</button>
                 <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('holiday')">🏖 Holiday notice</button>
                 <button class="qr-btn" style="text-align:left;border-radius:8px;padding:10px 14px;" onclick="useTemplate('reopening')">🏫 Resumption reminder</button>
+              </div>
+            </div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">⭐ My Presets</div></div>
+            <div class="dash-card-body">
+              <div id="broadcast-presets-list" style="display:flex;flex-direction:column;gap:8px;">
+                <div style="padding:10px;text-align:center;color:var(--text-muted);font-size:13px;">No saved presets yet</div>
               </div>
             </div>
           </div>
@@ -4160,7 +4169,7 @@ async function sendDirectMessage() {
 function printReportCard() {
   const data = _currentProfileData;
   if (!data) { showToast('Open a student profile first ❌'); return; }
-  const s = data.student;
+  const s = data;
   const fee = data.fees?.[0];
   const subjects = {};
   (data.scores||[]).forEach(sc => {
@@ -4223,7 +4232,7 @@ async function openProfile(studentId) {
   try {
     const data = await api('/api/admin/students/' + studentId + '/profile');
     _currentProfileData = data;
-    const s = data.student;
+    const s = data;
     _currentProfilePhone = s.parent_phone || '';
     document.getElementById('profile-name').textContent = s.name;
     document.getElementById('profile-class').textContent = (s.class_name||'') + ' — ' + (s.parent_name||'');
@@ -5186,6 +5195,53 @@ async function loadBroadcast() {
     if (reportClass) reportClass.innerHTML = '<option value="">All classes</option>' + classes.map(c => '<option value="' + c + '">' + c + '</option>').join('');
   } catch(e) {}
   updateBroadcastCount();
+  loadBroadcastPresets();
+}
+
+// ── Custom broadcast presets (saved by the school, per-school) ──────────
+async function loadBroadcastPresets() {
+  const listEl = document.getElementById('broadcast-presets-list');
+  if (!listEl) return;
+  try {
+    const presets = await api('/api/admin/broadcast-presets');
+    if (!presets.length) {
+      listEl.innerHTML = '<div style="padding:10px;text-align:center;color:var(--text-muted);font-size:13px;">No saved presets yet</div>';
+      return;
+    }
+    listEl.innerHTML = presets.map(p =>
+      '<div style="display:flex;gap:6px;align-items:center;">' +
+        '<button class="qr-btn" style="flex:1;text-align:left;border-radius:8px;padding:10px 14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" onclick="usePreset(' + JSON.stringify(p.message) + ')" title="' + p.name.replace(/"/g,'&quot;') + '">⭐ ' + p.name + '</button>' +
+        '<button class="action-btn" style="padding:8px 10px;flex:none;" onclick="deleteBroadcastPreset(\'' + p.id + '\')" title="Delete preset">🗑</button>' +
+      '</div>'
+    ).join('');
+  } catch(e) {
+    listEl.innerHTML = '<div style="padding:10px;text-align:center;color:var(--text-muted);font-size:13px;">Couldn\'t load presets</div>';
+  }
+}
+
+function usePreset(message) {
+  const el = document.getElementById('broadcast-msg');
+  if (el) { el.value = message; updateCharCount(); }
+}
+
+async function saveBroadcastPreset() {
+  const msg = document.getElementById('broadcast-msg')?.value?.trim();
+  if (!msg) { showToast('Type a message first ❌'); return; }
+  const name = prompt('Name this preset (e.g. "Monthly fee reminder"):');
+  if (!name || !name.trim()) return;
+  try {
+    await api('/api/admin/broadcast-presets', { method: 'POST', body: JSON.stringify({ name: name.trim(), message: msg }) });
+    showToast('✅ Preset saved!');
+    loadBroadcastPresets();
+  } catch(e) { showToast('Failed to save preset ❌'); }
+}
+
+async function deleteBroadcastPreset(id) {
+  if (!confirm('Delete this preset?')) return;
+  try {
+    await api('/api/admin/broadcast-presets/' + id, { method: 'DELETE' });
+    loadBroadcastPresets();
+  } catch(e) { showToast('Failed to delete preset ❌'); }
 }
 
 
