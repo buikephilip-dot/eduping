@@ -522,6 +522,12 @@ async function migrate() {
     );
 
     -- Waitlist for lead capture
+    CREATE TABLE IF NOT EXISTS broadcast_presets (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      name TEXT NOT NULL, message TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_broadcast_presets_school ON broadcast_presets(school_id);
+
     CREATE TABLE IF NOT EXISTS waitlist (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT, role TEXT, school TEXT, city TEXT,
@@ -3662,6 +3668,13 @@ app.post('/api/admin/broadcast', requireSchool, async (req, res) => {
       phones = rows.rows.map(r => r.parent_phone);
     }
 
+    // FIX: some parent_phone values contain multiple numbers comma-separated
+    // (e.g. "+2348038617710, +2347030969255"). Split and flatten before sending,
+    // since each provider call accepts exactly one recipient.
+    phones = phones.flatMap(p =>
+      String(p).split(',').map(n => n.trim()).filter(Boolean)
+    );
+
     let sent = 0;
     for (const phone of phones) {
       try { await twilioSend(phone, from, message); sent++; } catch(e) { console.warn('Broadcast failed to:', phone); }
@@ -3690,11 +3703,40 @@ app.post('/api/admin/broadcast/progress-reports', requireSchool, async (req, res
         }
         const attLine = attPct !== null ? '\n✅ Attendance (last 30 days): *' + attPct + '%*' : '';
         const msg = '📄 *Progress Report — ' + school.name + '*\n\nDear Parent of *' + s.name + '* (' + class_name + '),' + attLine + scoreText + '\n\nFor a full report or to ask questions, reply to this message.\n\n' + school.name + ' 🏫';
-        await twilioSend(s.parent_phone, from, msg);
+
+        // FIX: parent_phone may contain multiple comma-separated numbers.
+        // Send the same report to each one individually.
+        const numbers = String(s.parent_phone).split(',').map(n => n.trim()).filter(Boolean);
+        for (const num of numbers) {
+          await twilioSend(num, from, msg);
+        }
         sent++;
       } catch(e) { console.warn('Report failed for', s.name); }
     }
     json(res, { ok: true, sent });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+app.get('/api/admin/broadcast-presets', requireSchool, async (req, res) => {
+  try {
+    const rows = await q(`SELECT id, name, message, created_at FROM broadcast_presets WHERE school_id=$1 ORDER BY created_at DESC`, [req.school.id]);
+    json(res, rows.rows);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+app.post('/api/admin/broadcast-presets', requireSchool, async (req, res) => {
+  try {
+    const { name, message } = req.body;
+    if (!name || !message) return bad(res, 'name and message required');
+    const row = await q(`INSERT INTO broadcast_presets (school_id, name, message) VALUES ($1,$2,$3) RETURNING id, name, message, created_at`, [req.school.id, name, message]);
+    json(res, row.rows[0]);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+app.delete('/api/admin/broadcast-presets/:id', requireSchool, async (req, res) => {
+  try {
+    await q(`DELETE FROM broadcast_presets WHERE id=$1 AND school_id=$2`, [req.params.id, req.school.id]);
+    json(res, { ok: true });
   } catch(err) { bad(res, err.message, 500); }
 });
 
