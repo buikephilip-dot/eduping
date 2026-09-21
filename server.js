@@ -528,6 +528,16 @@ async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS idx_broadcast_presets_school ON broadcast_presets(school_id);
 
+    -- Approved WhatsApp templates the school can send outside the 24-hour free-form
+    -- window. Registered by the admin (name + language must exactly match what's
+    -- APPROVED in Meta Business Manager — WhatsApp Manager → Message Templates).
+    CREATE TABLE IF NOT EXISTS whatsapp_templates (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      label TEXT NOT NULL, template_name TEXT NOT NULL, language_code TEXT NOT NULL DEFAULT 'en',
+      has_variable BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_whatsapp_templates_school ON whatsapp_templates(school_id);
+
     CREATE TABLE IF NOT EXISTS waitlist (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT, role TEXT, school TEXT, city TEXT,
@@ -911,6 +921,52 @@ async function cloudSend(to, phoneNumberId, body) {
     throw new Error(data?.error?.message || `Cloud API send failed (${res.status})`);
   }
   return data;
+}
+
+// Sends a pre-approved WhatsApp template message via Cloud API. Required whenever
+// the recipient is outside the 24-hour customer-service window — Meta rejects
+// free-form text (cloudSend) with error 131047 in that case, and only a template
+// call can reach them. The template must already exist and be APPROVED in Meta
+// Business Manager (WhatsApp Manager → Message Templates).
+// `templateName`/`languageCode` must match an approved template exactly. Pass
+// `bodyText` when that template has a single {{1}} body variable; pass null/omit
+// for a template with fixed wording and no variables at all.
+// Falls back to WHATSAPP_BROADCAST_TEMPLATE_NAME / _LANG env vars when not given
+// explicitly, for backward compatibility with the single-generic-template setup.
+async function cloudSendTemplate(to, phoneNumberId, templateName, languageCode, bodyText) {
+  if (!hasWhatsAppCloud()) return { skipped: true, reason: 'WhatsApp Cloud API token missing' };
+  templateName = templateName || process.env.WHATSAPP_BROADCAST_TEMPLATE_NAME;
+  languageCode = languageCode || process.env.WHATSAPP_BROADCAST_TEMPLATE_LANG || 'en';
+  if (!templateName) {
+    throw new Error('No WhatsApp template specified — register an approved template first');
+  }
+  const toDigits = normalisePhone(to).replace(/^\+/, '');
+  const template = { name: templateName, language: { code: languageCode } };
+  if (bodyText) {
+    template.components = [{ type: 'body', parameters: [{ type: 'text', text: bodyText }] }];
+  }
+  const res = await fetch(`https://graph.facebook.com/v26.0/${phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaging_product: 'whatsapp', to: toDigits, type: 'template', template })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error('[cloudSendTemplate]', JSON.stringify(data));
+    throw new Error(data?.error?.message || `Cloud API template send failed (${res.status})`);
+  }
+  return data;
+}
+
+// True if this parent/staff number messaged the school within the last 24 hours —
+// the window inside which WhatsApp allows free-form text. Outside it, only an
+// approved template message can be delivered.
+async function isWithinFreeWindow(schoolId, phone) {
+  const digits = normalisePhone(phone);
+  const row = await q(`SELECT MAX(created_at) AS last FROM messages WHERE school_id=$1 AND from_number=$2`, [schoolId, digits]);
+  const last = row.rows[0]?.last;
+  if (!last) return false;
+  return (Date.now() - new Date(last).getTime()) < 24 * 60 * 60 * 1000;
 }
 
 // Ask Claude Vision whether the photo shows a live selfie performing the given gesture.
@@ -3644,12 +3700,24 @@ app.patch('/api/admin/staff/:id', requireSchool, async (req, res) => {
 
 app.post('/api/admin/broadcast', requireSchool, async (req, res) => {
   try {
-    const { message, target, class_name } = req.body;
-    if (!message) return bad(res, 'message required');
+    const { message, target, class_name, template_id } = req.body;
+    if (!message && !template_id) return bad(res, 'message or template_id required');
     const school = req.school;
     const from = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
     if (!from) return bad(res, 'Twilio not configured');
     let phones = [];
+
+    // When sending an approved template directly, look it up once up front —
+    // template sends work regardless of the 24-hour window, so this path skips
+    // that check entirely and always uses cloudSendTemplate.
+    let template = null;
+    if (template_id) {
+      if (!isCloudNumber(from)) return bad(res, 'Direct template sending is only supported for WhatsApp Cloud API numbers right now');
+      const row = await q(`SELECT * FROM whatsapp_templates WHERE id=$1 AND school_id=$2`, [template_id, school.id]);
+      template = row.rows[0];
+      if (!template) return bad(res, 'Template not found');
+      if (template.has_variable && !message) return bad(res, 'This template needs message text to fill its variable');
+    }
 
     if (target === 'all_parents') {
       const rows = await q(`SELECT DISTINCT parent_phone FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL AND parent_phone != ''`, [school.id]);
@@ -3675,11 +3743,27 @@ app.post('/api/admin/broadcast', requireSchool, async (req, res) => {
       String(p).split(',').map(n => n.trim()).filter(Boolean)
     );
 
-    let sent = 0;
+    let sent = 0, sentViaTemplate = 0, failed = 0;
     for (const phone of phones) {
-      try { await twilioSend(phone, from, message); sent++; } catch(e) { console.warn('Broadcast failed to:', phone); }
+      try {
+        if (template) {
+          await cloudSendTemplate(phone, from, template.template_name, template.language_code, template.has_variable ? message : null);
+          sentViaTemplate++;
+        } else if (isCloudNumber(from)) {
+          const withinWindow = await isWithinFreeWindow(school.id, phone);
+          if (withinWindow) {
+            await cloudSend(phone, from, message);
+          } else {
+            await cloudSendTemplate(phone, from, null, null, message);
+            sentViaTemplate++;
+          }
+        } else {
+          await twilioSend(phone, from, message);
+        }
+        sent++;
+      } catch(e) { failed++; console.warn('Broadcast failed to:', phone, '-', e.message); }
     }
-    json(res, { ok: true, sent, total: phones.length });
+    json(res, { ok: true, sent, sent_via_template: sentViaTemplate, failed, total: phones.length });
   } catch(err) { bad(res, err.message, 500); }
 });
 
@@ -3736,6 +3820,33 @@ app.post('/api/admin/broadcast-presets', requireSchool, async (req, res) => {
 app.delete('/api/admin/broadcast-presets/:id', requireSchool, async (req, res) => {
   try {
     await q(`DELETE FROM broadcast_presets WHERE id=$1 AND school_id=$2`, [req.params.id, req.school.id]);
+    json(res, { ok: true });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// ── WhatsApp approved templates (for messaging outside the 24h window) ──
+app.get('/api/admin/whatsapp-templates', requireSchool, async (req, res) => {
+  try {
+    const rows = await q(`SELECT id, label, template_name, language_code, has_variable, created_at FROM whatsapp_templates WHERE school_id=$1 ORDER BY created_at DESC`, [req.school.id]);
+    json(res, rows.rows);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+app.post('/api/admin/whatsapp-templates', requireSchool, async (req, res) => {
+  try {
+    const { label, template_name, language_code, has_variable } = req.body;
+    if (!label || !template_name) return bad(res, 'label and template_name required');
+    const row = await q(
+      `INSERT INTO whatsapp_templates (school_id, label, template_name, language_code, has_variable) VALUES ($1,$2,$3,$4,$5) RETURNING id, label, template_name, language_code, has_variable, created_at`,
+      [req.school.id, label, template_name, language_code || 'en', !!has_variable]
+    );
+    json(res, row.rows[0]);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+app.delete('/api/admin/whatsapp-templates/:id', requireSchool, async (req, res) => {
+  try {
+    await q(`DELETE FROM whatsapp_templates WHERE id=$1 AND school_id=$2`, [req.params.id, req.school.id]);
     json(res, { ok: true });
   } catch(err) { bad(res, err.message, 500); }
 });
