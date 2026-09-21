@@ -1035,6 +1035,28 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
             </div>
           </div>
           <div class="dash-card">
+            <div class="dash-card-header">
+              <div class="dash-card-title">✅ Approved Templates</div>
+              <button class="action-btn" style="padding:6px 10px;font-size:12px;" onclick="showAddTemplateForm()">➕ Register</button>
+            </div>
+            <div class="dash-card-body">
+              <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Sends a WhatsApp-approved template — reaches everyone, even parents who haven't messaged you in the last 24 hours.</div>
+              <div id="whatsapp-templates-add-form" style="display:none;flex-direction:column;gap:8px;margin-bottom:12px;padding:10px;background:var(--bg-alt,#f7f7f7);border-radius:8px;">
+                <input class="form-input" id="wa-tpl-label" placeholder="Label (e.g. Welcome Back)">
+                <input class="form-input" id="wa-tpl-name" placeholder="Exact template name in Meta (e.g. welcome_back)">
+                <input class="form-input" id="wa-tpl-lang" placeholder="Language code (e.g. en)" value="en">
+                <label style="font-size:12px;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="wa-tpl-hasvar"> This template has a {{1}} variable I can fill in</label>
+                <div style="display:flex;gap:8px;">
+                  <button class="broadcast-btn" style="max-width:120px;" onclick="addWhatsappTemplate()">Save</button>
+                  <button class="action-btn" onclick="showAddTemplateForm(false)">Cancel</button>
+                </div>
+              </div>
+              <div id="whatsapp-templates-list" style="display:flex;flex-direction:column;gap:8px;">
+                <div style="padding:10px;text-align:center;color:var(--text-muted);font-size:13px;">No templates registered yet</div>
+              </div>
+            </div>
+          </div>
+          <div class="dash-card">
             <div class="dash-card-header"><div class="dash-card-title">⭐ My Presets</div></div>
             <div class="dash-card-body">
               <div id="broadcast-presets-list" style="display:flex;flex-direction:column;gap:8px;">
@@ -5140,8 +5162,11 @@ async function sendBroadcast() {
   try {
     let endpoint = '/api/admin/broadcast';
     const body = { message: msg, target, class_name: cls || undefined };
-    await api(endpoint, { method: 'POST', body: JSON.stringify(body) });
-    showToast('✅ Broadcast sent!');
+    const res = await api(endpoint, { method: 'POST', body: JSON.stringify(body) });
+    let toastMsg = '✅ Sent to ' + (res.sent||0) + '/' + (res.total||0);
+    if (res.sent_via_template) toastMsg += ' (' + res.sent_via_template + ' via template — outside 24h window)';
+    if (res.failed) toastMsg += ' — ' + res.failed + ' failed';
+    showToast(toastMsg);
     document.getElementById('broadcast-msg').value = '';
     updateCharCount();
   } catch(e) { showToast('Failed to send broadcast ❌'); }
@@ -5196,6 +5221,7 @@ async function loadBroadcast() {
   } catch(e) {}
   updateBroadcastCount();
   loadBroadcastPresets();
+  loadWhatsappTemplates();
 }
 
 // ── Custom broadcast presets (saved by the school, per-school) ──────────
@@ -5242,6 +5268,75 @@ async function deleteBroadcastPreset(id) {
     await api('/api/admin/broadcast-presets/' + id, { method: 'DELETE' });
     loadBroadcastPresets();
   } catch(e) { showToast('Failed to delete preset ❌'); }
+}
+
+// ── Approved WhatsApp templates (send outside the 24h window) ───────────
+async function loadWhatsappTemplates() {
+  const listEl = document.getElementById('whatsapp-templates-list');
+  if (!listEl) return;
+  try {
+    const templates = await api('/api/admin/whatsapp-templates');
+    if (!templates.length) {
+      listEl.innerHTML = '<div style="padding:10px;text-align:center;color:var(--text-muted);font-size:13px;">No templates registered yet</div>';
+      return;
+    }
+    listEl.innerHTML = templates.map(t =>
+      '<div style="display:flex;gap:6px;align-items:center;">' +
+        '<button class="qr-btn" style="flex:1;text-align:left;border-radius:8px;padding:10px 14px;" onclick="sendWhatsappTemplate(\'' + t.id + '\',' + (t.has_variable ? 'true' : 'false') + ')">✅ ' + t.label + (t.has_variable ? ' (fill-in)' : ' (fixed)') + '</button>' +
+        '<button class="action-btn" style="padding:8px 10px;flex:none;" onclick="deleteWhatsappTemplate(\'' + t.id + '\')" title="Delete">🗑</button>' +
+      '</div>'
+    ).join('');
+  } catch(e) {
+    listEl.innerHTML = '<div style="padding:10px;text-align:center;color:var(--text-muted);font-size:13px;">Couldn\'t load templates</div>';
+  }
+}
+
+function showAddTemplateForm(show) {
+  const form = document.getElementById('whatsapp-templates-add-form');
+  if (form) form.style.display = (show === false) ? 'none' : 'flex';
+}
+
+async function addWhatsappTemplate() {
+  const label = document.getElementById('wa-tpl-label')?.value?.trim();
+  const template_name = document.getElementById('wa-tpl-name')?.value?.trim();
+  const language_code = document.getElementById('wa-tpl-lang')?.value?.trim() || 'en';
+  const has_variable = document.getElementById('wa-tpl-hasvar')?.checked || false;
+  if (!label || !template_name) { showToast('Label and template name required ❌'); return; }
+  try {
+    await api('/api/admin/whatsapp-templates', { method: 'POST', body: JSON.stringify({ label, template_name, language_code, has_variable }) });
+    showToast('✅ Template registered!');
+    document.getElementById('wa-tpl-label').value = '';
+    document.getElementById('wa-tpl-name').value = '';
+    document.getElementById('wa-tpl-hasvar').checked = false;
+    showAddTemplateForm(false);
+    loadWhatsappTemplates();
+  } catch(e) { showToast('Failed to register template ❌'); }
+}
+
+async function deleteWhatsappTemplate(id) {
+  if (!confirm('Delete this template registration? (This does not delete it from Meta, just from EduPing.)')) return;
+  try {
+    await api('/api/admin/whatsapp-templates/' + id, { method: 'DELETE' });
+    loadWhatsappTemplates();
+  } catch(e) { showToast('Failed to delete ❌'); }
+}
+
+// Sends the given approved template right now to the currently selected
+// audience (Send To dropdown), bypassing the 24h free-text window entirely.
+async function sendWhatsappTemplate(templateId, hasVariable) {
+  const target = document.getElementById('broadcast-target')?.value;
+  const cls = document.getElementById('broadcast-class')?.value;
+  let message = document.getElementById('broadcast-msg')?.value?.trim();
+  if (hasVariable && !message) { showToast('Type the text to fill the template\'s variable first ❌'); return; }
+  if (!confirm('Send this approved template to the selected audience (' + target + ')?')) return;
+  const sending = document.getElementById('broadcast-sending');
+  if (sending) sending.style.display = 'block';
+  try {
+    const body = { template_id: templateId, target, class_name: cls || undefined, message: hasVariable ? message : undefined };
+    const res = await api('/api/admin/broadcast', { method: 'POST', body: JSON.stringify(body) });
+    showToast('✅ Template sent to ' + (res.sent||0) + '/' + (res.total||0) + (res.failed ? ' — ' + res.failed + ' failed' : ''));
+  } catch(e) { showToast('Failed to send template ❌'); }
+  if (sending) sending.style.display = 'none';
 }
 
 
