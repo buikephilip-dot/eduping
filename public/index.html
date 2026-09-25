@@ -604,6 +604,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         <button class="subnav-btn" onclick="switchSection('pending',this)">📥 Pending Review <span id="pending-badge" style="display:none;background:var(--danger);color:white;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></button>
         <button class="subnav-btn" onclick="switchSection('team',this)">👥 Team & Devices</button>
         <button class="subnav-btn" onclick="switchSection('branding',this)">🎨 Branding & Results</button>
+        <button class="subnav-btn" onclick="switchSection('schoolsettings',this)">⚙️ School Settings</button>
         <button class="subnav-btn" onclick="switchSection('weeklyreports',this)">📋 Weekly Reports</button>
       </div>
 
@@ -2309,6 +2310,7 @@ const switchSection = function(name, btn) {
     if (name === 'pending') loadPendingReview();
     if (name === 'team') { loadTeam(); loadSessions(); }
     if (name === 'branding') loadBranding();
+    if (name === 'schoolsettings') loadSchoolSettings();
     if (name === 'weeklyreports') loadWeeklyReportsAdmin();
   }, 120);
 };
@@ -3756,6 +3758,77 @@ async function saveBrandingColor() {
     await api('/api/admin/branding', { method: 'POST', body: JSON.stringify({ primary_color: color }) });
     showToast('✅ Brand color saved');
   } catch(e) { showToast(e.message || 'Failed to save color ❌'); }
+}
+
+// ── School Settings (things onboarding sets once, editable here) ────────
+async function loadSchoolSettings() {
+  try {
+    const s = await api('/api/admin/school/settings');
+    document.getElementById('ss-fees').value = s.fees || '';
+    document.getElementById('ss-fee-deadline').value = s.fee_deadline || '';
+    document.getElementById('ss-fee-instructions').value = s.fee_instructions || '';
+    document.getElementById('ss-bank-name').value = s.bank_name || '';
+    document.getElementById('ss-account-number').value = s.bank_account_number || '';
+    document.getElementById('ss-account-name').value = s.bank_account_name || '';
+    document.getElementById('ss-paystack-link').value = s.paystack_payment_link || '';
+    document.getElementById('ss-landmark').value = s.landmark_description || '';
+    if (s.landmark_image_url) {
+      document.getElementById('ss-landmark-preview').src = s.landmark_image_url;
+      document.getElementById('ss-landmark-preview').style.display = '';
+      document.getElementById('ss-landmark-empty').style.display = 'none';
+    }
+    document.getElementById('ss-tone').value = s.tone || 'formal';
+    document.getElementById('ss-greeting').value = s.greeting || '';
+    document.getElementById('ss-phone').value = s.school_phone || '';
+    document.getElementById('ss-email').value = s.school_email || '';
+  } catch(e) { showToast('Failed to load settings ❌'); }
+}
+
+async function saveSchoolSettings(group) {
+  const bodies = {
+    fees: {
+      fees: document.getElementById('ss-fees').value.trim(),
+      fee_deadline: document.getElementById('ss-fee-deadline').value.trim(),
+      fee_instructions: document.getElementById('ss-fee-instructions').value.trim(),
+      bank_name: document.getElementById('ss-bank-name').value.trim(),
+      bank_account_number: document.getElementById('ss-account-number').value.trim(),
+      bank_account_name: document.getElementById('ss-account-name').value.trim(),
+      paystack_payment_link: document.getElementById('ss-paystack-link').value.trim(),
+    },
+    landmark: {
+      landmark_description: document.getElementById('ss-landmark').value.trim(),
+    },
+    tone: {
+      tone: document.getElementById('ss-tone').value,
+      greeting: document.getElementById('ss-greeting').value.trim(),
+    },
+    contact: {
+      school_phone: document.getElementById('ss-phone').value.trim(),
+      school_email: document.getElementById('ss-email').value.trim(),
+    }
+  };
+  try {
+    await api('/api/admin/school/settings', { method: 'POST', body: JSON.stringify(bodies[group]) });
+    showToast('✅ Saved');
+  } catch(e) { showToast(e.message || 'Failed to save ❌'); }
+}
+
+async function uploadLandmarkPhoto() {
+  const file = document.getElementById('ss-landmark-file').files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { showToast('Photo must be under 2MB'); return; }
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const base64 = reader.result.split(',')[1];
+    try {
+      const r = await api('/api/admin/school/landmark-photo', { method: 'POST', body: JSON.stringify({ image_data: base64, mime_type: file.type }) });
+      document.getElementById('ss-landmark-preview').src = r.landmark_image_url;
+      document.getElementById('ss-landmark-preview').style.display = '';
+      document.getElementById('ss-landmark-empty').style.display = 'none';
+      showToast('✅ Photo updated');
+    } catch(e) { showToast(e.message || 'Upload failed ❌'); }
+  };
+  reader.readAsDataURL(file);
 }
 
 function renderGradeRows() {
@@ -6234,6 +6307,67 @@ async function generatePayLink(studentId, studentName) {
     <button class="btn btn-outline btn-sm" onclick="addGradeRow()">+ Add band</button>
     <button class="btn btn-primary btn-sm" onclick="saveGradingScale()">Save grading scale</button>
     <button class="btn btn-outline btn-sm" onclick="resetGradingScale()">Reset to default</button>
+  </div>
+</section>
+
+<!-- SCHOOL SETTINGS -->
+<section id="section-schoolsettings" class="dash-section">
+  <div class="section-header"><h2>⚙️ School Settings</h2></div>
+  <p style="color:var(--text-muted);font-size:13px;margin-bottom:20px;">
+    Things set once during onboarding — update them anytime here instead of redoing setup.
+  </p>
+
+  <div class="dash-card full" style="margin-bottom:18px;">
+    <div class="dash-card-header"><div class="dash-card-title">💰 Fees</div></div>
+    <div class="dash-card-body" style="padding:16px 18px;display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <div class="form-group"><label class="form-label">Fee Amount Per Term</label><input class="form-input" id="ss-fees" placeholder="85000"></div>
+      <div class="form-group"><label class="form-label">Fee Deadline</label><input class="form-input" id="ss-fee-deadline" placeholder="15th January 2025"></div>
+      <div class="form-group" style="grid-column:span 2;"><label class="form-label">Fee Payment Instructions</label><input class="form-input" id="ss-fee-instructions" placeholder="Pay to GTBank Account: 0123456789, Winrose Schools Ltd"></div>
+      <div class="form-group"><label class="form-label">Bank Name</label><input class="form-input" id="ss-bank-name"></div>
+      <div class="form-group"><label class="form-label">Account Number</label><input class="form-input" id="ss-account-number"></div>
+      <div class="form-group"><label class="form-label">Account Name</label><input class="form-input" id="ss-account-name"></div>
+      <div class="form-group"><label class="form-label">Paystack Payment Link</label><input class="form-input" id="ss-paystack-link" placeholder="https://paystack.com/pay/your-school"></div>
+      <div style="grid-column:span 2;"><button class="broadcast-btn" onclick="saveSchoolSettings('fees')">💾 Save Fees Settings</button></div>
+    </div>
+  </div>
+
+  <div class="dash-card full" style="margin-bottom:18px;">
+    <div class="dash-card-header"><div class="dash-card-title">📍 School Landmark</div></div>
+    <div class="dash-card-body" style="padding:16px 18px;">
+      <div class="form-group" style="margin-bottom:12px;"><label class="form-label">Description</label><input class="form-input" id="ss-landmark" placeholder="e.g. Opposite First Bank, along Airport Road"></div>
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px;">
+        <img id="ss-landmark-preview" src="" alt="Landmark" style="height:56px;max-width:180px;object-fit:cover;border:1px solid var(--border-color,#eee);border-radius:8px;display:none;">
+        <div id="ss-landmark-empty" style="font-size:13px;color:var(--text-muted);">No photo uploaded yet</div>
+        <input type="file" id="ss-landmark-file" accept="image/*" style="display:none;" onchange="uploadLandmarkPhoto()">
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('ss-landmark-file').click()">📤 Upload photo</button>
+      </div>
+      <button class="broadcast-btn" onclick="saveSchoolSettings('landmark')">💾 Save Landmark</button>
+    </div>
+  </div>
+
+  <div class="dash-card full" style="margin-bottom:18px;">
+    <div class="dash-card-header"><div class="dash-card-title">🎭 AI Personality</div></div>
+    <div class="dash-card-body" style="padding:16px 18px;display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <div class="form-group">
+        <label class="form-label">Communication Style</label>
+        <select class="form-input" id="ss-tone">
+          <option value="formal">👔 Formal & Professional</option>
+          <option value="friendly">😊 Friendly & Warm</option>
+          <option value="concise">⚡ Concise & Direct</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Custom Greeting (optional)</label><input class="form-input" id="ss-greeting" placeholder="Welcome to Winrose Schools!"></div>
+      <div style="grid-column:span 2;"><button class="broadcast-btn" onclick="saveSchoolSettings('tone')">💾 Save AI Personality</button></div>
+    </div>
+  </div>
+
+  <div class="dash-card full">
+    <div class="dash-card-header"><div class="dash-card-title">📞 Emergency Contact</div></div>
+    <div class="dash-card-body" style="padding:16px 18px;display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <div class="form-group"><label class="form-label">School Phone Number</label><input class="form-input" id="ss-phone" placeholder="08012345678"></div>
+      <div class="form-group"><label class="form-label">School Email</label><input class="form-input" id="ss-email" placeholder="admin@winroseschools.edu.ng"></div>
+      <div style="grid-column:span 2;"><button class="broadcast-btn" onclick="saveSchoolSettings('contact')">💾 Save Contact Info</button></div>
+    </div>
   </div>
 </section>
 
