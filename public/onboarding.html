@@ -112,6 +112,22 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
 .add-event-btn{background:none;border:1.5px dashed var(--green);color:var(--green);border-radius:8px;padding:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;width:100%;margin-top:8px;transition:all .2s;}
 .add-event-btn:hover{background:var(--green-pale);}
 
+/* Fee schedule */
+.chip-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;}
+.chip{background:var(--green-pale);color:var(--green);border:none;border-radius:20px;padding:6px 14px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;}
+.chip:hover{background:#d3ecdd;}
+.fee-wrap{overflow-x:auto;}
+.fee-table{width:100%;border-collapse:collapse;}
+.fee-table th{font-size:11px;color:var(--text-muted);font-weight:600;padding:8px 6px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;}
+.fee-table td{padding:6px;border-bottom:1px solid #f3f4f6;}
+.fee-table input{background:var(--gray-bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-family:'DM Sans',sans-serif;font-size:13px;width:100%;min-width:110px;outline:none;}
+.fee-table input:focus{border-color:var(--green);background:white;}
+.fee-table .head-input{font-weight:600;}
+.fee-total{font-weight:700;color:var(--green);white-space:nowrap;padding-left:10px;}
+.fee-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px;}
+.fee-actions .add-event-btn{margin-top:0;}
+.small-x{width:28px;height:28px;font-size:13px;flex-shrink:0;}
+
 /* Navigation */
 .nav-bar{position:fixed;bottom:0;left:0;right:0;background:white;border-top:1px solid var(--border);padding:16px 32px;display:flex;justify-content:space-between;align-items:center;z-index:100;}
 .nav-back{background:none;border:1.5px solid var(--border);color:var(--text-muted);padding:10px 24px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;}
@@ -167,27 +183,32 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
     <div class="step-line" id="line1"></div>
     <div class="step">
       <div class="step-circle" id="sc2">2</div>
-      <div class="step-label" id="sl2">Grading</div>
+      <div class="step-label" id="sl2">Fees</div>
     </div>
     <div class="step-line" id="line2"></div>
     <div class="step">
       <div class="step-circle" id="sc3">3</div>
-      <div class="step-label" id="sl3">Staff Rules</div>
+      <div class="step-label" id="sl3">Grading</div>
     </div>
     <div class="step-line" id="line3"></div>
     <div class="step">
       <div class="step-circle" id="sc4">4</div>
-      <div class="step-label" id="sl4">Events</div>
+      <div class="step-label" id="sl4">Staff Rules</div>
     </div>
     <div class="step-line" id="line4"></div>
     <div class="step">
       <div class="step-circle" id="sc5">5</div>
-      <div class="step-label" id="sl5">AI Personality</div>
+      <div class="step-label" id="sl5">Events</div>
     </div>
     <div class="step-line" id="line5"></div>
     <div class="step">
       <div class="step-circle" id="sc6">6</div>
-      <div class="step-label" id="sl6">Done</div>
+      <div class="step-label" id="sl6">AI Personality</div>
+    </div>
+    <div class="step-line" id="line6"></div>
+    <div class="step">
+      <div class="step-circle" id="sc7">7</div>
+      <div class="step-label" id="sl7">Done</div>
     </div>
   </div>
 </div>
@@ -197,7 +218,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
   <!-- ── STEP 1: SCHOOL INFO ── -->
   <div id="panel-1" class="step-panel active">
     <div class="step-header">
-      <div class="step-num">Step 1 of 5</div>
+      <div class="step-num">Step 1 of 6</div>
       <div class="step-title">Tell us about your school</div>
       <div class="step-sub">This information helps EduPing answer parent questions accurately. Fields marked <span style="color:#ef4444">*</span> are required.</div>
     </div>
@@ -281,19 +302,64 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
     </div>
 
     <div class="card">
-      <div class="card-title">💰 School Fees</div>
-      <div class="form-grid" style="margin-bottom:16px;">
+      <div class="card-title">📸 School Gate / Landmark</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.6;">
+        Teachers will take a photo at this location every morning to sign in. Describe what the landmark looks like so EduPing can verify it.
+      </div>
+      <div class="form-grid single" style="margin-bottom:14px;">
         <div class="form-group">
-          <label class="form-label">Fee Amount Per Term <span class="req">*</span></label>
-          <input class="form-input" id="s-fees" placeholder="85000">
-          <div class="form-hint">In Naira, numbers only e.g. 85000</div>
+          <label class="form-label">Landmark Description <span class="req">*</span></label>
+          <input class="form-input" id="s-landmark" placeholder="Green metal gate with white Winrose Academy signboard at the entrance">
         </div>
+      </div>
+      <div class="upload-zone" id="landmark-zone" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleLandmarkDrop(event)" onclick="document.getElementById('landmark-file').click()">
+        <div class="upload-icon">🚪</div>
+        <div class="upload-title">Upload a photo of your school gate (optional)</div>
+        <div class="upload-sub">Helps EduPing verify teacher sign-ins more accurately</div>
+        <input type="file" id="landmark-file" accept="image/*" style="display:none" onchange="handleLandmarkFile(event)">
+      </div>
+      <div class="upload-preview" id="landmark-preview">
+        <img id="landmark-img" src="">
+        <div style="font-size:12px;color:var(--green);margin-top:8px;">✅ Gate photo uploaded</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STEP 2: FEES ── -->
+  <div id="panel-2" class="step-panel">
+    <div class="step-header">
+      <div class="step-num">Step 2 of 6</div>
+      <div class="step-title">School fees by class</div>
+      <div class="step-sub">Fees usually differ from class to class. Add your classes, then enter each fee per term. EduPing will quote parents the exact amount for their child's class.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">💰 Fee Schedule (per term, in Naira)</div>
+      <div class="form-label" style="margin-bottom:8px;">Add classes quickly</div>
+      <div class="chip-row">
+        <button type="button" class="chip" onclick="addPreset(['Creche'])">+ Creche</button>
+        <button type="button" class="chip" onclick="addPreset(['Nursery 1','Nursery 2','Nursery 3'])">+ Nursery 1–3</button>
+        <button type="button" class="chip" onclick="addPreset(['Primary 1','Primary 2','Primary 3','Primary 4','Primary 5','Primary 6'])">+ Primary 1–6</button>
+        <button type="button" class="chip" onclick="addPreset(['JSS 1','JSS 2','JSS 3'])">+ JSS 1–3</button>
+        <button type="button" class="chip" onclick="addPreset(['SS 1','SS 2','SS 3'])">+ SS 1–3</button>
+      </div>
+      <div class="fee-wrap"><table class="fee-table"><thead id="fee-head"></thead><tbody id="fee-body"></tbody></table></div>
+      <div class="err-msg" id="err-fees"></div>
+      <div class="fee-actions">
+        <button type="button" class="add-event-btn" onclick="addFeeClass()">+ Add class</button>
+        <button type="button" class="add-event-btn" onclick="addFeeItem()">+ Add fee item</button>
+        <button type="button" class="add-event-btn" onclick="fillFromFirst()">Copy first class to empty cells</button>
+      </div>
+      <div class="form-hint" style="margin-top:10px;">Fee items are the columns, such as Tuition, Development Levy, Books or Transport. Rename them to match your school. Totals are added up for you.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🗓️ Deadline & Instructions</div>
+      <div class="form-grid" style="margin-bottom:16px;">
         <div class="form-group">
           <label class="form-label">Fee Deadline <span class="req">*</span></label>
           <input class="form-input" id="s-fee-deadline" placeholder="15th January 2025">
         </div>
-      </div>
-      <div class="form-grid single">
         <div class="form-group">
           <label class="form-label">Fee Payment Instructions</label>
           <input class="form-input" id="s-fee-instructions" placeholder="Pay to GTBank Account: 0123456789, Winrose Schools Ltd">
@@ -328,35 +394,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         </div>
       </div>
     </div>
-
-    <div class="card">
-      <div class="card-title">📸 School Gate / Landmark</div>
-      <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.6;">
-        Teachers will take a photo at this location every morning to sign in. Describe what the landmark looks like so EduPing can verify it.
-      </div>
-      <div class="form-grid single" style="margin-bottom:14px;">
-        <div class="form-group">
-          <label class="form-label">Landmark Description <span class="req">*</span></label>
-          <input class="form-input" id="s-landmark" placeholder="Green metal gate with white Winrose Academy signboard at the entrance">
-        </div>
-      </div>
-      <div class="upload-zone" id="landmark-zone" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleLandmarkDrop(event)" onclick="document.getElementById('landmark-file').click()">
-        <div class="upload-icon">🚪</div>
-        <div class="upload-title">Upload a photo of your school gate (optional)</div>
-        <div class="upload-sub">Helps EduPing verify teacher sign-ins more accurately</div>
-        <input type="file" id="landmark-file" accept="image/*" style="display:none" onchange="handleLandmarkFile(event)">
-      </div>
-      <div class="upload-preview" id="landmark-preview">
-        <img id="landmark-img" src="">
-        <div style="font-size:12px;color:var(--green);margin-top:8px;">✅ Gate photo uploaded</div>
-      </div>
-    </div>
   </div>
 
-  <!-- ── STEP 2: GRADING ── -->
-  <div id="panel-2" class="step-panel">
+  <!-- ── STEP 3: GRADING ── -->
+  <div id="panel-3" class="step-panel">
     <div class="step-header">
-      <div class="step-num">Step 2 of 5</div>
+      <div class="step-num">Step 3 of 6</div>
       <div class="step-title">Your grading system</div>
       <div class="step-sub">Set your school's grading scale so EduPing gives parents the right grade and remark alongside every score.</div>
     </div>
@@ -411,10 +454,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
     </div>
   </div>
 
-  <!-- ── STEP 3: STAFF RULES ── -->
-  <div id="panel-3" class="step-panel">
+  <!-- ── STEP 4: STAFF RULES ── -->
+  <div id="panel-4" class="step-panel">
     <div class="step-header">
-      <div class="step-num">Step 3 of 5</div>
+      <div class="step-num">Step 4 of 6</div>
       <div class="step-title">Staff rules & appraisal</div>
       <div class="step-sub">Set your school's expectations for teachers. EduPing uses these to calculate performance scores and flag issues automatically.</div>
     </div>
@@ -519,12 +562,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
     </div>
   </div>
 
-  <!-- ── STEP 4: EVENTS ── -->
-  <div id="panel-4" class="step-panel">
+  <!-- ── STEP 5: EVENTS ── -->
+  <div id="panel-5" class="step-panel">
     <div class="step-header">
-      <div class="step-num">Step 4 of 5</div>
+      <div class="step-num">Step 5 of 6</div>
       <div class="step-title">School events & calendar</div>
-      <div class="step-sub">Add upcoming events so EduPing can tell parents about them when asked. You can always add more later from your dashboard.</div>
+      <div class="step-sub">Add upcoming events so EduPing can tell parents about them when asked. Events are optional, and setup can be completed without them. You can always add more later from your dashboard.</div>
     </div>
 
     <div class="card">
@@ -547,6 +590,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         </div>
       </div>
       <button class="add-event-btn" onclick="addEvent()">+ Add another event</button>
+      <div class="form-hint" style="margin-top:8px;">An event without a date is skipped. Add the date now, or add the event later from your dashboard.</div>
     </div>
 
     <div class="card">
@@ -565,10 +609,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
     </div>
   </div>
 
-  <!-- ── STEP 5: AI PERSONALITY ── -->
-  <div id="panel-5" class="step-panel">
+  <!-- ── STEP 6: AI PERSONALITY ── -->
+  <div id="panel-6" class="step-panel">
     <div class="step-header">
-      <div class="step-num">Step 5 of 5</div>
+      <div class="step-num">Step 6 of 6</div>
       <div class="step-title">How should EduPing sound?</div>
       <div class="step-sub">EduPing represents your school when talking to parents. Choose how it should communicate.</div>
     </div>
@@ -630,7 +674,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
       <div class="card-title">✅ Final Check</div>
       <div style="display:flex;flex-direction:column;gap:10px;" id="final-check">
         <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span id="check-name" style="font-size:18px;">⏳</span> School name and location</div>
-        <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span id="check-fees" style="font-size:18px;">⏳</span> Fee amount and deadline</div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span id="check-fees" style="font-size:18px;">⏳</span> Fees per class and deadline</div>
         <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span id="check-term" style="font-size:18px;">⏳</span> Current term information</div>
         <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span id="check-landmark" style="font-size:18px;">⏳</span> School gate landmark</div>
         <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span id="check-grading" style="font-size:18px;">⏳</span> Grading system</div>
@@ -667,7 +711,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
 <!-- NAV BAR -->
 <div class="nav-bar" id="nav-bar">
   <button class="nav-back" id="nav-back" onclick="goBack()" style="visibility:hidden;">← Back</button>
-  <div class="nav-step" id="nav-step">Step 1 of 5</div>
+  <div class="nav-step" id="nav-step">Step 1 of 6</div>
   <button class="nav-next" id="nav-next" onclick="goNext()">Continue →</button>
 </div>
 
@@ -680,7 +724,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
 <script>
 // ── State ─────────────────────────────────────────────────
 let currentStep = 1;
-const totalSteps = 5;
+const totalSteps = 6;
 let selectedTone = 'formal';
 let landmarkBase64 = '';
 const schoolId = new URLSearchParams(window.location.search).get('school_id') || '';
@@ -704,7 +748,7 @@ function showStep(step) {
   document.getElementById('panel-' + step).classList.add('active');
 
   // Update progress
-  for (let i = 1; i <= 6; i++) {
+  for (let i = 1; i <= 7; i++) {
     const circle = document.getElementById('sc' + i);
     const label = document.getElementById('sl' + i);
     const line = document.getElementById('line' + i);
@@ -732,16 +776,12 @@ function validateStep(step) {
     const name = document.getElementById('s-name').value.trim();
     const city = document.getElementById('s-city').value.trim();
     const term = document.getElementById('s-term').value.trim();
-    const fees = document.getElementById('s-fees').value.trim();
-    const deadline = document.getElementById('s-fee-deadline').value.trim();
     const landmark = document.getElementById('s-landmark').value.trim();
     const password = document.getElementById('s-password').value;
     const confirm = document.getElementById('s-password-confirm').value;
     if (!name) { highlight('s-name'); return false; }
     if (!city) { highlight('s-city'); return false; }
     if (!term) { highlight('s-term'); return false; }
-    if (!fees) { highlight('s-fees'); return false; }
-    if (!deadline) { highlight('s-fee-deadline'); return false; }
     if (!landmark) { highlight('s-landmark'); return false; }
     if (!password || password.length < 6) {
       highlight('s-password');
@@ -754,32 +794,24 @@ function validateStep(step) {
       return false;
     }
   }
-  if (step === 3) {
+  if (step === 2) {
+    const err = document.getElementById('err-fees');
+    let msg = '';
+    const stray = feeRows.find(r => !r.name.trim() && r.amounts.some(a => a > 0));
+    const empty = feeRows.find(r => r.name.trim() && !r.amounts.some(a => a > 0));
+    if (stray) msg = 'An amount is entered for a class with no name. Add the class name or clear the amount.';
+    else if (empty) msg = '"' + empty.name.trim() + '" has no fee yet. Enter its fees or remove the class.';
+    else if (!getFeeSchedule().length) msg = 'Add at least one class with its fees.';
+    err.textContent = msg;
+    err.style.display = msg ? 'block' : 'none';
+    if (msg) { err.scrollIntoView({behavior:'smooth', block:'center'}); return false; }
+    if (!document.getElementById('s-fee-deadline').value.trim()) { highlight('s-fee-deadline'); return false; }
+  }
+  if (step === 4) {
     const total = getWeightTotal();
     if (total !== 100) {
       document.getElementById('weight-total').classList.add('error');
       alert('Appraisal weights must add up to exactly 100%. Currently: ' + total + '%');
-      return false;
-    }
-  }
-  if (step === 4) {
-    let firstBadDateInput = null;
-    let badTitle = '';
-    document.querySelectorAll('.event-item').forEach(item => {
-      const inputs = item.querySelectorAll('input');
-      const title = inputs[0].value.trim();
-      const dateInput = inputs[1];
-      if (title && !dateInput.value) {
-        dateInput.classList.add('error');
-        if (!firstBadDateInput) { firstBadDateInput = dateInput; badTitle = title; }
-      } else {
-        dateInput.classList.remove('error');
-      }
-    });
-    if (firstBadDateInput) {
-      firstBadDateInput.focus();
-      firstBadDateInput.addEventListener('input', () => firstBadDateInput.classList.remove('error'), { once: true });
-      alert('"' + badTitle + '" needs a date, or remove it if you don\'t have one yet.');
       return false;
     }
   }
@@ -828,8 +860,7 @@ function addEvent() {
   list.appendChild(div);
 }
 function removeEvent(btn) {
-  const items = document.querySelectorAll('.event-item');
-  if (items.length > 1) btn.closest('.event-item').remove();
+  btn.closest('.event-item').remove();
 }
 
 // ── Landmark photo ────────────────────────────────────────
@@ -855,7 +886,7 @@ function processLandmarkFile(file) {
 function runFinalCheck() {
   const checks = {
     name: document.getElementById('s-name').value.trim(),
-    fees: document.getElementById('s-fees').value.trim() && document.getElementById('s-fee-deadline').value.trim(),
+    fees: getFeeSchedule().length && document.getElementById('s-fee-deadline').value.trim(),
     term: document.getElementById('s-term').value.trim(),
     landmark: document.getElementById('s-landmark').value.trim(),
     grading: document.getElementById('g-a-min').value
@@ -887,7 +918,8 @@ function collectData() {
     term_start: document.getElementById('s-term-start').value,
     term_end: document.getElementById('s-term-end').value,
     midterm_break: document.getElementById('s-midterm').value.trim(),
-    fees: document.getElementById('s-fees').value.trim(),
+    fee_schedule: getFeeSchedule(),
+    fees: feeSummary(),
     fee_deadline: document.getElementById('s-fee-deadline').value.trim(),
     fee_instructions: document.getElementById('s-fee-instructions').value.trim(),
     bank_name: document.getElementById('s-bank-name').value.trim(),
@@ -955,7 +987,7 @@ async function submitOnboarding() {
     document.getElementById('nav-bar').style.display = 'none';
 
     // Update all progress circles to done
-    for (let i = 1; i <= 6; i++) {
+    for (let i = 1; i <= 7; i++) {
       const circle = document.getElementById('sc' + i);
       if (circle) { circle.classList.add('done'); circle.textContent = '✓'; }
     }
@@ -964,6 +996,52 @@ async function submitOnboarding() {
     alert('Setup failed: ' + e.message + '. Please try again or contact EduPing support on 07015255068.');
   }
 }
+
+// ── Fee schedule (per class) ──────────────────────────────
+let feeItems = ['Tuition'];
+let feeRows = [{ name: '', amounts: [] }];
+const esc = v => String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+const naira = n => '₦' + n.toLocaleString('en-NG');
+const rowTotal = r => feeItems.reduce((sum, _, i) => sum + (r.amounts[i] || 0), 0);
+
+function renderFees() {
+  document.getElementById('fee-head').innerHTML = '<tr><th>Class</th>' + feeItems.map((n, i) =>
+    '<th><div style="display:flex;gap:4px;align-items:center;"><input class="head-input" value="' + esc(n) + '" oninput="feeItems[' + i + ']=this.value">' +
+    (i ? '<button type="button" class="remove-btn small-x" onclick="removeFeeItem(' + i + ')">✕</button>' : '') + '</div></th>').join('') + '<th>Total</th><th></th></tr>';
+  document.getElementById('fee-body').innerHTML = feeRows.map((r, ri) =>
+    '<tr><td><input value="' + esc(r.name) + '" placeholder="e.g. Primary 1" oninput="feeRows[' + ri + '].name=this.value"></td>' +
+    feeItems.map((_, i) => '<td><input inputmode="numeric" placeholder="0" value="' + (r.amounts[i] || '') + '" oninput="setFee(' + ri + ',' + i + ',this.value)"></td>').join('') +
+    '<td class="fee-total" id="fee-total-' + ri + '">' + naira(rowTotal(r)) + '</td>' +
+    '<td><button type="button" class="remove-btn small-x" onclick="removeFeeClass(' + ri + ')">✕</button></td></tr>').join('');
+}
+function setFee(ri, i, v) {
+  feeRows[ri].amounts[i] = parseInt(String(v).replace(/[^0-9]/g, '')) || 0;
+  document.getElementById('fee-total-' + ri).textContent = naira(rowTotal(feeRows[ri]));
+}
+function addFeeClass() { feeRows.push({ name: '', amounts: [] }); renderFees(); }
+function removeFeeClass(ri) { feeRows.splice(ri, 1); if (!feeRows.length) feeRows.push({ name: '', amounts: [] }); renderFees(); }
+function addFeeItem() { feeItems.push(''); renderFees(); const h = document.querySelectorAll('#fee-head .head-input'); h[h.length - 1].focus(); }
+function removeFeeItem(i) { feeItems.splice(i, 1); feeRows.forEach(r => r.amounts.splice(i, 1)); renderFees(); }
+function addPreset(names) {
+  if (feeRows.length === 1 && !feeRows[0].name.trim() && !rowTotal(feeRows[0])) feeRows = [];
+  names.forEach(n => { if (!feeRows.some(r => r.name.trim().toLowerCase() === n.toLowerCase())) feeRows.push({ name: n, amounts: [] }); });
+  renderFees();
+}
+function fillFromFirst() {
+  const first = feeRows[0];
+  feeRows.slice(1).forEach(r => feeItems.forEach((_, i) => { if (!r.amounts[i] && first.amounts[i]) r.amounts[i] = first.amounts[i]; }));
+  renderFees();
+}
+function getFeeSchedule() {
+  return feeRows.filter(r => r.name.trim()).map(r => {
+    const items = feeItems.map((n, i) => ({ name: n.trim() || 'Fee ' + (i + 1), amount: r.amounts[i] || 0 })).filter(x => x.amount > 0);
+    return { class_name: r.name.trim(), items, total: items.reduce((sum, x) => sum + x.amount, 0) };
+  });
+}
+function feeSummary() {
+  return getFeeSchedule().map(c => c.class_name + ': ' + naira(c.total)).join('; ');
+}
+renderFees();
 </script>
 </body>
 </html>
