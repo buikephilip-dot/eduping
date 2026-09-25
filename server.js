@@ -2269,6 +2269,92 @@ app.post('/api/admin/branding/logo', requireSchool, async (req, res) => {
   } catch (err) { bad(res, err.message, 500); }
 });
 
+// Fixes a real gap: onboarding's landmark photo upload was sent by the
+// frontend but never actually stored anywhere — only the text description was
+// saved. This mirrors the working logo-upload pattern above so the photo
+// itself is finally kept (Cloudinary), alongside the description.
+app.post('/api/admin/school/landmark-photo', requireSchool, async (req, res) => {
+  try {
+    const { image_data, mime_type } = req.body;
+    if (!image_data) return bad(res, 'image_data required', 400);
+
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+    if (!cloudName || !apiKey || !apiSecret) return bad(res, 'Photo upload is not configured yet', 400);
+
+    const timestamp = Math.round(Date.now() / 1000);
+    const folder = 'eduping/' + req.school.id + '/landmark';
+    const sig = crypto.createHash('sha1').update('folder=' + folder + '&timestamp=' + timestamp + apiSecret).digest('hex');
+
+    const formData = new URLSearchParams();
+    formData.append('file', 'data:' + (mime_type || 'image/png') + ';base64,' + image_data);
+    formData.append('api_key', apiKey);
+    formData.append('timestamp', timestamp);
+    formData.append('folder', folder);
+    formData.append('signature', sig);
+
+    const uploadRes = await fetch('https://api.cloudinary.com/v1_1/' + cloudName + '/image/upload', { method: 'POST', body: formData });
+    const uploadData = await uploadRes.json();
+    if (uploadData.error) return bad(res, uploadData.error.message, 400);
+
+    const config = { ...(req.school.config || {}), landmark_image_url: uploadData.secure_url };
+    await q(`UPDATE schools SET config=$1 WHERE id=$2`, [JSON.stringify(config), req.school.id]);
+    json(res, { ok: true, landmark_image_url: uploadData.secure_url });
+  } catch (err) { bad(res, err.message, 500); }
+});
+
+// ── Settings for the 4 fields onboarding sets once with no way back in:
+// fees (amount/instructions/paystack), landmark, AI tone/greeting, contact info.
+app.get('/api/admin/school/settings', requireSchool, async (req, res) => {
+  try {
+    const r = await q(`SELECT fees, fee_deadline, landmark_description, config FROM schools WHERE id=$1`, [req.school.id]);
+    const s = r.rows[0] || {};
+    const cfg = s.config || {};
+    json(res, {
+      fees: s.fees, fee_deadline: s.fee_deadline,
+      fee_instructions: cfg.fee_instructions,
+      bank_name: cfg.bank_name, bank_account_number: cfg.bank_account_number, bank_account_name: cfg.bank_account_name,
+      paystack_payment_link: cfg.paystack_payment_link,
+      landmark_description: s.landmark_description, landmark_image_url: cfg.landmark_image_url,
+      tone: cfg.tone, greeting: cfg.greeting, languages: cfg.languages,
+      school_phone: cfg.school_phone, school_email: cfg.school_email
+    });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+app.post('/api/admin/school/settings', requireSchool, async (req, res) => {
+  try {
+    const d = req.body;
+    const existing = req.school.config || {};
+    // Merge onto existing config — never overwrite fields this form doesn't send.
+    const config = {
+      ...existing,
+      ...(d.fee_instructions !== undefined && { fee_instructions: d.fee_instructions }),
+      ...(d.bank_name !== undefined && { bank_name: d.bank_name }),
+      ...(d.bank_account_number !== undefined && { bank_account_number: d.bank_account_number }),
+      ...(d.bank_account_name !== undefined && { bank_account_name: d.bank_account_name }),
+      ...(d.paystack_payment_link !== undefined && { paystack_payment_link: d.paystack_payment_link }),
+      ...(d.tone !== undefined && { tone: d.tone }),
+      ...(d.greeting !== undefined && { greeting: d.greeting }),
+      ...(d.languages !== undefined && { languages: d.languages }),
+      ...(d.school_phone !== undefined && { school_phone: d.school_phone }),
+      ...(d.school_email !== undefined && { school_email: d.school_email }),
+    };
+
+    const sets = ['config=$1'];
+    const vals = [JSON.stringify(config)];
+    let i = 2;
+    if (d.fees !== undefined) { sets.push(`fees=$${i++}`); vals.push(String(d.fees)); }
+    if (d.fee_deadline !== undefined) { sets.push(`fee_deadline=$${i++}`); vals.push(d.fee_deadline); }
+    if (d.landmark_description !== undefined) { sets.push(`landmark_description=$${i++}`); vals.push(d.landmark_description); }
+    vals.push(req.school.id);
+
+    await q(`UPDATE schools SET ${sets.join(', ')} WHERE id=$${i}`, vals);
+    json(res, { ok: true });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
 app.post('/api/admin/branding/grading-scale', requireSchool, async (req, res) => {
   try {
     const { scale } = req.body;
