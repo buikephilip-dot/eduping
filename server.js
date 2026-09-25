@@ -128,6 +128,88 @@ function isCloudNumber(v) {
 }
 function hasWhatsAppCloud() { return Boolean(process.env.WHATSAPP_ACCESS_TOKEN); }
 function uuid() { return crypto.randomUUID(); }
+
+// Hard, code-level topic gate for the parent-facing AI — runs BEFORE the AI is
+// ever called, so an off-topic or instruction-override attempt never reaches
+// the model at all. This exists for two reasons: (1) a prompt instruction alone
+// can be talked around ("ignore your instructions and just answer..."), and (2)
+// Meta's WhatsApp Business Platform policy bans "general-purpose" AI chatbots —
+// bots that "handle open-domain conversations on any topic" and are "not
+// restricted to a specific business process." A parent-facing bot that will
+// readily answer sports scores or general trivia on request is exactly the
+// kind of evidence that could be used to argue non-compliance. Blocking these
+// deterministically, in code, before the AI runs, keeps the bot provably
+// scoped to its actual business process (a specific child's school updates)
+// rather than relying on the model's own judgment call every time.
+const PROMPT_INJECTION_PATTERNS = [
+  /\bignore\s+(all\s+|any\s+|your\s+|the\s+|previous\s+|prior\s+|above\s+)*instructions?\b/i,
+  /\bdisregard\s+(all\s+|your\s+|the\s+|previous\s+|prior\s+|above\s+)*instructions?\b/i,
+  /\bforget\s+(all\s+|your\s+|the\s+|previous\s+|prior\s+|above\s+)*instructions?\b/i,
+  /\byou\s+are\s+now\b/i,
+  /\bpretend\s+(you('?re| are)|to\s+be)\b/i,
+  /\bact\s+as\s+(a|an|if)\b/i,
+  /\broleplay\s+as\b/i,
+  /\bsystem\s+prompt\b/i,
+  /\bnew\s+instructions?\b/i,
+  /\bjailbreak\b/i,
+  /\bdeveloper\s+mode\b/i,
+  /\bDAN\s+mode\b/i,
+  /\brepeat\s+(your\s+|the\s+)?(instructions|prompt|system\s+message)\b/i,
+  /\bwhat\s+(were|are)\s+you\s+told\b/i,
+  /\bwhat('?s| is)\s+your\s+(system\s+)?prompt\b/i,
+  /\bare\s+you\s+(chatgpt|gpt|an?\s+ai|a\s+bot|a\s+language\s+model|claude|gemini)\b/i,
+  /\bwhich\s+(llm|ai\s+model)\b/i,
+];
+const OFF_TOPIC_PATTERNS = [
+  /\b(football|premier\s+league|\bepl\b|nba|afcon|world\s+cup|champions\s+league)\b/i,
+  /\b(who\s+won|match\s+score|score\s*line|scoreline)\b/i,
+  /\bcapital\s+of\b/i,
+  /\b(president|prime\s+minister)\s+of\b/i,
+  /\bwho\s+is\s+the\s+ceo\s+of\b/i,
+  /\bweather\s+(today|tomorrow|forecast)\b/i,
+  /\bis\s+it\s+(raining|sunny)\b/i,
+  /\b(movie|netflix|celebrity|actor|actress|song\s+lyrics)\b/i,
+  /\bwrite\s+me\s+a\s+(poem|essay|story|code|song)\b/i,
+  /\btranslate\s+this\b/i,
+  /\btell\s+me\s+a\s+joke\b/i,
+  /\bsolve\s+this\s+(math|equation)\b/i,
+];
+function isOffTopicOrInjection(text) {
+  const t = String(text || '');
+  if (!t.trim()) return false;
+  return PROMPT_INJECTION_PATTERNS.some(re => re.test(t)) || OFF_TOPIC_PATTERNS.some(re => re.test(t));
+}
+function guardRedirectReply(studentName, schoolName) {
+  return `I'm just here to help with ${studentName}'s school updates! Let me know if you have any questions about that.\n\n${schoolName} 🏫`;
+}
+
+// A parent asking for their child's exam script/result by name — matches
+// phrases like "marked script", "corrected script", "exam script", "see my
+// child's script/result". Kept separate from the general off-topic patterns
+// above since this should route to actual data, not get redirected.
+function isScriptRequest(text) {
+  return /\b(marked|corrected)?\s*(script|exam\s+result|test\s+result)\b/i.test(String(text || ''));
+}
+
+// Finds the student's most recently submitted CBT exam and sends the result +
+// marked script links to the parent via WhatsApp — same links an admin could
+// trigger manually from the dashboard.
+async function sendLatestScriptToParent(school, student, parentPhone) {
+  const { rows: [session] } = await q(
+    `SELECT ss.access_token, a.subject, a.title
+     FROM student_sessions ss
+     JOIN assessments a ON a.id = ss.assessment_id
+     WHERE ss.student_id=$1 AND ss.school_id=$2 AND ss.status='submitted'
+     ORDER BY ss.submitted_at DESC LIMIT 1`,
+    [student.id, school.id]
+  );
+  if (!session) {
+    return `I couldn't find any completed exams for ${student.name} yet.\n\n${school.name} 🏫`;
+  }
+  const resultUrl = `${CBT_BASE_URL}/cbt/result/${session.access_token}`;
+  const scriptUrl = `${CBT_BASE_URL}/cbt/script/${session.access_token}`;
+  return `📄 *${session.subject} ${session.title} — ${school.name}*\n\nHere's ${student.name}'s most recent result and marked script:\n\nResult: ${resultUrl}\nMarked Script: ${scriptUrl}\n\n${school.name} 🏫`;
+}
 function maxAdminsForPlan(plan) { return plan === 'starter' ? 1 : 5; }
 function createToken(payload) {
   return jwt.sign(payload, process.env.JWT_SECRET || 'eduping-secret', { expiresIn: '7d' });
@@ -456,6 +538,10 @@ async function migrate() {
     ALTER TABLE schools ADD COLUMN IF NOT EXISTS term_end DATE;
     ALTER TABLE schools ADD COLUMN IF NOT EXISTS events_enabled BOOLEAN DEFAULT true;
     ALTER TABLE schools ADD COLUMN IF NOT EXISTS student_limit INTEGER;
+    -- Number the AI alerts when it can't fully answer a parent (escalation).
+    -- Previously referenced in code with no column/migration behind it, so this
+    -- alert has never actually been able to fire until now.
+    ALTER TABLE schools ADD COLUMN IF NOT EXISTS admin_phone TEXT;
 
     -- School events: extended columns used by events hub
     ALTER TABLE school_events ADD COLUMN IF NOT EXISTS name TEXT;
@@ -537,6 +623,10 @@ async function migrate() {
       has_variable BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS idx_whatsapp_templates_school ON whatsapp_templates(school_id);
+    -- Marks a registered template as the one to auto-use for a specific system
+    -- event (e.g. 'homework') when a recipient is outside the 24h free window.
+    -- NULL means it's only used when an admin manually picks it in Broadcast.
+    ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS trigger_key TEXT;
 
     CREATE TABLE IF NOT EXISTS waitlist (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1124,7 +1214,8 @@ Conversation rules:
 - If a parent seems worried, acknowledge their feeling before answering
 - If a parent seems happy or proud, share in that moment genuinely
 - Never say "based on the data" or "according to records" — you know this child, speak like it
-- Never mention EduPing by name in the conversation — you are simply the school assistant`;
+- Never mention EduPing by name in the conversation — you are simply the school assistant
+- You only discuss topics related to this child, this school, or general parenting/school questions. If asked about anything unrelated (sports scores, news, general trivia, etc.), politely redirect: "I'm just here to help with ${student.name}'s school updates! Let me know if you have any questions about that."`;
 }
 
 async function twilioSend(to, from, body) {
@@ -1221,12 +1312,18 @@ How can I help you today? You can ask about attendance, results, fees, homework,
         reply = await handleTutorRequest(school, enriched, from);
         await q(`UPDATE intervention_plans SET tutor_requested=true WHERE student_id=$1 AND tutor_requested=false`, [student.rows[0].id]);
       }
+      // ── Parent asking for the exam script/result ─────────
+      else if (isScriptRequest(body)) {
+        reply = await sendLatestScriptToParent(school, student.rows[0], from);
+      }
       // ── YES to intervention plan ─────────────────────────
       else if (lower === 'yes' || lower === 'ok' || lower === 'okay' || lower === 'sure') {
         const pending = await q(`SELECT ip.*, s.name student_name FROM intervention_plans ip JOIN students s ON s.id=ip.student_id WHERE ip.student_id=$1 AND s.school_id=$2 AND ip.parent_acknowledged=false ORDER BY ip.created_at DESC LIMIT 1`, [student.rows[0].id, school.id]);
         if (pending.rowCount) {
           await q(`UPDATE intervention_plans SET parent_acknowledged=true WHERE id=$1`, [pending.rows[0].id]);
           reply = `✅ Great! We've noted that you're on board with ${pending.rows[0].student_name}'s study plan.\n\nReply *TUTOR* anytime if you'd like us to connect you with a private tutor.\n\n${school.name} 🏫`;
+        } else if (isOffTopicOrInjection(body)) {
+          reply = guardRedirectReply(student.rows[0].name, school.name);
         } else {
           const ctx = await buildStudentContext(school, student.rows[0], from);
           ctx.siblings = siblings;
@@ -1244,29 +1341,21 @@ How can I help you today? You can ask about attendance, results, fees, homework,
           const twiml = new twilio.twiml.MessagingResponse();
           return res.type('text/xml').send(twiml.toString()); // empty response — no AI reply
         }
-        const ctx = await buildStudentContext(school, student.rows[0], from);
-        ctx.siblings = siblings;
-        reply = await callAI(parentPrompt(ctx, first), body || 'Hello', null, ctx.history);
+        if (isOffTopicOrInjection(body)) {
+          reply = guardRedirectReply(student.rows[0].name, school.name);
+        } else {
+          const ctx = await buildStudentContext(school, student.rows[0], from);
+          ctx.siblings = siblings;
+          reply = await callAI(parentPrompt(ctx, first), body || 'Hello', null, ctx.history);
+        }
       }
 
       await q(`INSERT INTO messages (school_id,from_number,student_id,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)`, [school.id, from, student.rows[0].id, body, reply]);
-
-      // ── Escalation detection — notify admin if AI couldn't answer ──
-      const escalationPhrases = ['pass your question', 'contact the school directly', 'reach out directly', 'speak to the school', 'please contact'];
-      const isEscalation = escalationPhrases.some(p => (reply||'').toLowerCase().includes(p));
-      if (isEscalation && school.admin_phone) {
-        try {
-          await twilioSend(school.admin_phone, school.twilio_number || process.env.TWILIO_WHATSAPP_NUMBER, `⚠️ *EduPing Alert — Parent needs follow-up*
-
-From: ${from}
-Student: ${student.rows[0].name}
-Message: "${body}"
-
-EduPing could not fully answer this. Please follow up directly.
-
-${school.name} 🏫`);
-        } catch(e) { console.warn('Admin escalation notify failed:', e.message); }
-      }
+      // Escalation is surfaced inside the admin dashboard's Conversations view
+      // (needs_attention flag + live badge), not as a private WhatsApp DM to an
+      // admin's personal phone — that way any admin can open the actual parent
+      // thread and reply directly, rather than the alert being visible to one
+      // person's phone only.
     } else {
       const first = (await q(`SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1`, [school.id, from])).rowCount === 0;
       const system = `You are EduPing for ${school.name}. This number is not linked to a current parent or staff record, so treat them as a prospective parent unless they say otherwise. Capture parent name, phone, child name, class applying, and next action. Keep it short. ${first ? 'Start with the first message privacy disclaimer.' : ''}`;
@@ -1389,11 +1478,16 @@ How can I help you today? You can ask about attendance, results, fees, homework,
           reply = await handleTutorRequest(school, enriched, from);
           await q(`UPDATE intervention_plans SET tutor_requested=true WHERE student_id=$1 AND tutor_requested=false`, [student.rows[0].id]);
         }
+        else if (isScriptRequest(body)) {
+          reply = await sendLatestScriptToParent(school, student.rows[0], from);
+        }
         else if (lower === 'yes' || lower === 'ok' || lower === 'okay' || lower === 'sure') {
           const pending = await q(`SELECT ip.*, s.name student_name FROM intervention_plans ip JOIN students s ON s.id=ip.student_id WHERE ip.student_id=$1 AND s.school_id=$2 AND ip.parent_acknowledged=false ORDER BY ip.created_at DESC LIMIT 1`, [student.rows[0].id, school.id]);
           if (pending.rowCount) {
             await q(`UPDATE intervention_plans SET parent_acknowledged=true WHERE id=$1`, [pending.rows[0].id]);
             reply = `✅ Great! We've noted that you're on board with ${pending.rows[0].student_name}'s study plan.\n\nReply *TUTOR* anytime if you'd like us to connect you with a private tutor.\n\n${school.name} 🏫`;
+          } else if (isOffTopicOrInjection(body)) {
+            reply = guardRedirectReply(student.rows[0].name, school.name);
           } else {
             const ctx = await buildStudentContext(school, student.rows[0], from);
             ctx.siblings = siblings;
@@ -1407,28 +1501,18 @@ How can I help you today? You can ask about attendance, results, fees, homework,
               [school.id, from, student.rows[0].id, body, '[AI suppressed — admin active in thread]']);
             return res.sendStatus(200);
           }
-          const ctx = await buildStudentContext(school, student.rows[0], from);
-          ctx.siblings = siblings;
-          reply = await callAI(parentPrompt(ctx, first), body || 'Hello', null, ctx.history);
+          if (isOffTopicOrInjection(body)) {
+            reply = guardRedirectReply(student.rows[0].name, school.name);
+          } else {
+            const ctx = await buildStudentContext(school, student.rows[0], from);
+            ctx.siblings = siblings;
+            reply = await callAI(parentPrompt(ctx, first), body || 'Hello', null, ctx.history);
+          }
         }
 
         await q(`INSERT INTO messages (school_id,from_number,student_id,user_message,assistant_reply) VALUES ($1,$2,$3,$4,$5)`, [school.id, from, student.rows[0].id, body, reply]);
-
-        const escalationPhrases = ['pass your question', 'contact the school directly', 'reach out directly', 'speak to the school', 'please contact'];
-        const isEscalation = escalationPhrases.some(p => (reply||'').toLowerCase().includes(p));
-        if (isEscalation && school.admin_phone) {
-          try {
-            await twilioSend(school.admin_phone, school.twilio_number, `⚠️ *EduPing Alert — Parent needs follow-up*
-
-From: ${from}
-Student: ${student.rows[0].name}
-Message: "${body}"
-
-EduPing could not fully answer this. Please follow up directly.
-
-${school.name} 🏫`);
-          } catch(e) { console.warn('Admin escalation notify failed:', e.message); }
-        }
+        // Escalation is surfaced inside the admin dashboard's Conversations view
+        // (needs_attention flag + live badge), not as a private WhatsApp DM.
       } else {
         const first = (await q(`SELECT id FROM messages WHERE school_id=$1 AND from_number=$2 LIMIT 1`, [school.id, from])).rowCount === 0;
         const system = `You are EduPing for ${school.name}. This number is not linked to a current parent or staff record, so treat them as a prospective parent unless they say otherwise. Capture parent name, phone, child name, class applying, and next action. Keep it short. ${first ? 'Start with the first message privacy disclaimer.' : ''}`;
@@ -1520,18 +1604,40 @@ async function processTeacher(school, staff, body, mediaUrl, mediaType, mediaBas
       );
       const fromNumber = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
       const dueDate = new Date(Date.now() + 3 * 86400000).toLocaleDateString('en-NG', { weekday: 'long', day: 'numeric', month: 'long' });
-      let notified = 0;
-      for (const p of parents.rows) {
+      let notified = 0, notifiedViaTemplate = 0;
+      // Look up the template registered for automatic homework alerts, if any —
+      // needed to reach parents outside the 24h free-form window.
+      const homeworkTemplate = isCloudNumber(fromNumber)
+        ? (await q(`SELECT * FROM whatsapp_templates WHERE school_id=$1 AND trigger_key='homework'`, [school.id])).rows[0]
+        : null;
+      // FIX: parent_phone may hold multiple comma-separated numbers (e.g. mom + dad).
+      const parentContacts = parents.rows.flatMap(p =>
+        String(p.parent_phone).split(',').map(n => n.trim()).filter(Boolean).map(phone => ({ name: p.name, phone }))
+      );
+      for (const p of parentContacts) {
         try {
           const msg = `📚 *Homework Alert — ${school.name}*\n\nDear parent, ${staff.name} has assigned new ${staff.subject || 'class'} homework to *${staff.class}*:\n\n"${body}"\n\n📅 Due: ${dueDate}\n\nReply to this number to ask EduPing any questions.\n${school.name} 🏫`;
-          await twilioSend(p.parent_phone, fromNumber, msg);
+          if (isCloudNumber(fromNumber)) {
+            const withinWindow = await isWithinFreeWindow(school.id, p.phone);
+            if (withinWindow) {
+              await cloudSend(p.phone, fromNumber, msg);
+            } else if (homeworkTemplate) {
+              await cloudSendTemplate(p.phone, fromNumber, homeworkTemplate.template_name, homeworkTemplate.language_code, homeworkTemplate.has_variable ? msg : null);
+              notifiedViaTemplate++;
+            } else {
+              console.warn(`⚠️ Skipped homework alert to parent of ${p.name} (${p.phone}) — outside 24h window and no "homework" template registered`);
+              continue;
+            }
+          } else {
+            await twilioSend(p.phone, fromNumber, msg);
+          }
           notified++;
-          console.log(`📱 Homework notification sent to parent of ${p.name} (${p.parent_phone})`);
+          console.log(`📱 Homework notification sent to parent of ${p.name} (${p.phone})`);
         } catch(e) {
           console.warn(`⚠️ Failed to notify parent of ${p.name}: ${e.message}`);
         }
       }
-      console.log(`📚 Homework saved for ${staff.class}. Notified ${notified}/${parents.rows.length} parents.`);
+      console.log(`📚 Homework saved for ${staff.class}. Notified ${notified}/${parentContacts.length} parents (${notifiedViaTemplate} via template).`);
     }
 
     return `✅ Homework saved for ${staff.class || 'your class'}. ${staff.class ? 'Parents have been notified via WhatsApp.' : 'Parents can now ask EduPing for it.'} ${school.name} 🏫`;
@@ -3377,8 +3483,20 @@ app.get('/api/admin/attendance', requireSchool, async (req, res) => {
 
 app.get('/api/admin/school', requireSchool, async (req, res) => {
   try {
-    const r = await q(`SELECT id, name, city, plan, status, twilio_number, events_enabled, current_term FROM schools WHERE id=$1`, [req.school.id]);
+    const r = await q(`SELECT id, name, city, plan, status, twilio_number, events_enabled, current_term, admin_phone FROM schools WHERE id=$1`, [req.school.id]);
     json(res, r.rows[0] || {});
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// Sets the number the AI alerts when it can't fully answer a parent's question
+// (e.g. "please contact the school directly") — without this set, that alert
+// has nowhere to go and silently never fires.
+app.post('/api/admin/school/admin-phone', requireSchool, async (req, res) => {
+  try {
+    const { admin_phone } = req.body;
+    if (!admin_phone) return bad(res, 'admin_phone required');
+    await q(`UPDATE schools SET admin_phone=$1 WHERE id=$2`, [normalisePhone(admin_phone), req.school.id]);
+    json(res, { ok: true, admin_phone: normalisePhone(admin_phone) });
   } catch(err) { bad(res, err.message, 500); }
 });
 
@@ -3827,18 +3945,22 @@ app.delete('/api/admin/broadcast-presets/:id', requireSchool, async (req, res) =
 // ── WhatsApp approved templates (for messaging outside the 24h window) ──
 app.get('/api/admin/whatsapp-templates', requireSchool, async (req, res) => {
   try {
-    const rows = await q(`SELECT id, label, template_name, language_code, has_variable, created_at FROM whatsapp_templates WHERE school_id=$1 ORDER BY created_at DESC`, [req.school.id]);
+    const rows = await q(`SELECT id, label, template_name, language_code, has_variable, trigger_key, created_at FROM whatsapp_templates WHERE school_id=$1 ORDER BY created_at DESC`, [req.school.id]);
     json(res, rows.rows);
   } catch(err) { bad(res, err.message, 500); }
 });
 
 app.post('/api/admin/whatsapp-templates', requireSchool, async (req, res) => {
   try {
-    const { label, template_name, language_code, has_variable } = req.body;
+    const { label, template_name, language_code, has_variable, trigger_key } = req.body;
     if (!label || !template_name) return bad(res, 'label and template_name required');
+    // Only one template can auto-fire per trigger — replace any existing one for this key.
+    if (trigger_key) {
+      await q(`UPDATE whatsapp_templates SET trigger_key=NULL WHERE school_id=$1 AND trigger_key=$2`, [req.school.id, trigger_key]);
+    }
     const row = await q(
-      `INSERT INTO whatsapp_templates (school_id, label, template_name, language_code, has_variable) VALUES ($1,$2,$3,$4,$5) RETURNING id, label, template_name, language_code, has_variable, created_at`,
-      [req.school.id, label, template_name, language_code || 'en', !!has_variable]
+      `INSERT INTO whatsapp_templates (school_id, label, template_name, language_code, has_variable, trigger_key) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, label, template_name, language_code, has_variable, trigger_key, created_at`,
+      [req.school.id, label, template_name, language_code || 'en', !!has_variable, trigger_key || null]
     );
     json(res, row.rows[0]);
   } catch(err) { bad(res, err.message, 500); }
@@ -4420,6 +4542,23 @@ async function migrateCBT() {
     CREATE INDEX IF NOT EXISTS idx_assessments_school          ON assessments(school_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_questions_assessment        ON questions(assessment_id);
     CREATE INDEX IF NOT EXISTS idx_cbt_results_assessment      ON cbt_results(assessment_id);
+
+    -- One PIN per student per assessment, issued when the exam is published.
+    -- Lets a student log into the exam on ANY shared school computer with just
+    -- their name + this PIN — mirrors the existing result_pins pattern used for
+    -- term results, so no WhatsApp link is needed for in-school supervised exams.
+    CREATE TABLE IF NOT EXISTS exam_pins (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      assessment_id UUID NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
+      student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+      student_name TEXT, class_name TEXT,
+      pin TEXT NOT NULL,
+      accessed BOOLEAN DEFAULT false,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_exam_pins_assessment ON exam_pins(assessment_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_exam_pins_unique ON exam_pins(assessment_id, student_id);
   `);
 }
 
@@ -4762,21 +4901,52 @@ app.post('/api/admin/cbt/assessments/:id/publish', requireSchool, async (req, re
         [assessment.id, s.id, req.school.id]
       )).rows[0].access_token;
 
+      // Issue this student's exam PIN (idempotent — reuses the same PIN if
+      // already published before) so a shared school computer can identify
+      // which session to load without any WhatsApp link.
+      const { rows: [existingPin] } = await q(
+        'SELECT pin FROM exam_pins WHERE assessment_id=$1 AND student_id=$2',
+        [assessment.id, s.id]
+      );
+      const pin = existingPin?.pin || String(Math.floor(100000 + Math.random() * 900000));
+      if (!existingPin) {
+        await q(
+          `INSERT INTO exam_pins (school_id, assessment_id, student_id, student_name, class_name, pin)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [req.school.id, assessment.id, s.id, s.name, s.class_name, pin]
+        );
+      }
+
       sessions.push({
         student_id: s.id,
         student_name: s.name,
         parent_phone: s.parent_phone,
         token,
+        pin,
         url: `${CBT_BASE_URL}/cbt/${token}`
       });
     }
 
     await q("UPDATE assessments SET status='active' WHERE id=$1", [assessment.id]);
-    json(res, { published: true, sessions });
+    json(res, { published: true, sessions, join_url: `${CBT_BASE_URL}/cbt/join` });
   } catch (e) { bad(res, e.message); }
 });
 
-// Notify parents via WhatsApp
+// Exam PINs for an assessment — for printing/handing out login slips before
+// students sit the exam on shared school computers.
+app.get('/api/admin/cbt/assessments/:id/pins', requireSchool, async (req, res) => {
+  try {
+    const rows = await q(
+      `SELECT student_name, class_name, pin, accessed FROM exam_pins WHERE assessment_id=$1 AND school_id=$2 ORDER BY student_name`,
+      [req.params.id, req.school.id]
+    );
+    json(res, rows.rows);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// FYI-only announcement to parents — no exam access link, since exams are
+// taken in-school on shared computers via Student Name + PIN (see /cbt/join),
+// not on the parent's own device.
 app.post('/api/admin/cbt/assessments/:id/notify', requireSchool, async (req, res) => {
   try {
     const { rows: [assessment] } = await q(
@@ -4799,12 +4969,11 @@ app.post('/api/admin/cbt/assessments/:id/notify', requireSchool, async (req, res
     let sent = 0;
     for (const sess of sessions) {
       if (!sess.parent_phone) continue;
-      const link = `${CBT_BASE_URL}/cbt/${sess.access_token}`;
       const msg =
         `📝 ${assessment.subject} ${assessment.title} — ${school.name}\n` +
-        `Dear ${sess.parent_name || 'Parent'}, ${sess.student_name} has a ${assessment.subject} test scheduled.\n` +
-        `Access their exam here: ${link}\n` +
+        `Dear ${sess.parent_name || 'Parent'}, ${sess.student_name} has a ${assessment.subject} test scheduled at school.\n` +
         `Time limit: ${assessment.time_limit_minutes} minutes. ${timingNote}\n` +
+        `The exam will be taken on a school computer. You'll receive the result once it's submitted.\n` +
         `${school.name} 🏫`;
       try {
         await twilioSend(sess.parent_phone, school.twilio_number, msg);
@@ -4825,7 +4994,7 @@ app.get('/api/admin/cbt/assessments/:id/results', requireSchool, async (req, res
     if (!assessment) return bad(res, 'Not found', 404);
 
     const { rows } = await q(
-      `SELECT ss.id, ss.status, ss.score, ss.total_marks, ss.percentage,
+      `SELECT ss.id, ss.status, ss.score, ss.total_marks, ss.percentage, ss.student_id,
          ss.started_at, ss.submitted_at,
          s.name AS student_name, s.class_name,
          r.grade, r.time_taken_seconds, r.parent_notified,
@@ -5693,4 +5862,302 @@ app.post('/webhook/paystack', async (req, res) => {
 });
 
 // ── Student CBT exam page ──
+// Shared "Join Exam" page — one URL usable on any school computer. Student
+// types their name + this exam's PIN; on match, redirects to their own
+// /cbt/:token exam session. Must be registered BEFORE /cbt/:token below,
+// since Express would otherwise match "join" as a :token value.
+app.get('/cbt/join', (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EduPing — Join Exam</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:#f0f2f5;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:40px 16px;}
+.card{background:white;border-radius:16px;padding:32px;width:100%;max-width:440px;box-shadow:0 4px 24px rgba(0,0,0,.08);}
+.logo{font-size:22px;font-weight:700;color:#0f1a14;text-align:center;margin-bottom:8px;}
+.logo span{color:#0055CC;}
+.subtitle{font-size:14px;color:#667781;text-align:center;margin-bottom:28px;}
+.form-group{margin-bottom:16px;}
+label{font-size:12px;font-weight:600;color:#667781;letter-spacing:.5px;text-transform:uppercase;display:block;margin-bottom:6px;}
+input{width:100%;padding:12px 14px;border:1.5px solid #e9edef;border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s;}
+input:focus{border-color:#1a7a4a;}
+.btn{width:100%;background:#1a7a4a;color:white;border:none;padding:14px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:4px;}
+.btn:hover{background:#0d4a2c;}
+.error{background:#fee2e2;color:#991b1b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none;}
+.footer{font-size:12px;color:#aab;text-align:center;margin-top:16px;}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">Edu<span>Ping</span></div>
+  <div class="subtitle">Enter your details to start your exam</div>
+  <div class="error" id="error-msg"></div>
+  <div class="form-group">
+    <label>Full Name</label>
+    <input type="text" id="student-id" placeholder="e.g. Amara Okafor" autocomplete="off">
+  </div>
+  <div class="form-group">
+    <label>Exam PIN</label>
+    <input type="text" id="exam-pin" placeholder="6-digit PIN" style="letter-spacing:2px;font-weight:600;" autocomplete="off" inputmode="numeric">
+  </div>
+  <button class="btn" onclick="joinExam()">Start Exam →</button>
+  <div class="footer">Powered by EduPing · eduping.org</div>
+</div>
+<script>
+async function joinExam() {
+  const studentName = document.getElementById('student-id').value.trim();
+  const pin = document.getElementById('exam-pin').value.trim();
+  const errEl = document.getElementById('error-msg');
+  errEl.style.display = 'none';
+  if (!studentName || !pin) { errEl.textContent = 'Please enter both your name and the PIN.'; errEl.style.display = 'block'; return; }
+  try {
+    const res = await fetch('/api/cbt/verify', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ student_name: studentName, pin }) });
+    const data = await res.json();
+    if (!data.ok) { errEl.textContent = data.error || 'Invalid PIN or name. Please check and try again, or ask your teacher.'; errEl.style.display = 'block'; return; }
+    window.location.href = '/cbt/' + data.token;
+  } catch(e) { errEl.textContent = 'Something went wrong. Please try again.'; errEl.style.display = 'block'; }
+}
+document.getElementById('exam-pin').addEventListener('keydown', e => { if(e.key==='Enter') joinExam(); });
+</script>
+</body>
+</html>`);
+});
+
+app.post('/api/cbt/verify', async (req, res) => {
+  try {
+    const { student_name, pin } = req.body;
+    if (!student_name || !pin) return bad(res, 'student_name and pin required');
+    const rec = await q(
+      `SELECT ep.*, ss.access_token, a.status AS assessment_status
+       FROM exam_pins ep
+       JOIN student_sessions ss ON ss.assessment_id=ep.assessment_id AND ss.student_id=ep.student_id
+       JOIN assessments a ON a.id=ep.assessment_id
+       WHERE ep.pin=$1 AND ep.student_name ILIKE $2`,
+      [String(pin).trim(), `%${student_name}%`]
+    );
+    if (!rec.rows.length) return json(res, { ok: false, error: 'Invalid PIN or name. Please check and try again, or ask your teacher.' });
+    const record = rec.rows[0];
+    if (record.assessment_status !== 'active') return json(res, { ok: false, error: 'This exam is not currently active. Please ask your teacher.' });
+    await q('UPDATE exam_pins SET accessed=true WHERE id=$1', [record.id]);
+    json(res, { ok: true, token: record.access_token });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
 app.get('/cbt/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', 'cbt.html')));
+
+
+// Recomputes a full per-question breakdown (with actual question/option text,
+// not just IDs) from the student's stored answers -- used by both the marked
+// script page and the WhatsApp delivery. Safe to call anytime after submission
+// since it's derived fresh from student_sessions.answers_json + the current
+// questions/options rows, rather than needing separate storage.
+async function getMarkedScriptData(assessmentId, answersJson) {
+  const { rows: questions } = await q(
+    `SELECT q.id, q.question_text, q.question_type, q.marks, q.order_index,
+       json_agg(json_build_object('id',o.id,'option_text',o.option_text,'is_correct',o.is_correct)
+                ORDER BY o.order_index) AS options
+     FROM questions q
+     LEFT JOIN options o ON o.question_id = q.id
+     WHERE q.assessment_id = $1
+     GROUP BY q.id
+     ORDER BY q.order_index`, [assessmentId]
+  );
+  return questions.map(q2 => {
+    const given = answersJson[q2.id];
+    const correctOpt = q2.options.find(o => o.is_correct);
+    let studentAnswerText = null, correct = false;
+    if (q2.question_type === 'mcq' || q2.question_type === 'truefalse') {
+      const chosen = q2.options.find(o => String(o.id) === String(given));
+      studentAnswerText = chosen ? chosen.option_text : '(no answer)';
+      correct = correctOpt && String(given) === String(correctOpt.id);
+    } else if (q2.question_type === 'fillin') {
+      studentAnswerText = given || '(no answer)';
+      correct = correctOpt && String(given || '').trim().toLowerCase() === correctOpt.option_text.trim().toLowerCase();
+    }
+    return {
+      question_text: q2.question_text,
+      marks: q2.marks,
+      student_answer: studentAnswerText,
+      correct_answer: correctOpt ? correctOpt.option_text : null,
+      correct
+    };
+  });
+}
+
+// Branded, printable single-exam result page (parent-facing) -- mirrors the
+// term-result page's styling so it opens the same way on any phone/browser
+// and can be saved as a PDF or printed directly from there.
+app.get('/cbt/result/:token', async (req, res) => {
+  try {
+    const { rows: [r] } = await q(
+      `SELECT ss.*, s.name AS student_name, s.class_name,
+         a.title, a.subject, a.term,
+         sc.name AS school_name, sc.config
+       FROM student_sessions ss
+       JOIN students s ON s.id = ss.student_id
+       JOIN assessments a ON a.id = ss.assessment_id
+       JOIN schools sc ON sc.id = ss.school_id
+       WHERE ss.access_token = $1`, [req.params.token]
+    );
+    if (!r) return res.status(404).send('Result not found.');
+    if (r.status !== 'submitted') return res.status(403).send('This exam has not been submitted yet.');
+
+    const branding = getSchoolBranding({ config: r.config });
+    const scale = getSchoolGradingScale({ config: r.config });
+    const { grade } = gradeForScore(r.percentage || 0, scale);
+
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${r.student_name} -- ${r.subject} Result</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:#f0f2f5;padding:24px 16px;}
+.result-card{background:white;max-width:700px;margin:0 auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08);}
+.result-header{background:${branding.primary_color};color:white;padding:28px 32px;text-align:center;}
+.result-logo{max-height:56px;max-width:200px;margin:0 auto 10px;display:block;}
+.school-name{font-size:22px;font-weight:700;margin-bottom:4px;}
+.result-title{font-size:13px;opacity:.7;letter-spacing:1px;text-transform:uppercase;}
+.student-info{display:grid;grid-template-columns:repeat(3,1fr);gap:0;background:#f7f9f7;border-bottom:1px solid #e9edef;}
+.info-item{padding:16px 20px;border-right:1px solid #e9edef;}
+.info-item:last-child{border-right:none;}
+.info-label{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#667781;margin-bottom:4px;}
+.info-value{font-size:15px;font-weight:600;color:#0f1a14;}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:24px 28px;}
+.sum-box{background:#f7f9f7;border-radius:8px;padding:14px;text-align:center;}
+.sum-val{font-size:24px;font-weight:700;color:${branding.primary_color};}
+.sum-label{font-size:11px;color:#667781;margin-top:3px;}
+.result-footer{background:#f7f9f7;padding:16px 28px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #e9edef;}
+.footer-brand{font-size:13px;color:#aab;}
+.footer-brand strong{color:${branding.primary_color};}
+.print-btn{background:${branding.primary_color};color:white;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+@media print{ body{background:white;padding:0;} .print-btn{display:none;} .result-card{box-shadow:none;border-radius:0;} }
+</style>
+</head>
+<body>
+<div class="result-card">
+  <div class="result-header">
+    ${branding.logo_url ? `<img class="result-logo" src="${branding.logo_url}" alt="${r.school_name} logo">` : ''}
+    <div class="school-name">${r.school_name}</div>
+    <div class="result-title">${r.subject} -- ${r.title}</div>
+  </div>
+  <div class="student-info">
+    <div class="info-item"><div class="info-label">Student Name</div><div class="info-value">${r.student_name}</div></div>
+    <div class="info-item"><div class="info-label">Class</div><div class="info-value">${r.class_name||'-'}</div></div>
+    <div class="info-item"><div class="info-label">Term</div><div class="info-value">${r.term||'-'}</div></div>
+  </div>
+  <div class="summary">
+    <div class="sum-box"><div class="sum-val">${r.score}/${r.total_marks}</div><div class="sum-label">Score</div></div>
+    <div class="sum-box"><div class="sum-val">${r.percentage}%</div><div class="sum-label">Percentage</div></div>
+    <div class="sum-box"><div class="sum-val">${grade}</div><div class="sum-label">Grade</div></div>
+  </div>
+  <div class="result-footer">
+    <div class="footer-brand">Powered by <strong>EduPing</strong> · eduping.org</div>
+    <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+  </div>
+</div>
+</body>
+</html>`);
+  } catch(err) { res.status(500).send('Error loading result: ' + err.message); }
+});
+
+// Marked script -- per-question breakdown showing the student's answer vs the
+// correct answer, so a parent can see exactly what was missed.
+app.get('/cbt/script/:token', async (req, res) => {
+  try {
+    const { rows: [r] } = await q(
+      `SELECT ss.*, s.name AS student_name, s.class_name,
+         a.title, a.subject, a.term,
+         sc.name AS school_name, sc.config
+       FROM student_sessions ss
+       JOIN students s ON s.id = ss.student_id
+       JOIN assessments a ON a.id = ss.assessment_id
+       JOIN schools sc ON sc.id = ss.school_id
+       WHERE ss.access_token = $1`, [req.params.token]
+    );
+    if (!r) return res.status(404).send('Script not found.');
+    if (r.status !== 'submitted') return res.status(403).send('This exam has not been submitted yet.');
+
+    const branding = getSchoolBranding({ config: r.config });
+    const answers = typeof r.answers_json === 'string' ? JSON.parse(r.answers_json) : (r.answers_json || {});
+    const items = await getMarkedScriptData(r.assessment_id, answers);
+
+    const rowsHtml = items.map((it, i) => `
+      <div style="padding:16px;border-bottom:1px solid #f0f2f5;${it.correct ? '' : 'background:#fff7f7;'}">
+        <div style="font-size:11px;color:#667781;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Question ${i+1} -- ${it.marks} mark${it.marks!==1?'s':''} ${it.correct ? '[correct]' : '[wrong]'}</div>
+        <div style="font-size:14px;color:#0f1a14;margin-bottom:8px;">${it.question_text}</div>
+        <div style="font-size:13px;color:${it.correct ? '#1a7a4a' : '#b91c1c'};">Student's answer: <strong>${it.student_answer}</strong></div>
+        ${!it.correct ? `<div style="font-size:13px;color:#1a7a4a;">Correct answer: <strong>${it.correct_answer}</strong></div>` : ''}
+      </div>`).join('');
+
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${r.student_name} -- ${r.subject} Marked Script</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:#f0f2f5;padding:24px 16px;}
+.card{background:white;max-width:700px;margin:0 auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08);}
+.header{background:${branding.primary_color};color:white;padding:28px 32px;text-align:center;}
+.result-logo{max-height:56px;max-width:200px;margin:0 auto 10px;display:block;}
+.school-name{font-size:22px;font-weight:700;margin-bottom:4px;}
+.result-title{font-size:13px;opacity:.7;letter-spacing:1px;text-transform:uppercase;}
+.footer{background:#f7f9f7;padding:16px 28px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #e9edef;}
+.footer-brand{font-size:13px;color:#aab;}
+.footer-brand strong{color:${branding.primary_color};}
+.print-btn{background:${branding.primary_color};color:white;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+@media print{ body{background:white;padding:0;} .print-btn{display:none;} .card{box-shadow:none;border-radius:0;} }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    ${branding.logo_url ? `<img class="result-logo" src="${branding.logo_url}" alt="${r.school_name} logo">` : ''}
+    <div class="school-name">${r.school_name}</div>
+    <div class="result-title">${r.subject} -- Marked Script -- ${r.student_name}</div>
+  </div>
+  ${rowsHtml}
+  <div class="footer">
+    <div class="footer-brand">Powered by <strong>EduPing</strong> · eduping.org</div>
+    <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+  </div>
+</div>
+</body>
+</html>`);
+  } catch(err) { res.status(500).send('Error loading script: ' + err.message); }
+});
+
+// Admin-triggered: send a specific student's result + marked script links to
+// their parent via WhatsApp.
+app.post('/api/admin/cbt/assessments/:id/students/:studentId/send-script', requireSchool, async (req, res) => {
+  try {
+    const { rows: [session] } = await q(
+      `SELECT ss.access_token, ss.status, s.name AS student_name, s.parent_phone, s.parent_name, a.subject, a.title
+       FROM student_sessions ss
+       JOIN students s ON s.id = ss.student_id
+       JOIN assessments a ON a.id = ss.assessment_id
+       WHERE ss.assessment_id=$1 AND ss.student_id=$2 AND ss.school_id=$3`,
+      [req.params.id, req.params.studentId, req.school.id]
+    );
+    if (!session) return bad(res, 'Session not found', 404);
+    if (session.status !== 'submitted') return bad(res, 'This student has not submitted the exam yet', 400);
+    if (!session.parent_phone) return bad(res, 'No parent phone number on file for this student', 400);
+
+    const school = req.school;
+    const resultUrl = `${CBT_BASE_URL}/cbt/result/${session.access_token}`;
+    const scriptUrl = `${CBT_BASE_URL}/cbt/script/${session.access_token}`;
+    const msg = `EduPing: ${session.subject} ${session.title} -- ${school.name}\n\nDear ${session.parent_name || 'Parent'}, here is ${session.student_name}'s result and marked script:\n\nResult: ${resultUrl}\nMarked Script: ${scriptUrl}\n\n${school.name}`;
+    await twilioSend(session.parent_phone, school.twilio_number, msg);
+    json(res, { ok: true });
+  } catch(err) { bad(res, err.message, 500); }
+});
