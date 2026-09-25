@@ -1035,6 +1035,16 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
             </div>
           </div>
           <div class="dash-card">
+            <div class="dash-card-header"><div class="dash-card-title">💰 Payment Alerts</div></div>
+            <div class="dash-card-body">
+              <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">This number gets a WhatsApp alert whenever a parent pays fees online (Paystack). Parent conversations needing follow-up show up in the Conversations tab instead — no separate alert needed.</div>
+              <div style="display:flex;gap:8px;">
+                <input class="form-input" id="admin-phone-input" placeholder="e.g. +2348012345678" style="flex:1;">
+                <button class="broadcast-btn" style="max-width:100px;" onclick="saveAdminPhone()">Save</button>
+              </div>
+            </div>
+          </div>
+          <div class="dash-card">
             <div class="dash-card-header">
               <div class="dash-card-title">✅ Approved Templates</div>
               <button class="action-btn" style="padding:6px 10px;font-size:12px;" onclick="showAddTemplateForm()">➕ Register</button>
@@ -1046,6 +1056,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
                 <input class="form-input" id="wa-tpl-name" placeholder="Exact template name in Meta (e.g. welcome_back)">
                 <input class="form-input" id="wa-tpl-lang" placeholder="Language code (e.g. en)" value="en">
                 <label style="font-size:12px;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="wa-tpl-hasvar"> This template has a {{1}} variable I can fill in</label>
+                <select class="form-input" id="wa-tpl-trigger">
+                  <option value="">Manual use only (send it myself from Broadcast)</option>
+                  <option value="homework">Auto-use for Homework Alerts (when outside 24h window)</option>
+                </select>
                 <div style="display:flex;gap:8px;">
                   <button class="broadcast-btn" style="max-width:120px;" onclick="addWhatsappTemplate()">Save</button>
                   <button class="action-btn" onclick="showAddTemplateForm(false)">Cancel</button>
@@ -1940,8 +1954,11 @@ function _demoCbtPaystack(baseUrl, opts) {
 
   // ── CBT ──
   const mDetail  = baseUrl.match(/^\/api\/admin\/cbt\/assessments\/([^\/]+)$/);
-  const mSub     = baseUrl.match(/^\/api\/admin\/cbt\/assessments\/([^\/]+)\/(questions|publish|notify|results|monitor|release)$/);
+  const mSub     = baseUrl.match(/^\/api\/admin\/cbt\/assessments\/([^\/]+)\/(questions|publish|notify|results|monitor|release|pins)$/);
+  const mScript  = baseUrl.match(/^\/api\/admin\/cbt\/assessments\/([^\/]+)\/students\/([^\/]+)\/send-script$/);
   const mQuestion= baseUrl.match(/^\/api\/admin\/cbt\/questions\/([^\/]+)$/);
+
+  if (mScript) return { ok: true };
 
   if (baseUrl === '/api/admin/cbt/assessments' && method === 'GET') return DEMO_CBT.assessments;
 
@@ -1984,15 +2001,16 @@ function _demoCbtPaystack(baseUrl, opts) {
     if (action === 'publish') {
       if (a) { a.status = 'active'; a.session_count = 6; }
       const kids = (typeof DEMO_STUDENTS !== 'undefined' ? DEMO_STUDENTS.filter(s => s.class_name === (a ? a.class_name : 'JSS2A')) : []).slice(0, 6);
-      const sessions = kids.map(s => { const t = 'demo-token-' + Math.random().toString(36).slice(2, 10); return { student_id: s.id, student_name: s.name, parent_phone: s.parent_phone, token: t, url: 'https://eduping.org/cbt/' + t }; });
-      return { published: true, sessions };
+      const sessions = kids.map(s => { const t = 'demo-token-' + Math.random().toString(36).slice(2, 10); const pin = String(Math.floor(100000 + Math.random() * 900000)); return { student_id: s.id, student_name: s.name, parent_phone: s.parent_phone, token: t, pin, url: 'https://eduping.org/cbt/' + t }; });
+      return { published: true, sessions, join_url: 'https://eduping.org/cbt/join' };
     }
     if (action === 'notify') return { sent: 6, total: 6, ok: true };
     if (action === 'release') return { released: true, sent: 4, total: 4, ok: true };
     if (action === 'monitor') return DEMO_CBT.monitor[id] || [];
+    if (action === 'pins') return (DEMO_CBT.monitor[id] || []).map(r => ({ student_name: r.student_name, class_name: a ? a.class_name : '', pin: String(Math.floor(100000 + Math.random() * 900000)), accessed: false }));
     if (action === 'results') {
       const rows = (DEMO_CBT.monitor[id] || []).filter(r => r.status === 'submitted');
-      const results = rows.map(r => ({ student_name: r.student_name, score: r.score, total_marks: r.total_marks, percentage: r.percentage, grade: r.percentage >= 90 ? 'A' : r.percentage >= 70 ? 'B' : r.percentage >= 60 ? 'C' : r.percentage >= 50 ? 'D' : 'F', time_taken_seconds: 900 - (r.time_remaining_seconds || 0), status: r.status }));
+      const results = rows.map(r => ({ student_id: r.student_id || ('demo-s-' + r.student_name), student_name: r.student_name, score: r.score, total_marks: r.total_marks, percentage: r.percentage, grade: r.percentage >= 90 ? 'A' : r.percentage >= 70 ? 'B' : r.percentage >= 60 ? 'C' : r.percentage >= 50 ? 'D' : 'F', time_taken_seconds: 900 - (r.time_remaining_seconds || 0), status: r.status }));
       const pcts = results.map(r => r.percentage);
       return { results, stats: { total: (DEMO_CBT.monitor[id] || []).length, submitted: results.length, average: pcts.length ? Math.round(pcts.reduce((x, y) => x + y, 0) / pcts.length) : 0, highest: pcts.length ? Math.max(...pcts) : null, lowest: pcts.length ? Math.min(...pcts) : null } };
     }
@@ -5222,6 +5240,24 @@ async function loadBroadcast() {
   updateBroadcastCount();
   loadBroadcastPresets();
   loadWhatsappTemplates();
+  loadAdminPhone();
+}
+
+async function loadAdminPhone() {
+  try {
+    const school = await api('/api/admin/school');
+    const input = document.getElementById('admin-phone-input');
+    if (input && school.admin_phone) input.value = school.admin_phone;
+  } catch(e) {}
+}
+
+async function saveAdminPhone() {
+  const val = document.getElementById('admin-phone-input')?.value?.trim();
+  if (!val) { showToast('Enter a phone number first ❌'); return; }
+  try {
+    await api('/api/admin/school/admin-phone', { method: 'POST', body: JSON.stringify({ admin_phone: val }) });
+    showToast('✅ Escalation number saved!');
+  } catch(e) { showToast('Failed to save ❌'); }
 }
 
 // ── Custom broadcast presets (saved by the school, per-school) ──────────
@@ -5282,7 +5318,7 @@ async function loadWhatsappTemplates() {
     }
     listEl.innerHTML = templates.map(t =>
       '<div style="display:flex;gap:6px;align-items:center;">' +
-        '<button class="qr-btn" style="flex:1;text-align:left;border-radius:8px;padding:10px 14px;" onclick="sendWhatsappTemplate(\'' + t.id + '\',' + (t.has_variable ? 'true' : 'false') + ')">✅ ' + t.label + (t.has_variable ? ' (fill-in)' : ' (fixed)') + '</button>' +
+        '<button class="qr-btn" style="flex:1;text-align:left;border-radius:8px;padding:10px 14px;" onclick="sendWhatsappTemplate(\'' + t.id + '\',' + (t.has_variable ? 'true' : 'false') + ')">✅ ' + t.label + (t.has_variable ? ' (fill-in)' : ' (fixed)') + (t.trigger_key === 'homework' ? ' · 📚 Auto: Homework' : '') + '</button>' +
         '<button class="action-btn" style="padding:8px 10px;flex:none;" onclick="deleteWhatsappTemplate(\'' + t.id + '\')" title="Delete">🗑</button>' +
       '</div>'
     ).join('');
@@ -5301,13 +5337,15 @@ async function addWhatsappTemplate() {
   const template_name = document.getElementById('wa-tpl-name')?.value?.trim();
   const language_code = document.getElementById('wa-tpl-lang')?.value?.trim() || 'en';
   const has_variable = document.getElementById('wa-tpl-hasvar')?.checked || false;
+  const trigger_key = document.getElementById('wa-tpl-trigger')?.value || null;
   if (!label || !template_name) { showToast('Label and template name required ❌'); return; }
   try {
-    await api('/api/admin/whatsapp-templates', { method: 'POST', body: JSON.stringify({ label, template_name, language_code, has_variable }) });
+    await api('/api/admin/whatsapp-templates', { method: 'POST', body: JSON.stringify({ label, template_name, language_code, has_variable, trigger_key }) });
     showToast('✅ Template registered!');
     document.getElementById('wa-tpl-label').value = '';
     document.getElementById('wa-tpl-name').value = '';
     document.getElementById('wa-tpl-hasvar').checked = false;
+    document.getElementById('wa-tpl-trigger').value = '';
     showAddTemplateForm(false);
     loadWhatsappTemplates();
   } catch(e) { showToast('Failed to register template ❌'); }
@@ -6360,12 +6398,14 @@ Q: The sky is blue | A: True | B: False | ANS: A</pre>
       <button class="modal-close" onclick="cbt.closeModal('modal-cbt-links')">✕</button>
     </div>
     <div class="modal-body">
-      <p style="margin-bottom:12px;color:var(--muted);font-size:14px">Session links generated for each student. Share or send via WhatsApp.</p>
+      <p style="margin-bottom:4px;color:var(--muted);font-size:14px">Each student logs in on any school computer at <strong id="cbt-join-url"></strong> with their name + PIN below.</p>
+      <p style="margin-bottom:12px;color:var(--muted);font-size:13px">Print these as login slips, or read them out before the exam starts.</p>
       <div id="links-list" style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="cbt.closeModal('modal-cbt-links')">Close</button>
-      <button class="btn btn-primary" onclick="cbt.notifyAll()">📲 Send All via WhatsApp</button>
+      <button class="btn btn-outline" onclick="cbt.printSlips()">🖨 Print Login Slips</button>
+      <button class="btn btn-primary" onclick="cbt.notifyAll()">📲 Notify Parents (FYI)</button>
     </div>
   </div>
 </div>
@@ -6679,12 +6719,12 @@ const cbt = (() => {
   // ── PUBLISH ────────────────────────────────────────────────────
   async function publish(id) {
     const a = assessments.find(x => x.id === id);
-    if (!confirm(`Publish "${a?.title}"? This will generate session links for all students in ${a?.class_name}.`)) return;
+    if (!confirm(`Publish "${a?.title}"? This will generate exam PINs for all students in ${a?.class_name}.`)) return;
     try {
       const data = await api('POST', `/api/admin/cbt/assessments/${id}/publish`);
       publishedLinks = data.sessions;
       currentAssessmentId = id;
-      renderLinks(data.sessions);
+      renderLinks(data.sessions, data.join_url);
       openModal('modal-cbt-links');
       await loadList();
     } catch (e) { alert(e.message); }
@@ -6692,22 +6732,42 @@ const cbt = (() => {
 
   let currentAssessmentId = null;
 
-  function renderLinks(sessions) {
+  function renderLinks(sessions, joinUrl) {
     const baseUrl = window.location.origin;
+    document.getElementById('cbt-join-url').textContent = joinUrl || (baseUrl + '/cbt/join');
     document.getElementById('links-list').innerHTML = sessions.map(s => `
       <div class="link-card">
         <div>
           <div class="link-name">${esc(s.student_name)}</div>
-          <div class="link-url">${baseUrl}/cbt/${s.token}</div>
+          <div class="link-url">PIN: <strong style="letter-spacing:2px">${esc(s.pin)}</strong></div>
         </div>
-        <button class="btn btn-outline btn-sm link-copy" onclick="copyLink('${baseUrl}/cbt/${s.token}', this)">Copy</button>
+        <button class="btn btn-outline btn-sm link-copy" onclick="copyLink('${esc(s.pin)}', this)">Copy PIN</button>
       </div>
     `).join('');
   }
 
+  function printSlips() {
+    if (!publishedLinks || !publishedLinks.length) return;
+    const baseUrl = window.location.origin;
+    const joinUrl = baseUrl + '/cbt/join';
+    const slipsHtml = publishedLinks.map(s => `
+      <div style="border:1.5px dashed #999;border-radius:8px;padding:14px;margin-bottom:10px;page-break-inside:avoid;font-family:'DM Sans',sans-serif;">
+        <div style="font-size:11px;color:#667781;text-transform:uppercase;letter-spacing:.5px;">Exam Login</div>
+        <div style="font-size:16px;font-weight:700;margin:4px 0;">${esc(s.student_name)}</div>
+        <div style="font-size:14px;">PIN: <strong style="letter-spacing:2px">${esc(s.pin)}</strong></div>
+        <div style="font-size:11px;color:#667781;margin-top:6px;">Go to: ${joinUrl}</div>
+      </div>
+    `).join('');
+    const w = window.open('', '_blank');
+    w.document.write(`<!DOCTYPE html><html><head><title>Exam Login Slips</title>
+      <style>body{padding:20px;} @media print{body{padding:0;}}</style></head>
+      <body>${slipsHtml}<script>window.onload=()=>window.print()<\/script></body></html>`);
+    w.document.close();
+  }
+
   async function notifyAll() {
     if (!currentAssessmentId) return;
-    if (!confirm('Send WhatsApp links to all parents in this class?')) return;
+    if (!confirm('Send a WhatsApp FYI to all parents in this class? (No exam access link is included — this is announcement only.)')) return;
     try {
       const data = await api('POST', `/api/admin/cbt/assessments/${currentAssessmentId}/notify`);
       alert(`✅ Sent to ${data.sent} of ${data.total} parents.`);
@@ -6717,7 +6777,7 @@ const cbt = (() => {
 
   async function notifyAssessment(id) {
     currentAssessmentId = id;
-    if (!confirm('Send WhatsApp links to all parents in this class?')) return;
+    if (!confirm('Send a WhatsApp FYI to all parents in this class? (No exam access link is included — this is announcement only.)')) return;
     try {
       const data = await api('POST', `/api/admin/cbt/assessments/${id}/notify`);
       alert(`✅ Sent to ${data.sent} of ${data.total} parents.`);
@@ -7049,7 +7109,7 @@ const cbt = (() => {
         <div class="table-wrap">
           <table class="cbt-table">
             <thead><tr>
-              <th>#</th><th>Student</th><th>Score</th><th>%</th><th>Grade</th><th>Time Taken</th><th>Status</th>
+              <th>#</th><th>Student</th><th>Score</th><th>%</th><th>Grade</th><th>Time Taken</th><th>Status</th><th></th>
             </tr></thead>
             <tbody>
               ${results.map((r, i) => `
@@ -7064,6 +7124,7 @@ const cbt = (() => {
                     <span class="dot dot-${r.status === 'in_progress' ? 'progress' : r.status}"></span>
                     ${r.status === 'submitted' ? 'Submitted' : r.status === 'in_progress' ? 'In progress' : 'Not started'}
                   </td>
+                  <td>${r.status === 'submitted' ? `<button class="btn btn-outline btn-sm" onclick="cbt.sendScript('${r.student_id}','${esc(r.student_name)}')">📄 Send Script</button>` : ''}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -7072,6 +7133,14 @@ const cbt = (() => {
     } catch (e) {
       document.getElementById('cbt-results-table').innerHTML = `<p style="color:red;padding:16px">${e.message}</p>`;
     }
+  }
+
+  async function sendScript(studentId, studentName) {
+    if (!confirm(`Send ${studentName}'s result + marked script to their parent via WhatsApp?`)) return;
+    try {
+      await api('POST', `/api/admin/cbt/assessments/${current.id}/students/${studentId}/send-script`);
+      alert('✅ Sent to parent.');
+    } catch (e) { alert(e.message); }
   }
 
   async function releaseResults() {
@@ -7131,11 +7200,11 @@ const cbt = (() => {
   return {
     init, loadList,
     openCreateModal, editAssessment, saveAssessment, deleteAssessment,
-    publish, notifyAll, notifyAssessment,
+    publish, notifyAll, notifyAssessment, printSlips,
     openDetail, backToList, switchTab, changeStatus,
     openAddQuestion, openEditQuestion, onQuestionTypeChange, addOption, saveQuestion, deleteQuestion,
     openBulkImport, submitBulkImport,
-    loadMonitor, loadResults, releaseResults, exportCSV,
+    loadMonitor, loadResults, releaseResults, exportCSV, sendScript,
     openModal, closeModal
   };
 })();
