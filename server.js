@@ -1098,12 +1098,26 @@ function demoReply(text, system = '') {
 async function buildStudentContext(school, student, fromNumber) {
   // Each query is wrapped individually so a missing table/column never crashes the whole context
   const safe = async (fn) => { try { return await fn(); } catch(e) { console.warn('[buildStudentContext]', e.message); return { rows: [] }; } };
-  const [attendance, scores, fees, homeworks, events, notes, sickbay, history] = await Promise.all([
+  const [attendance, scores, fees, homeworks, events, alerts, notes, sickbay, history] = await Promise.all([
     safe(() => q('SELECT date,status FROM attendance WHERE school_id=$1 AND student_id=$2 ORDER BY date DESC LIMIT 10', [school.id, student.id])),
     safe(() => q('SELECT subject,score,term FROM scores WHERE school_id=$1 AND student_id=$2 ORDER BY uploaded_at DESC LIMIT 10', [school.id, student.id])),
     safe(() => q('SELECT term,amount_due,amount_paid,status FROM fees WHERE school_id=$1 AND student_id=$2 LIMIT 5', [school.id, student.id])),
     safe(() => q('SELECT subject,description,due_date FROM homeworks WHERE school_id=$1 AND class_name=$2 ORDER BY created_at DESC LIMIT 5', [school.id, student.class_name])),
-    safe(() => q('SELECT title,event_date FROM school_events WHERE school_id=$1 ORDER BY event_date ASC LIMIT 5', [school.id])),
+    // NOTE: school_events has two historical column sets — title/event_date (old,
+    // written only by the onboarding bulk-import) and name/date (current, written by
+    // the admin Events UI). COALESCE both so events from either path reach the AI, and
+    // filter to future dates only — otherwise an ASC sort with no date floor mostly
+    // surfaces stale past events once a school has entered a full term's calendar.
+    // Emergency-type entries are pulled separately below so they never get crowded
+    // out of the top 20 by routine calendar items.
+    safe(() => q(`SELECT COALESCE(title,name) AS title, COALESCE(event_date,date) AS event_date, type, description
+                  FROM school_events
+                  WHERE school_id=$1 AND COALESCE(type,'social') != 'emergency' AND COALESCE(event_date,date) >= current_date
+                  ORDER BY COALESCE(event_date,date) ASC LIMIT 20`, [school.id])),
+    safe(() => q(`SELECT COALESCE(title,name) AS title, COALESCE(event_date,date) AS event_date, description
+                  FROM school_events
+                  WHERE school_id=$1 AND type='emergency' AND COALESCE(event_date,date) >= current_date - interval '1 day'
+                  ORDER BY COALESCE(event_date,date) ASC LIMIT 10`, [school.id])),
     safe(() => q('SELECT note,created_at FROM behaviour_notes WHERE school_id=$1 AND student_id=$2 ORDER BY created_at DESC LIMIT 5', [school.id, student.id])),
     safe(() => q('SELECT reason,action_taken,visited_at FROM sickbay_log WHERE school_id=$1 AND student_id=$2 ORDER BY visited_at DESC LIMIT 5', [school.id, student.id])),
     // Pull last 6 messages (3 exchanges) to give AI conversation memory
@@ -1111,7 +1125,7 @@ async function buildStudentContext(school, student, fromNumber) {
       ? safe(() => q('SELECT user_message,assistant_reply FROM messages WHERE school_id=$1 AND from_number=$2 ORDER BY created_at DESC LIMIT 6', [school.id, fromNumber]))
       : Promise.resolve({ rows: [] })
   ]);
-  return { school, student, attendance: attendance.rows, scores: scores.rows, fees: fees.rows, homeworks: homeworks.rows, events: events.rows, notes: notes.rows, sickbay: sickbay.rows, history: history.rows.reverse() };
+  return { school, student, attendance: attendance.rows, scores: scores.rows, fees: fees.rows, homeworks: homeworks.rows, events: events.rows, alerts: alerts.rows, notes: notes.rows, sickbay: sickbay.rows, history: history.rows.reverse() };
 }
 
 function parentPrompt(ctx, first) {
@@ -1156,8 +1170,15 @@ function parentPrompt(ctx, first) {
 
   // Upcoming events
   const eventSummary = ctx.events.length
-    ? ctx.events.map(e => `${e.title} on ${e.event_date}`).join(', ')
+    ? ctx.events.map(e => `${e.title} on ${e.event_date}${e.description ? ' (' + e.description + ')' : ''}`).join(', ')
     : 'No upcoming events';
+
+  // Active alerts / emergencies (school closures, disruptions) — kept separate from
+  // routine calendar events so they can't be crowded out and so the AI treats them
+  // as urgent, proactively-mentionable info rather than background context
+  const alertSummary = (ctx.alerts && ctx.alerts.length)
+    ? ctx.alerts.map(a => `${a.title} on ${a.event_date}${a.description ? ' — ' + a.description : ''}`).join('; ')
+    : '';
 
   // Sickbay
   const sickbaySummary = ctx.sickbay.length
@@ -1183,7 +1204,7 @@ function parentPrompt(ctx, first) {
     : '';
 
   return `You are a warm, caring school assistant for ${school.name}${school.city ? ', ' + school.city : ''}, powered by EduPing.
-
+${alertSummary ? `\n⚠️ ACTIVE SCHOOL ALERT — this is current, urgent information (closures, disruptions, emergencies). Bring it up proactively near the start of the conversation even if the parent hasn't asked, unless you already mentioned it earlier in this chat: ${alertSummary}\n` : ''}
 Your personality:
 - You speak like a trusted, knowledgeable school staff member who genuinely knows this child — not a bot reading from a database
 - You are warm, conversational and Nigerian-friendly in tone — the way a caring class teacher would speak to a parent on WhatsApp
@@ -1208,6 +1229,7 @@ Upcoming school events: ${eventSummary}.
 Current term: ${school.current_term || 'not specified'}.${siblingNote}
 
 Conversation rules:
+- If there is an active school alert above, treat it as important, time-sensitive information a parent would want to know — don't bury it
 - This is a WhatsApp conversation — keep it flowing and human
 - If a parent asks how to pay fees, give them the exact payment details listed above (Paystack link and/or bank account) — never be vague about payment
 - If a parent asks a follow-up question, answer it directly without repeating information already given
@@ -3602,6 +3624,28 @@ app.post('/api/admin/events', requireSchool, async (req, res) => {
       [req.school.id, name, date, time||null, type||'social', description||null, notify_parents||false]
     );
     json(res, r.rows[0]);
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// Bulk-add a term calendar in one call — e.g. parsed from a pasted list or CSV on
+// the frontend — instead of submitting the single-event form N times. Invalid rows
+// (missing name/date, unparseable date) are skipped rather than failing the batch.
+app.post('/api/admin/events/bulk', requireSchool, async (req, res) => {
+  try {
+    const { events } = req.body;
+    if (!Array.isArray(events) || !events.length) return bad(res, 'events array required');
+    let inserted = 0, skipped = 0;
+    for (const ev of events) {
+      const name = String(ev.name || ev.title || '').trim();
+      const date = ev.date || ev.event_date;
+      if (!name || !date || isNaN(new Date(date).getTime())) { skipped++; continue; }
+      await q(
+        `INSERT INTO school_events (school_id,name,date,time,type,description,notify_parents) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [req.school.id, name, date, ev.time || null, ev.type || 'academic', ev.description || null, !!ev.notify_parents]
+      );
+      inserted++;
+    }
+    json(res, { ok: true, inserted, skipped });
   } catch(err) { bad(res, err.message, 500); }
 });
 
