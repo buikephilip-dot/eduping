@@ -1451,6 +1451,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
                     <option value="sports">⚽ Sports</option>
                     <option value="exam">📝 Exam</option>
                     <option value="holiday">🏖 Holiday</option>
+                    <option value="emergency">⚠️ Emergency / Alert</option>
                   </select>
                 </div>
                 <div class="form-group"><label class="form-label">Description</label><textarea class="form-textarea" id="evt-desc" placeholder="What's happening?" style="height:70px;"></textarea></div>
@@ -1459,6 +1460,27 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
                   <label for="evt-notify" style="font-size:13px;">Notify all parents via WhatsApp when event starts</label>
                 </div>
                 <button class="broadcast-btn" onclick="addEvent()">📅 Save Event</button>
+              </div>
+            </div>
+
+            <!-- Bulk term calendar import -->
+            <div class="dash-card" style="flex:1;">
+              <div class="dash-card-header"><div class="dash-card-title">📆 Bulk Import Term Calendar</div></div>
+              <div class="dash-card-body" style="padding:16px 18px;">
+                <div style="font-size:12.5px;color:var(--text-secondary,#666);margin-bottom:8px;">
+                  One event per line: <code>Name | YYYY-MM-DD | type | description</code><br>
+                  Type and description are optional. Type must be one of: social, academic, sports, exam, holiday, emergency (defaults to academic).
+                </div>
+                <textarea class="form-textarea" id="evt-bulk-text" placeholder="Resumption | 2026-09-14 | academic | First day of term
+Independence Day Holiday | 2026-10-01 | holiday | No school — public holiday
+Mid-Term Break | 2026-10-27 | holiday | Break resumes 2026-11-03
+First Term Exams | 2026-12-01 | exam | End of term examinations begin" style="height:140px;font-family:monospace;font-size:12.5px;"></textarea>
+                <div style="display:flex;align-items:center;gap:8px;margin:10px 0 14px;">
+                  <input type="checkbox" id="evt-bulk-notify">
+                  <label for="evt-bulk-notify" style="font-size:13px;">Notify parents when each of these events starts</label>
+                </div>
+                <button class="broadcast-btn" onclick="bulkImportEvents()">📥 Import Calendar</button>
+                <div id="evt-bulk-result" style="font-size:12.5px;margin-top:10px;"></div>
               </div>
             </div>
 
@@ -4432,8 +4454,8 @@ async function loadDashboard() {
 // ── EVENTS HUB ────────────────────────────────────────────
 let allEvents = [];
 let allGalleries = [];
-const eventTypeColors = { academic:'#e53935', social:'#1a7a4a', sports:'#f59e0b', holiday:'#3b82f6', exam:'#7c3aed' };
-const eventTypeEmoji = { academic:'📚', social:'🎉', sports:'⚽', holiday:'🏖', exam:'📝' };
+const eventTypeColors = { academic:'#e53935', social:'#1a7a4a', sports:'#f59e0b', holiday:'#3b82f6', exam:'#7c3aed', emergency:'#dc2626' };
+const eventTypeEmoji = { academic:'📚', social:'🎉', sports:'⚽', holiday:'🏖', exam:'📝', emergency:'⚠️' };
 
 async function loadEvents() {
   // Check if events are enabled for this school
@@ -4565,6 +4587,41 @@ async function addEvent() {
       if (badge && rows.length > 0) { badge.textContent = rows.length; badge.style.display = 'inline'; }
     }).catch(() => {});
   } catch(e) { showToast('Failed to save event ❌'); }
+}
+
+async function bulkImportEvents() {
+  const raw = document.getElementById('evt-bulk-text').value.trim();
+  const notify_parents = document.getElementById('evt-bulk-notify').checked;
+  const resultEl = document.getElementById('evt-bulk-result');
+  if (!raw) { showToast('Paste at least one event line first ❌'); return; }
+  const validTypes = ['social','academic','sports','exam','holiday','emergency'];
+  const events = [];
+  const lineErrors = [];
+  raw.split('\n').map(l => l.trim()).filter(Boolean).forEach((line, i) => {
+    const parts = line.split('|').map(p => p.trim());
+    const [name, date, typeRaw, description] = parts;
+    if (!name || !date) { lineErrors.push(`Line ${i + 1}: missing name or date`); return; }
+    if (isNaN(new Date(date).getTime())) { lineErrors.push(`Line ${i + 1}: unrecognised date "${date}"`); return; }
+    const type = validTypes.includes((typeRaw || '').toLowerCase()) ? typeRaw.toLowerCase() : 'academic';
+    events.push({ name, date, type, description: description || '', notify_parents });
+  });
+  if (!events.length) {
+    resultEl.innerHTML = `<span style="color:#dc2626;">Nothing valid to import.<br>${lineErrors.join('<br>')}</span>`;
+    return;
+  }
+  try {
+    const res = await api('/api/admin/events/bulk', { method: 'POST', body: JSON.stringify({ events }) });
+    const insertedCount = typeof res.inserted === 'number' ? res.inserted : events.length;
+    resultEl.innerHTML = `<span style="color:#1a7a4a;">✅ Imported ${insertedCount} event${insertedCount === 1 ? '' : 's'}${res.skipped ? `, skipped ${res.skipped}` : ''}.</span>` +
+      (lineErrors.length ? `<br><span style="color:#dc2626;">${lineErrors.join('<br>')}</span>` : '');
+    showToast(`✅ ${insertedCount} event${insertedCount === 1 ? '' : 's'} imported!`);
+    document.getElementById('evt-bulk-text').value = '';
+    loadEvents();
+    loadUpcomingEventsWidget();
+  } catch(e) {
+    resultEl.innerHTML = `<span style="color:#dc2626;">Import failed: ${e.message || 'unknown error'}</span>`;
+    showToast('Bulk import failed ❌');
+  }
 }
 
 async function deleteEvent(id) {
