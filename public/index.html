@@ -1055,8 +1055,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
               <div id="whatsapp-templates-add-form" style="display:none;flex-direction:column;gap:8px;margin-bottom:12px;padding:10px;background:var(--bg-alt,#f7f7f7);border-radius:8px;">
                 <input class="form-input" id="wa-tpl-label" placeholder="Label (e.g. Welcome Back)">
                 <input class="form-input" id="wa-tpl-name" placeholder="Exact template name in Meta (e.g. welcome_back)">
-                <input class="form-input" id="wa-tpl-lang" placeholder="Language code (e.g. en)" value="en">
-                <label style="font-size:12px;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="wa-tpl-hasvar"> This template has a {{1}} variable I can fill in</label>
+                <input class="form-input" id="wa-tpl-lang" placeholder="Language code (e.g. en_US)" value="en_US">
+                <input class="form-input" id="wa-tpl-varlabels" placeholder="Variables in order, comma-separated (e.g. Start date, End date, Resumption date) — leave blank if none">
+                <div style="font-size:11px;color:var(--text-muted);">Match the order of {{1}}, {{2}}, {{3}}... in your approved template body exactly.</div>
                 <select class="form-input" id="wa-tpl-trigger">
                   <option value="">Manual use only (send it myself from Broadcast)</option>
                   <option value="homework">Auto-use for Homework Alerts (when outside 24h window)</option>
@@ -5446,12 +5447,14 @@ async function loadWhatsappTemplates() {
       listEl.innerHTML = '<div style="padding:10px;text-align:center;color:var(--text-muted);font-size:13px;">No templates registered yet</div>';
       return;
     }
-    listEl.innerHTML = templates.map(t =>
-      '<div style="display:flex;gap:6px;align-items:center;">' +
-        '<button class="qr-btn" style="flex:1;text-align:left;border-radius:8px;padding:10px 14px;" onclick="sendWhatsappTemplate(\'' + t.id + '\',' + (t.has_variable ? 'true' : 'false') + ')">✅ ' + t.label + (t.has_variable ? ' (fill-in)' : ' (fixed)') + (t.trigger_key === 'homework' ? ' · 📚 Auto: Homework' : '') + '</button>' +
+    window._waTemplates = templates; // stash full objects (with variable_labels) for the send flow
+    listEl.innerHTML = templates.map(t => {
+      const varCount = (t.variable_labels || []).length;
+      return '<div style="display:flex;gap:6px;align-items:center;">' +
+        '<button class="qr-btn" style="flex:1;text-align:left;border-radius:8px;padding:10px 14px;" onclick="sendWhatsappTemplate(\'' + t.id + '\')">✅ ' + t.label + (varCount ? ' (' + varCount + ' field' + (varCount>1?'s':'') + ')' : ' (fixed text)') + (t.trigger_key === 'homework' ? ' · 📚 Auto: Homework' : '') + '</button>' +
         '<button class="action-btn" style="padding:8px 10px;flex:none;" onclick="deleteWhatsappTemplate(\'' + t.id + '\')" title="Delete">🗑</button>' +
-      '</div>'
-    ).join('');
+      '</div>';
+    }).join('');
   } catch(e) {
     listEl.innerHTML = '<div style="padding:10px;text-align:center;color:var(--text-muted);font-size:13px;">Couldn\'t load templates</div>';
   }
@@ -5465,16 +5468,17 @@ function showAddTemplateForm(show) {
 async function addWhatsappTemplate() {
   const label = document.getElementById('wa-tpl-label')?.value?.trim();
   const template_name = document.getElementById('wa-tpl-name')?.value?.trim();
-  const language_code = document.getElementById('wa-tpl-lang')?.value?.trim() || 'en';
-  const has_variable = document.getElementById('wa-tpl-hasvar')?.checked || false;
+  const language_code = document.getElementById('wa-tpl-lang')?.value?.trim() || 'en_US';
+  const varLabelsRaw = document.getElementById('wa-tpl-varlabels')?.value?.trim() || '';
+  const variable_labels = varLabelsRaw ? varLabelsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
   const trigger_key = document.getElementById('wa-tpl-trigger')?.value || null;
   if (!label || !template_name) { showToast('Label and template name required ❌'); return; }
   try {
-    await api('/api/admin/whatsapp-templates', { method: 'POST', body: JSON.stringify({ label, template_name, language_code, has_variable, trigger_key }) });
+    await api('/api/admin/whatsapp-templates', { method: 'POST', body: JSON.stringify({ label, template_name, language_code, variable_labels, trigger_key }) });
     showToast('✅ Template registered!');
     document.getElementById('wa-tpl-label').value = '';
     document.getElementById('wa-tpl-name').value = '';
-    document.getElementById('wa-tpl-hasvar').checked = false;
+    document.getElementById('wa-tpl-varlabels').value = '';
     document.getElementById('wa-tpl-trigger').value = '';
     showAddTemplateForm(false);
     loadWhatsappTemplates();
@@ -5491,16 +5495,28 @@ async function deleteWhatsappTemplate(id) {
 
 // Sends the given approved template right now to the currently selected
 // audience (Send To dropdown), bypassing the 24h free-text window entirely.
-async function sendWhatsappTemplate(templateId, hasVariable) {
+// Prompts once per variable, in order, so multi-variable templates (dates,
+// term names, etc.) are filled in correctly rather than squeezed into one box.
+async function sendWhatsappTemplate(templateId) {
   const target = document.getElementById('broadcast-target')?.value;
   const cls = document.getElementById('broadcast-class')?.value;
-  let message = document.getElementById('broadcast-msg')?.value?.trim();
-  if (hasVariable && !message) { showToast('Type the text to fill the template\'s variable first ❌'); return; }
-  if (!confirm('Send this approved template to the selected audience (' + target + ')?')) return;
+  const template = (window._waTemplates || []).find(t => t.id === templateId);
+  if (!template) { showToast('Template not found — refresh and try again ❌'); return; }
+
+  const varLabels = template.variable_labels || [];
+  const variables = [];
+  for (const label of varLabels) {
+    const val = prompt('Fill in "' + label + '" for "' + template.label + '":');
+    if (val === null) { showToast('Cancelled'); return; } // user backed out
+    variables.push(val.trim());
+  }
+
+  if (!confirm('Send "' + template.label + '" to the selected audience (' + target + ')?' + (variables.length ? '\n\n' + varLabels.map((l,i) => l + ': ' + variables[i]).join('\n') : ''))) return;
+
   const sending = document.getElementById('broadcast-sending');
   if (sending) sending.style.display = 'block';
   try {
-    const body = { template_id: templateId, target, class_name: cls || undefined, message: hasVariable ? message : undefined };
+    const body = { template_id: templateId, target, class_name: cls || undefined, variables };
     const res = await api('/api/admin/broadcast', { method: 'POST', body: JSON.stringify(body) });
     showToast('✅ Template sent to ' + (res.sent||0) + '/' + (res.total||0) + (res.failed ? ' — ' + res.failed + ' failed' : ''));
   } catch(e) { showToast('Failed to send template ❌'); }
