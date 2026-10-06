@@ -4305,7 +4305,7 @@ async function sendDirectMessage() {
 function printReportCard() {
   const data = _currentProfileData;
   if (!data) { showToast('Open a student profile first ❌'); return; }
-  const s = data;
+  const s = data.student;
   const fee = data.fees?.[0];
   const subjects = {};
   (data.scores||[]).forEach(sc => {
@@ -4368,7 +4368,7 @@ async function openProfile(studentId) {
   try {
     const data = await api('/api/admin/students/' + studentId + '/profile');
     _currentProfileData = data;
-    const s = data;
+    const s = data.student;
     _currentProfilePhone = s.parent_phone || '';
     document.getElementById('profile-name').textContent = s.name;
     document.getElementById('profile-class').textContent = (s.class_name||'') + ' — ' + (s.parent_name||'');
