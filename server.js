@@ -399,6 +399,11 @@ async function migrate() {
       title TEXT NOT NULL, message TEXT NOT NULL, audience TEXT DEFAULT 'all_admins',
       is_active BOOLEAN DEFAULT true, expires_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT now()
     );
+    CREATE TABLE IF NOT EXISTS whatsapp_templates (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+      label TEXT NOT NULL, template_name TEXT NOT NULL, language_code TEXT DEFAULT 'en_US',
+      variable_labels JSONB DEFAULT '[]', trigger_key TEXT, created_at TIMESTAMPTZ DEFAULT now()
+    );
     CREATE TABLE IF NOT EXISTS message_queue_logs (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       school_id UUID REFERENCES schools(id), job_id TEXT, status TEXT, recipient TEXT, error TEXT,
@@ -3820,15 +3825,50 @@ app.patch('/api/admin/staff/:id', requireSchool, async (req, res) => {
   } catch(err) { bad(res, err.message, 500); }
 });
 
+// ── Registered WhatsApp templates (the "Templates" list under Broadcast) ──
+// These just store metadata — label, the EXACT name Meta approved, language, and
+// how many {{n}} variables the body needs. Actually SENDING one happens via
+// /api/admin/broadcast below, which calls Meta's template API, not free text.
+app.get('/api/admin/whatsapp-templates', requireSchool, async (req, res) => {
+  const rows = await q(`SELECT * FROM whatsapp_templates WHERE school_id=$1 ORDER BY created_at DESC`, [req.school.id]);
+  json(res, rows.rows);
+});
+app.post('/api/admin/whatsapp-templates', requireSchool, async (req, res) => {
+  try {
+    const { label, template_name, language_code, has_variable, variable_labels, trigger_key } = req.body;
+    if (!label || !template_name) return bad(res, 'label and template_name required');
+    // Accept either the new variable_labels array, or the older single has_variable
+    // checkbox for backward compatibility with any existing registrations.
+    const varLabels = Array.isArray(variable_labels) ? variable_labels : (has_variable ? ['Value'] : []);
+    const row = await q(
+      `INSERT INTO whatsapp_templates (school_id, label, template_name, language_code, variable_labels, trigger_key) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [req.school.id, label, template_name, language_code || 'en_US', JSON.stringify(varLabels), trigger_key || null]
+    );
+    json(res, row.rows[0]);
+  } catch(err) { bad(res, err.message, 500); }
+});
+app.delete('/api/admin/whatsapp-templates/:id', requireSchool, async (req, res) => {
+  await q(`DELETE FROM whatsapp_templates WHERE id=$1 AND school_id=$2`, [req.params.id, req.school.id]);
+  json(res, { ok: true });
+});
+
 app.post('/api/admin/broadcast', requireSchool, async (req, res) => {
   try {
-    const { message, target, class_name } = req.body;
-    if (!message) return bad(res, 'message required');
+    const { message, target, class_name, template_id, variables } = req.body;
     const school = req.school;
     const from = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
-    if (!from) return bad(res, 'Twilio not configured');
-    let phones = [];
+    if (!from) return bad(res, 'WhatsApp number not configured');
 
+    let template = null;
+    if (template_id) {
+      const tRes = await q(`SELECT * FROM whatsapp_templates WHERE id=$1 AND school_id=$2`, [template_id, school.id]);
+      if (!tRes.rowCount) return bad(res, 'Template not found — it may have been deleted');
+      template = tRes.rows[0];
+    } else if (!message) {
+      return bad(res, 'message required');
+    }
+
+    let phones = [];
     if (target === 'all_parents') {
       const rows = await q(`SELECT DISTINCT parent_phone FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL AND parent_phone != ''`, [school.id]);
       phones = rows.rows.map(r => r.parent_phone);
@@ -3846,11 +3886,21 @@ app.post('/api/admin/broadcast', requireSchool, async (req, res) => {
       phones = rows.rows.map(r => r.parent_phone);
     }
 
-    let sent = 0;
+    let sent = 0, failed = 0;
     for (const phone of phones) {
-      try { await twilioSend(phone, from, message); sent++; } catch(e) { console.warn('Broadcast failed to:', phone); }
+      try {
+        if (template) {
+          // Real Meta template send — works for every recipient, in or out of the 24h window.
+          const fallback = `${template.label}${(variables||[]).length ? ': ' + variables.join(' | ') : ''}`;
+          await sendParentTemplate(phone, from, template.template_name, variables || [], fallback);
+        } else {
+          // Free text — only reliable for recipients inside the 24h customer-service window.
+          await twilioSend(phone, from, message);
+        }
+        sent++;
+      } catch(e) { failed++; console.warn('Broadcast failed to:', phone, e.message); }
     }
-    json(res, { ok: true, sent, total: phones.length });
+    json(res, { ok: true, sent, total: phones.length, failed, sent_via_template: template ? sent : 0 });
   } catch(err) { bad(res, err.message, 500); }
 });
 
