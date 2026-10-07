@@ -5544,14 +5544,6 @@ function togglePassword() {
 let resultStudents = [];
 let allPINLogs = [];
 
-function openSubjectModal(studentId, studentName) {
-  // Show a modal to add extra subjects for this student
-  const subjects = ['Further Mathematics','Technical Drawing','Agricultural Science','Home Economics','Civic Education','Christian/Islamic Studies','French','Yoruba','Igbo','Hausa','Music','Fine Art','Physical Education'];
-  const existing = document.querySelectorAll('[id^="res-"][id$="-' + studentId + '"]');
-  const msg = 'Additional subjects for ' + studentName + ':\n\n' + subjects.join('\n') + '\n\nThis feature allows adding extra subjects outside the standard set. Contact support to enable per-school subject configuration.';
-  alert(msg);
-}
-
 async function loadResults() {
   // Load classes
   try {
@@ -5596,13 +5588,49 @@ function updateResultModel() {
   }
 }
 
+let schoolSubjects = null; // cached after first fetch this session; null = not loaded yet
+
+async function loadSchoolSubjects(force) {
+  if (schoolSubjects !== null && !force) return schoolSubjects;
+  try {
+    const res = await api('/api/admin/subjects');
+    schoolSubjects = res.subjects || [];
+  } catch(e) { schoolSubjects = []; }
+  return schoolSubjects;
+}
+
+// Lets the admin set/edit the school's subject list once, used everywhere results
+// are entered (this table, the CSV template, the CSV import). Simple comma-separated
+// prompt, consistent with the editing pattern used elsewhere in this dashboard.
+async function manageSubjects() {
+  const current = (await loadSchoolSubjects()).join(', ');
+  const val = prompt('Enter your school\'s subjects, comma-separated:\n(This list is used for result entry across every class.)', current);
+  if (val === null) return;
+  const subjects = val.split(',').map(s => s.trim()).filter(Boolean);
+  if (!subjects.length) { showToast('Enter at least one subject ❌'); return; }
+  try {
+    await api('/api/admin/subjects', { method: 'PUT', body: JSON.stringify({ subjects }) });
+    schoolSubjects = subjects;
+    showToast('✅ Subjects updated!');
+    loadResultStudents();
+  } catch(e) { showToast('Failed to update subjects ❌'); }
+}
+
+function subjectInputId(subject, studentId) {
+  // Sanitize so the subject name is safe to use inside an element id.
+  return 'res-subj-' + subject.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '-' + studentId;
+}
+
 async function loadResultStudents() {
   const cls = document.getElementById('res-class-select')?.value;
   const el = document.getElementById('res-student-table');
   if (!cls || !el) return;
   el.innerHTML = '<div class="loading" style="padding:20px;">Loading students...</div>';
   try {
-    const students = await api('/api/admin/students/list?class_name=' + encodeURIComponent(cls));
+    const [students] = await Promise.all([
+      api('/api/admin/students/list?class_name=' + encodeURIComponent(cls)),
+      loadSchoolSubjects()
+    ]);
     resultStudents = students;
     renderResultTable(students);
   } catch(e) { el.innerHTML = '<div style="padding:20px;color:var(--danger);">Error loading students</div>'; }
@@ -5610,19 +5638,27 @@ async function loadResultStudents() {
 
 function renderResultTable(students) {
   const el = document.getElementById('res-student-table');
+  if (!schoolSubjects || !schoolSubjects.length) {
+    el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-muted);">' +
+      'No subjects configured for this school yet.<br><br>' +
+      '<button class="action-btn" onclick="manageSubjects()">➕ Add your subjects</button>' +
+      '</div>';
+    return;
+  }
   if (!students.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">No students in this class</div>'; return; }
-  el.innerHTML = '<table class="data-table"><thead><tr>' +
-    '<th>Student</th><th>Maths</th><th>English</th><th>Science</th><th>Other Subjects</th><th>Position</th><th>Remarks</th><th>Fee Status</th><th>Result Status</th>' +
+  el.innerHTML = '<div style="margin-bottom:10px;"><button class="action-btn" onclick="manageSubjects()">✏ Edit Subjects (' + schoolSubjects.length + ')</button></div>' +
+    '<table class="data-table"><thead><tr>' +
+    '<th>Student</th>' + schoolSubjects.map(subj => '<th>' + subj + '</th>').join('') + '<th>Position</th><th>Remarks</th><th>Fee Status</th><th>Result Status</th>' +
     '</tr></thead><tbody>' +
     students.map(s => {
       const feeOk = s.fee_status === 'paid';
       const feePill = feeOk ? 'pill-green' : 'pill-red';
+      const subjectCells = schoolSubjects.map(subj =>
+        '<td><input type="number" min="0" max="100" class="form-input" style="width:60px;padding:4px 6px;font-size:12px;" id="' + subjectInputId(subj, s.id) + '" placeholder="—"></td>'
+      ).join('');
       return '<tr id="res-row-' + s.id + '">' +
         '<td><strong>' + s.name + '</strong></td>' +
-        '<td><input type="number" min="0" max="100" class="form-input" style="width:60px;padding:4px 6px;font-size:12px;" id="res-maths-' + s.id + '" placeholder="—"></td>' +
-        '<td><input type="number" min="0" max="100" class="form-input" style="width:60px;padding:4px 6px;font-size:12px;" id="res-english-' + s.id + '" placeholder="—"></td>' +
-        '<td><input type="number" min="0" max="100" class="form-input" style="width:60px;padding:4px 6px;font-size:12px;" id="res-science-' + s.id + '" placeholder="—"></td>' +
-        '<td><button class="action-btn" style="font-size:11px;" onclick="openSubjectModal(\'' + s.id + '\',\'' + s.name.replace(/'/g,'') + '\')">+ More subjects</button></td>' +
+        subjectCells +
         '<td><input type="number" min="1" class="form-input" style="width:50px;padding:4px 6px;font-size:12px;" id="res-position-' + s.id + '" placeholder="—"></td>' +
         '<td><input type="text" class="form-input" style="width:120px;padding:4px 6px;font-size:12px;" id="res-remark-' + s.id + '" placeholder="Good effort"></td>' +
         '<td><span class="pill ' + feePill + '">' + (s.fee_status||'unpaid') + '</span></td>' +
@@ -5639,21 +5675,24 @@ function renderResultTable(students) {
 async function saveClassResults() {
   const cls = document.getElementById('res-class-select')?.value;
   if (!cls) { showToast('Select a class first'); return; }
+  if (!schoolSubjects || !schoolSubjects.length) { showToast('Add your subjects first ❌'); return; }
   let saved = 0;
   for (const s of resultStudents) {
-    const maths = document.getElementById('res-maths-' + s.id)?.value;
-    const english = document.getElementById('res-english-' + s.id)?.value;
-    const science = document.getElementById('res-science-' + s.id)?.value;
+    const subjects = {};
+    schoolSubjects.forEach(subj => {
+      const val = document.getElementById(subjectInputId(subj, s.id))?.value;
+      if (val !== '' && val !== undefined) subjects[subj] = val;
+    });
     const position = document.getElementById('res-position-' + s.id)?.value;
     const remark = document.getElementById('res-remark-' + s.id)?.value;
-    if (!maths && !english && !science) continue;
+    if (!Object.keys(subjects).length) continue;
     try {
       await api('/api/admin/results', {
         method: 'POST',
         body: JSON.stringify({
           student_id: s.id, class_name: cls,
           term: document.getElementById('res-term')?.value || 'Current Term',
-          subjects: { Mathematics: maths, English: english, Science: science },
+          subjects,
           position, remark
         })
       });
@@ -5755,12 +5794,31 @@ function exportPINLog() {
   downloadCSV(csv, 'result_pins.csv');
 }
 
-function downloadResultTemplate() {
-  const csv = 'Student Name,Student ID,Mathematics,English Language,Basic Science,Social Studies,Agricultural Science,Position,Class Teacher Remark\nAmara Okafor,,,87,79,91,75,82,2,Excellent performance this term\n';
+// Headers use "Subject: Component" — e.g. "Mathematics: 1st CA" — so any school can
+// list exactly the subjects and assessment components they actually use. Everything
+// between "Student ID" and "Position" is read as a subject column; nothing is hardcoded.
+async function downloadResultTemplate() {
+  const subjects = await loadSchoolSubjects();
+  if (!subjects.length) { showToast('Add your subjects first, so the template matches them ❌'); manageSubjects(); return; }
+  const components = ['1st CA', 'Project', 'Mid Term Test', '2nd CA', 'Take Home', 'Exam', 'Class Average', 'Position'];
+  const exampleValues = ['10', '5', '9', '10', '3', '57', '67', '3rd'];
+  const header = ['Student Name', 'Student ID'];
+  const example = ['Amara Okafor', ''];
+  subjects.forEach(subj => {
+    components.forEach((comp, i) => { header.push(subj + ': ' + comp); example.push(exampleValues[i]); });
+  });
+  header.push('Position', 'Class Teacher Remark');
+  example.push('2', 'Excellent performance this term');
+  const csv = header.map(h => `"${h}"`).join(',') + '\n' + example.map(v => `"${v}"`).join(',') + '\n';
   downloadCSV(csv, 'result_upload_template.csv');
-  showToast('📥 Template downloaded!');
+  showToast('📥 Template downloaded with your ' + subjects.length + ' subjects! Remove any component columns you don\'t use.');
 }
 
+// Any column header formatted "Subject: Component" (e.g. "Mathematics: 1st CA") becomes
+// part of that subject's breakdown — no fixed subject list. "Subject: Class Average" and
+// "Subject: Position" are read as that subject's metadata rather than a scored component.
+// A subject's total is summed from its numeric components unless a "Subject: Total"
+// column is given explicitly.
 async function importResultCSV(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -5769,28 +5827,57 @@ async function importResultCSV(event) {
   const term = document.getElementById('res-term')?.value || 'Current Term';
   const text = await file.text();
   const lines = text.trim().split('\n');
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,'').toLowerCase());
-  let saved = 0;
+  const rawHeaders = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
+  const headersLower = rawHeaders.map(h => h.toLowerCase());
+  const METADATA_COLS = ['student name', 'name', 'student', 'student id', 'position', 'class teacher remark', 'remark'];
+
+  let saved = 0, skipped = 0;
   for (const line of lines.slice(1)) {
     if (!line.trim()) continue;
     const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g,''));
     const obj = {};
-    headers.forEach((h, i) => obj[h] = vals[i] || '');
-    const name = obj['student name'] || obj['name'] || obj['student'];
-    if (!name) continue;
+    rawHeaders.forEach((h, i) => obj[h] = vals[i] || '');
+    const objLower = {};
+    headersLower.forEach((h, i) => objLower[h] = vals[i] || '');
+
+    const name = objLower['student name'] || objLower['name'] || objLower['student'];
+    if (!name) { skipped++; continue; }
     const student = resultStudents.find(s => s.name.toLowerCase().includes(name.toLowerCase()));
-    if (!student) continue;
+    if (!student) { skipped++; continue; }
+
+    // Group every "Subject: Component" column by subject, in the order they appear.
     const subjects = {};
-    ['mathematics','english language','basic science','social studies','agricultural science'].forEach(sub => {
-      const key = headers.find(h => h.includes(sub.split(' ')[0]));
-      if (key && obj[key]) subjects[sub.charAt(0).toUpperCase() + sub.slice(1)] = obj[key];
+    rawHeaders.forEach((h, i) => {
+      if (METADATA_COLS.includes(h.toLowerCase())) return;
+      const sepIdx = h.indexOf(':');
+      if (sepIdx === -1) return; // not a recognized "Subject: Component" column — ignore
+      const subject = h.slice(0, sepIdx).trim();
+      const component = h.slice(sepIdx + 1).trim();
+      const value = vals[i];
+      if (!subject || value === '' || value === undefined) return;
+      if (!subjects[subject]) subjects[subject] = { components: [] };
+      const compLower = component.toLowerCase();
+      if (compLower === 'class average') subjects[subject].classAvg = value;
+      else if (compLower === 'position') subjects[subject].position = value;
+      else if (compLower === 'total') subjects[subject].total = Number(value);
+      else if (compLower === 'remark') subjects[subject].remark = value;
+      else subjects[subject].components.push({ label: component, value: isNaN(Number(value)) ? value : Number(value) });
     });
+    // Fill in total from components for any subject that didn't have an explicit "Total" column.
+    Object.values(subjects).forEach(sub => {
+      if (sub.total === undefined) {
+        const nums = sub.components.map(c => Number(c.value)).filter(n => !isNaN(n));
+        sub.total = nums.length ? nums.reduce((a,b)=>a+b,0) : 0;
+      }
+    });
+
+    if (!Object.keys(subjects).length) { skipped++; continue; }
     try {
-      await api('/api/admin/results', { method: 'POST', body: JSON.stringify({ student_id: student.id, class_name: cls, term, subjects, position: obj['position'], remark: obj['class teacher remark'] || obj['remark'] }) });
+      await api('/api/admin/results', { method: 'POST', body: JSON.stringify({ student_id: student.id, class_name: cls, term, subjects, position: objLower['position'], remark: objLower['class teacher remark'] || objLower['remark'] }) });
       saved++;
-    } catch(e) {}
+    } catch(e) { skipped++; }
   }
-  showToast('✅ ' + saved + ' results imported!');
+  showToast('✅ ' + saved + ' results imported!' + (skipped ? ' (' + skipped + ' row' + (skipped!==1?'s':'') + ' skipped — check names match enrolled students)' : ''));
   loadResults();
 }
 
