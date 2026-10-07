@@ -2444,6 +2444,21 @@ app.post('/api/admin/students', requireSchool, async (req, res) => {
   } catch(err) { bad(res, err.message, 500); }
 });
 
+// A school's subject list — used to build the result-entry columns dynamically
+// (replacing the old hardcoded Maths/English/Science) and the CSV template.
+// Stored in schools.config, which already exists as a flexible JSONB column.
+app.get('/api/admin/subjects', requireSchool, async (req, res) => {
+  const config = req.school.config || {};
+  json(res, { subjects: Array.isArray(config.subjects) ? config.subjects : [] });
+});
+app.put('/api/admin/subjects', requireSchool, async (req, res) => {
+  const { subjects } = req.body;
+  if (!Array.isArray(subjects)) return bad(res, 'subjects must be an array');
+  const clean = subjects.map(s => String(s).trim()).filter(Boolean);
+  await q(`UPDATE schools SET config = COALESCE(config, '{}'::jsonb) || jsonb_build_object('subjects', $1::jsonb) WHERE id=$2`, [JSON.stringify(clean), req.school.id]);
+  json(res, { ok: true, subjects: clean });
+});
+
 app.get('/api/admin/students/list', requireSchool, async (req, res) => {
   try {
     const rows = await q(
@@ -2456,7 +2471,7 @@ app.get('/api/admin/students/list', requireSchool, async (req, res) => {
        FROM students s
        LEFT JOIN fees f ON f.student_id = s.id AND f.school_id = s.school_id
        WHERE s.school_id = $1
-       ORDER BY s.class_name, s.name LIMIT 500`,
+       ORDER BY s.class_name, s.name`,
       [req.school.id]
     );
     json(res, rows.rows);
@@ -3497,7 +3512,7 @@ app.get('/api/admin/attendance', requireSchool, async (req, res) => {
     if (from) { params.push(from); sql += ` AND a.date >= $${params.length}`; }
     if (to) { params.push(to); sql += ` AND a.date <= $${params.length}`; }
     if (student_id) { params.push(student_id); sql += ` AND a.student_id = $${params.length}`; }
-    sql += ' ORDER BY a.date DESC LIMIT 2000';
+    sql += ' ORDER BY a.date DESC';
     json(res, (await q(sql, params)).rows);
   } catch(err) { bad(res, err.message, 500); }
 });
@@ -4038,7 +4053,7 @@ ${school.name} 🏫`;
 
 app.get('/api/admin/results/pins', requireSchool, async (req, res) => {
   try {
-    const rows = await q('SELECT * FROM result_pins WHERE school_id=$1 ORDER BY sent_at DESC LIMIT 500', [req.school.id]);
+    const rows = await q('SELECT * FROM result_pins WHERE school_id=$1 ORDER BY sent_at DESC', [req.school.id]);
     json(res, rows.rows);
   } catch(err) { bad(res, err.message, 500); }
 });
@@ -4142,14 +4157,39 @@ app.get('/results/:token', async (req, res) => {
     const scale = getSchoolGradingScale({ config: r.config });
     const branding = getSchoolBranding({ config: r.config });
     const subjects = typeof r.subjects === 'string' ? JSON.parse(r.subjects) : r.subjects || {};
-    const subjectRows = Object.entries(subjects).map(([subj, score]) => {
-      const s = Number(score);
+    // A subject's value is either a plain number (older/simple results — just a final
+    // score) or an object { components: [{label,value}], total, classAvg, position,
+    // remark } for the full CA/exam breakdown. subjectTotal() normalizes either shape
+    // down to the one number used for grading and averages.
+    const subjectTotal = (val) => (val && typeof val === 'object') ? Number(val.total) : Number(val);
+    const hasComponentBreakdown = Object.values(subjects).some(v => v && typeof v === 'object' && Array.isArray(v.components) && v.components.length);
+    // Union of component labels across all subjects, in first-seen order, so the table
+    // has one consistent set of columns even if a couple of subjects are missing one.
+    const componentLabels = hasComponentBreakdown
+      ? [...new Set(Object.values(subjects).flatMap(v => (v && v.components) ? v.components.map(c => c.label) : []))]
+      : [];
+    const subjectRows = Object.entries(subjects).map(([subj, val]) => {
+      const s = subjectTotal(val);
       const bandIndex = scale.findIndex(b => s >= b.min);
       const { grade, remark } = gradeForScore(s, scale);
       const gc = GRADE_COLOR_PALETTE[Math.min(Math.max(bandIndex, 0), GRADE_COLOR_PALETTE.length - 1)];
-      return `<tr><td>${subj}</td><td style="text-align:center;">${score}</td><td style="text-align:center;font-weight:700;color:${gc};">${grade}</td><td>${remark}</td></tr>`;
+      const isObj = val && typeof val === 'object';
+      const componentCells = hasComponentBreakdown
+        ? componentLabels.map(label => {
+            const comp = isObj && Array.isArray(val.components) ? val.components.find(c => c.label === label) : null;
+            return `<td style="text-align:center;">${comp ? comp.value : '—'}</td>`;
+          }).join('')
+        : '';
+      const classAvgCell = hasComponentBreakdown ? `<td style="text-align:center;">${isObj && val.classAvg !== undefined ? val.classAvg : '—'}</td>` : '';
+      const subjPositionCell = hasComponentBreakdown ? `<td style="text-align:center;">${isObj && val.position ? val.position : '—'}</td>` : '';
+      const subjRemarkCell = isObj && val.remark ? val.remark : remark;
+      return `<tr><td>${subj}</td>${componentCells}<td style="text-align:center;font-weight:700;">${s}</td><td style="text-align:center;font-weight:700;color:${gc};">${grade}</td>${subjPositionCell}${classAvgCell}<td>${subjRemarkCell}</td></tr>`;
     }).join('');
-    const avg = Object.values(subjects).length ? Math.round(Object.values(subjects).reduce((a,b)=>a+Number(b),0)/Object.values(subjects).length) : 0;
+    const subjectTableHeader = hasComponentBreakdown
+      ? `<tr><th>Subject</th>${componentLabels.map(l => `<th style="text-align:center;">${l}</th>`).join('')}<th style="text-align:center;">Total</th><th style="text-align:center;">Grade</th><th style="text-align:center;">Position</th><th style="text-align:center;">Class Avg</th><th>Remark</th></tr>`
+      : `<tr><th>Subject</th><th style="text-align:center;">Score</th><th style="text-align:center;">Grade</th><th>Remark</th></tr>`;
+    const avgVals = Object.values(subjects).map(subjectTotal).filter(n => !isNaN(n));
+    const avg = avgVals.length ? Math.round(avgVals.reduce((a,b)=>a+b,0)/avgVals.length) : 0;
 
     // Cumulative (year-to-date) view — only released terms in the same session, excluding this one
     const priorTerms = await getCumulativeResults(r.school_id, r.student_id, r.session_year, r.result_id);
@@ -4162,14 +4202,14 @@ app.get('/results/:token', async (req, res) => {
       const allSubjects = [...new Set(allTerms.flatMap(t => Object.keys(t.subjects || {})))].sort();
       const termLabels = allTerms.map(t => t.term);
       const subjectTrendRows = allSubjects.map(subj => {
-        const scores = allTerms.map(t => t.subjects?.[subj]);
-        const nums = scores.filter(s => s !== undefined && s !== null).map(Number);
+        const scores = allTerms.map(t => t.subjects?.[subj] !== undefined ? subjectTotal(t.subjects[subj]) : null);
+        const nums = scores.filter(s => s !== null && !isNaN(s));
         const subjAvg = nums.length ? Math.round(nums.reduce((a,b)=>a+b,0)/nums.length) : null;
-        const cells = scores.map(s => `<td style="text-align:center;">${s !== undefined && s !== null ? s : '—'}</td>`).join('');
+        const cells = scores.map(s => `<td style="text-align:center;">${s !== null && !isNaN(s) ? s : '—'}</td>`).join('');
         return `<tr><td>${subj}</td>${cells}<td style="text-align:center;font-weight:700;color:${branding.primary_color};">${subjAvg !== null ? subjAvg : '—'}</td></tr>`;
       }).join('');
       const overallAvgs = allTerms.map(t => {
-        const vals = Object.values(t.subjects || {}).map(Number).filter(n => !isNaN(n));
+        const vals = Object.values(t.subjects || {}).map(subjectTotal).filter(n => !isNaN(n));
         return vals.length ? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length) : null;
       });
       const yearAvg = overallAvgs.filter(v => v !== null).length
@@ -4248,7 +4288,7 @@ td{padding:12px 12px;border-bottom:1px solid #f0f2f5;color:#0f1a14;}
   </div>
   <div class="scores">
     <table>
-      <thead><tr><th>Subject</th><th style="text-align:center;">Score</th><th style="text-align:center;">Grade</th><th>Remark</th></tr></thead>
+      <thead>${subjectTableHeader}</thead>
       <tbody>${subjectRows}</tbody>
     </table>
   </div>
