@@ -119,6 +119,16 @@ function normalisePhone(phone = '') {
   if (raw.startsWith('234')) raw = '+' + raw;
   return raw;
 }
+// A parent_phone field often holds more than one number ("0805..., 0703..." for mum and dad).
+// Splits on commas, semicolons, slashes, "&", "and", "or" and line breaks, normalises each,
+// and drops anything too short to be a real number. Always returns a de-duplicated array.
+function splitPhones(value) {
+  return [...new Set(
+    String(value || '').split(/[,;\/&|\n]| and | or /i)
+      .map(p => normalisePhone(p))
+      .filter(p => p.replace(/\D/g, '').length >= 10)
+  )];
+}
 // A Cloud API Phone Number ID is a long digit-only string (e.g. "1310160585515916").
 // Twilio numbers are always stored with a leading "+". This lets every existing
 // call site that passes school.twilio_number as a "from" value route correctly
@@ -132,6 +142,9 @@ function hasWhatsAppCloud() { return Boolean(process.env.WHATSAPP_ACCESS_TOKEN);
 // differs from these defaults, without needing a code change/redeploy.
 const TEMPLATE_HOMEWORK_REMINDER = process.env.TEMPLATE_HOMEWORK_REMINDER || 'homework_submission_reminder';
 const TEMPLATE_BEHAVIOUR_NOTICE = process.env.TEMPLATE_BEHAVIOUR_NOTICE || 'student_behaviour_notice';
+// Meta errors that mean the template or token itself is wrong, so every other recipient
+// would fail identically. A broadcast stops at the first one instead of repeating it hundreds of times.
+const WA_FATAL_CODES = [190, 132000, 132001, 132005, 132007, 132012, 132015, 132016];
 const TEMPLATE_ABSENCE_NOTICE = process.env.TEMPLATE_ABSENCE_NOTICE || 'student_absence_notice';
 function uuid() { return crypto.randomUUID(); }
 function maxAdminsForPlan(plan) { return plan === 'starter' ? 1 : 5; }
@@ -944,7 +957,10 @@ async function cloudSend(to, phoneNumberId, body) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     console.error('[cloudSend]', JSON.stringify(data));
-    throw new Error(data?.error?.message || `Cloud API send failed (${res.status})`);
+    const detail = data?.error?.error_data?.details;
+    const err = new Error((data?.error?.message || `Cloud API send failed (${res.status})`) + (detail ? ' — ' + detail : ''));
+    err.waCode = data?.error?.code;
+    throw err;
   }
   return data;
 }
@@ -955,6 +971,7 @@ async function cloudSend(to, phoneNumberId, body) {
 async function cloudSendTemplate(to, phoneNumberId, templateName, bodyParams = [], languageCode = 'en_US') {
   if (!hasWhatsAppCloud()) return { skipped: true, reason: 'WhatsApp Cloud API token missing' };
   const toDigits = normalisePhone(to).replace(/^\+/, '');
+  languageCode = String(languageCode || 'en_US').trim().replace('-', '_');
   const payload = {
     messaging_product: 'whatsapp',
     to: toDigits,
@@ -972,8 +989,11 @@ async function cloudSendTemplate(to, phoneNumberId, templateName, bodyParams = [
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    console.error('[cloudSendTemplate]', templateName, JSON.stringify(data));
-    throw new Error(data?.error?.message || `Cloud API template send failed (${res.status})`);
+    console.error('[cloudSendTemplate]', templateName, languageCode, JSON.stringify(data));
+    const detail = data?.error?.error_data?.details;
+    const err = new Error((data?.error?.message || `Cloud API template send failed (${res.status})`) + (detail ? ' — ' + detail : ''));
+    err.waCode = data?.error?.code;
+    throw err;
   }
   return data;
 }
@@ -984,9 +1004,16 @@ async function cloudSendTemplate(to, phoneNumberId, templateName, bodyParams = [
 // outside the 24-hour customer service window. Twilio numbers currently fall back to
 // free text (Twilio template/Content API wiring is a separate TODO — flagged loudly
 // below rather than silently sending something that may be rejected or non-compliant).
-async function sendParentTemplate(to, fromNumber, templateName, bodyParams, plainTextFallback) {
+async function sendParentTemplate(to, fromNumber, templateName, bodyParams, plainTextFallback, languageCode) {
+  const targets = splitPhones(to);
+  if (targets.length > 1) {
+    const results = await Promise.allSettled(targets.map(t => sendParentTemplate(t, fromNumber, templateName, bodyParams, plainTextFallback, languageCode)));
+    const ok = results.find(r => r.status === 'fulfilled');
+    if (!ok) throw results[0].reason;
+    return ok.value;
+  }
   if (isCloudNumber(fromNumber)) {
-    return cloudSendTemplate(to, fromNumber, templateName, bodyParams);
+    return cloudSendTemplate(to, fromNumber, templateName, bodyParams, languageCode || 'en_US');
   }
   console.warn(`[sendParentTemplate] "${templateName}" requested on a Twilio number — Twilio Content API template sending is not yet wired, sending free text instead. This WILL be rejected by Meta if the parent has not messaged in the last 24 hours.`);
   return twilioSend(to, fromNumber, plainTextFallback);
@@ -1151,6 +1178,14 @@ Conversation rules:
 }
 
 async function twilioSend(to, from, body) {
+  // A field holding several numbers is sent to each one; it only fails if every number fails.
+  const targets = splitPhones(to);
+  if (targets.length > 1) {
+    const results = await Promise.allSettled(targets.map(t => twilioSend(t, from, body)));
+    const ok = results.find(r => r.status === 'fulfilled');
+    if (!ok) throw results[0].reason;
+    return ok.value;
+  }
   // Route to WhatsApp Cloud API transparently if "from" is a Cloud Phone Number ID
   // rather than a Twilio number — every existing call site keeps working unchanged.
   if (isCloudNumber(from)) return cloudSend(to, from, body);
@@ -1221,7 +1256,7 @@ async function handleIncomingWhatsApp(req, res) {
   else {
     // Match parent by exact phone OR last 9 digits (same fix as staff — handles +234 vs 0 formats)
     const student = await q(
-      `SELECT * FROM students WHERE school_id=$1 AND (parent_phone=$2 OR right(regexp_replace(parent_phone,'[^0-9]','','g'),9)=$3) ORDER BY created_at ASC`,
+      `SELECT * FROM students WHERE school_id=$1 AND (parent_phone=$2 OR regexp_replace(parent_phone,'[^0-9]','','g') LIKE '%' || $3 || '%') ORDER BY created_at ASC`,
       [school.id, from, last9]
     );
     // Multi-child parents: if a child's name is mentioned in the message, answer about THAT child
@@ -1329,7 +1364,15 @@ async function handleIncomingWhatsAppCloud(req, res) {
   try {
     const value = req.body?.entry?.[0]?.changes?.[0]?.value;
     // Delivery/read status callbacks (and anything with no actual message) — just ack.
-    if (!value?.messages?.length) return res.sendStatus(200);
+    if (!value?.messages?.length) {
+      // Meta can accept a send and fail it afterwards. Those failures only arrive here.
+      (value?.statuses || []).forEach(st => {
+        if (st.status === 'failed') {
+          console.warn(`[wa-status] FAILED to ${st.recipient_id}: ` + (st.errors || []).map(e => `${e.code} ${e.title || ''} ${e.error_data?.details || e.message || ''}`.trim()).join(' | '));
+        }
+      });
+      return res.sendStatus(200);
+    }
 
     const phoneNumberId = value.metadata?.phone_number_id; // acts as the "to" routing key
     const message = value.messages[0];
@@ -1415,7 +1458,7 @@ async function handleIncomingWhatsAppCloud(req, res) {
         [school.id, from, body, reply]).catch(e => console.warn('[teacher-log]', e.message));
     } else {
       const student = await q(
-        `SELECT * FROM students WHERE school_id=$1 AND (parent_phone=$2 OR right(regexp_replace(parent_phone,'[^0-9]','','g'),9)=$3) ORDER BY created_at ASC`,
+        `SELECT * FROM students WHERE school_id=$1 AND (parent_phone=$2 OR regexp_replace(parent_phone,'[^0-9]','','g') LIKE '%' || $3 || '%') ORDER BY created_at ASC`,
         [school.id, from, last9]
       );
       let siblings = [];
@@ -3943,21 +3986,27 @@ app.post('/api/admin/broadcast', requireSchool, async (req, res) => {
       phones = rows.rows.map(r => r.parent_phone);
     }
 
-    let sent = 0, failed = 0;
+    // One parent_phone field can hold two numbers, and siblings share a parent: split, then de-duplicate.
+    phones = [...new Set(phones.flatMap(splitPhones))];
+    let sent = 0, failed = 0, firstError = null, aborted = false;
     for (const phone of phones) {
       try {
         if (template) {
           // Real Meta template send — works for every recipient, in or out of the 24h window.
           const fallback = `${template.label}${(variables||[]).length ? ': ' + variables.join(' | ') : ''}`;
-          await sendParentTemplate(phone, from, template.template_name, variables || [], fallback);
+          await sendParentTemplate(phone, from, template.template_name, variables || [], fallback, template.language_code);
         } else {
           // Free text — only reliable for recipients inside the 24h customer-service window.
           await twilioSend(phone, from, message);
         }
         sent++;
-      } catch(e) { failed++; console.warn('Broadcast failed to:', phone, e.message); }
+      } catch(e) {
+        failed++; if (!firstError) firstError = e.message;
+        console.warn('Broadcast failed to:', phone, e.message);
+        if (WA_FATAL_CODES.includes(e.waCode)) { aborted = true; console.warn('[broadcast] stopped early — this error repeats for every recipient'); break; }
+      }
     }
-    json(res, { ok: true, sent, total: phones.length, failed, sent_via_template: template ? sent : 0 });
+    json(res, { ok: true, sent, total: phones.length, failed, aborted, first_error: firstError, sent_via_template: template ? sent : 0 });
   } catch(err) { bad(res, err.message, 500); }
 });
 
@@ -4000,7 +4049,16 @@ app.post('/api/admin/results', requireSchool, async (req, res) => {
     if (!student_id) return bad(res, 'student_id required');
     const sessionYear = req.body.session_year || extractSessionYear(term) || extractSessionYear(req.school.current_term);
     const existing = await q('SELECT id FROM student_results WHERE student_id=$1 AND school_id=$2 AND term=$3', [student_id, req.school.id, term]);
-    if (existing.rows.length) {
+    if (existing.rows.length && req.body.merge) {
+      // merge=true: add/replace only the subjects sent and leave the rest alone, so scores can be
+      // entered one subject at a time. Position/remark are only changed when actually provided.
+      await q(`UPDATE student_results
+                  SET subjects = COALESCE(subjects,'{}'::jsonb) || $1::jsonb,
+                      position = COALESCE($2, position), remark = COALESCE($3, remark),
+                      class_name=$4, session_year=$5, updated_at=NOW()
+                WHERE id=$6`,
+        [JSON.stringify(subjects||{}), position||null, remark||null, class_name, sessionYear, existing.rows[0].id]);
+    } else if (existing.rows.length) {
       await q('UPDATE student_results SET subjects=$1, position=$2, remark=$3, class_name=$4, session_year=$5, updated_at=NOW() WHERE id=$6',
         [JSON.stringify(subjects||{}), position||null, remark||null, class_name, sessionYear, existing.rows[0].id]);
     } else {
@@ -4008,6 +4066,20 @@ app.post('/api/admin/results', requireSchool, async (req, res) => {
         [req.school.id, student_id, class_name, term, JSON.stringify(subjects||{}), position||null, remark||null, sessionYear]);
     }
     json(res, { ok: true });
+  } catch(err) { bad(res, err.message, 500); }
+});
+
+// Saved results for one class + term, so the entry grid can pre-fill what's already been entered.
+app.get('/api/admin/results/class', requireSchool, async (req, res) => {
+  try {
+    const { class_name, term } = req.query;
+    if (!class_name) return bad(res, 'class_name required');
+    const rows = await q(
+      `SELECT sr.student_id, sr.subjects, sr.position, sr.remark
+         FROM student_results sr JOIN students s ON s.id = sr.student_id
+        WHERE sr.school_id=$1 AND s.class_name=$2 AND sr.term=$3`,
+      [req.school.id, class_name, term || 'Current Term']);
+    json(res, rows.rows);
   } catch(err) { bad(res, err.message, 500); }
 });
 
