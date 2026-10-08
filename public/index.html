@@ -1126,11 +1126,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
         <div class="dash-grid">
           <div class="dash-card">
             <div class="dash-card-header">
-              <div class="dash-card-title">📄 Upload School Documents</div>
+              <div class="dash-card-title" id="doc-form-title">📄 Add School Information</div>
             </div>
             <div class="dash-card-body">
               <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6;">
-                Upload your school handbook, fee structure, calendar, or any document. EduPing reads them and uses the information to answer parent questions more accurately.
+                Type or paste your school calendar, fee structure, rules, or handbook. EduPing reads it and uses it to answer parent questions on WhatsApp — for example "When does school resume?" or "When is mid-term break?".
               </div>
               <div style="background:#fef3c7;border-radius:8px;padding:12px;font-size:12px;color:#92400e;margin-bottom:16px;">
                 ⭐ <strong>AI Training Feature</strong> — The more documents you add, the smarter EduPing becomes about your specific school.
@@ -1142,7 +1142,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
                 </div>
                 <div class="form-group">
                   <label class="form-label">Document Type</label>
-                  <select class="form-select" id="doc-type">
+                  <select class="form-select" id="doc-type" onchange="updateDocPlaceholder()">
                     <option value="handbook">Student Handbook</option>
                     <option value="calendar">Academic Calendar</option>
                     <option value="fees">Fee Structure</option>
@@ -1152,10 +1152,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
                   </select>
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Paste Document Content</label>
-                  <textarea class="form-textarea" id="doc-content" style="height:140px;" placeholder="Paste the text content of your document here. You can copy from Word, PDF, or type directly..."></textarea>
+                  <label class="form-label">Type or Paste Content</label>
+                  <textarea class="form-textarea" id="doc-content" style="height:200px;" oninput="updateDocCount()" placeholder=""></textarea>
+                  <div id="doc-count" style="font-size:11px;color:var(--text-muted);margin-top:4px;text-align:right;"></div>
                 </div>
-                <button class="broadcast-btn" onclick="uploadDocument()">📤 Upload & Train AI</button>
+                <div style="display:flex;gap:8px;">
+                  <button class="broadcast-btn" id="doc-save-btn" onclick="uploadDocument()">📤 Save & Train AI</button>
+                  <button class="action-btn" id="doc-cancel-btn" onclick="cancelDocEdit()" style="display:none;">Cancel edit</button>
+                </div>
               </div>
             </div>
           </div>
@@ -3024,27 +3028,80 @@ document.addEventListener('keydown', function(e) {
 // sendBroadcast defined below
 
 // ── Documents / AI Training ───────────────────────────────
+const DOC_PLACEHOLDERS = {
+  calendar: "Type your calendar, one item per line. For example:\n\nFirst Term 2026/2027\nResumption: Monday, 14 September 2026\nMid-term break: Monday 26 – Friday 30 October 2026\nPTA meeting: Saturday, 7 November 2026\nExaminations: 30 November – 9 December 2026\nFirst term ends: Friday, 11 December 2026\n\nSecond Term\nResumption: Monday, 11 January 2027\n...",
+  fees: "Type your fee structure. For example:\n\nJSS 1 – JSS 3: ₦150,000 per term\nSS 1 – SS 3: ₦180,000 per term\nPTA levy: ₦5,000\nPayment deadline: within the first 3 weeks of term\n...",
+  rules: "Type your school rules and policies. For example:\n\nSchool hours: 8:00am – 3:00pm\nLateness: gates close at 8:15am\nUniform: ...\nPhones are not allowed in school\n...",
+  admission: "Type your admission requirements. For example:\n\nRequired: birth certificate, last report card, 4 passport photos\nEntrance exam: every second Saturday\nAge for Primary 1: 5 years and above\n...",
+  handbook: "Paste your student handbook text here (copy from Word or PDF).",
+  other: "Type or paste any other information parents often ask about..."
+};
+let _kbDocs = [];
+let _kbEditingId = null;
+
+function updateDocPlaceholder() {
+  const t = document.getElementById('doc-type').value;
+  document.getElementById('doc-content').placeholder = DOC_PLACEHOLDERS[t] || DOC_PLACEHOLDERS.other;
+}
+function updateDocCount() {
+  const n = document.getElementById('doc-content').value.length;
+  document.getElementById('doc-count').textContent = n ? n.toLocaleString() + ' characters' : '';
+}
+function resetDocForm() {
+  _kbEditingId = null;
+  document.getElementById('doc-name').value = '';
+  document.getElementById('doc-content').value = '';
+  document.getElementById('doc-type').value = 'calendar';
+  document.getElementById('doc-form-title').textContent = '📄 Add School Information';
+  document.getElementById('doc-save-btn').textContent = '📤 Save & Train AI';
+  document.getElementById('doc-cancel-btn').style.display = 'none';
+  updateDocPlaceholder();
+  updateDocCount();
+}
+function cancelDocEdit() { resetDocForm(); }
+
 async function loadDocuments() {
   const el = document.getElementById('documents-list');
+  updateDocPlaceholder();
   try {
-    const docs = await api('/api/admin/documents');
-    if (!docs.length) {
-      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">No documents uploaded yet.<br>Upload your school handbook to make EduPing smarter.</div>';
+    _kbDocs = await api('/api/admin/documents');
+    if (!Array.isArray(_kbDocs) || !_kbDocs.length) {
+      _kbDocs = [];
+      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Nothing added yet.<br>Type in your school calendar first — it is the most common thing parents ask about.</div>';
       return;
     }
-    el.innerHTML = docs.map(d => `
+    const icons = {handbook:'📖',calendar:'📅',fees:'💰',admission:'📋',rules:'⚖️',other:'📄'};
+    el.innerHTML = _kbDocs.map((d, i) => `
       <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid #f5f5f5;">
         <div style="width:36px;height:36px;background:var(--green-pale);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">
-          ${{handbook:'📖',calendar:'📅',fees:'💰',admission:'📋',rules:'⚖️',other:'📄'}[d.doc_type]||'📄'}
+          ${icons[d.doc_type] || '📄'}
         </div>
         <div style="flex:1;min-width:0;">
-          <div style="font-weight:600;font-size:13px;">${d.name}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${d.doc_type} · Uploaded ${new Date(d.uploaded_at).toLocaleDateString()}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.preview}...</div>
+          <div style="font-weight:600;font-size:13px;">${esc(d.name)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${esc(d.doc_type)} · Updated ${new Date(d.updated_at || d.uploaded_at).toLocaleDateString()}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(d.preview)}...</div>
         </div>
-        <button class="action-btn" onclick="deleteDocument('${d.id}','${d.name}')" style="flex-shrink:0;color:var(--danger);border-color:var(--danger);">Delete</button>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button class="action-btn" onclick="editDocument(${i})">Edit</button>
+          <button class="action-btn" onclick="deleteDocument(${i})" style="color:var(--danger);border-color:var(--danger);">Delete</button>
+        </div>
       </div>`).join('');
   } catch(e) { el.innerHTML = '<div class="loading">Could not load documents</div>'; }
+}
+
+function editDocument(i) {
+  const d = _kbDocs[i];
+  if (!d) return;
+  _kbEditingId = d.id;
+  document.getElementById('doc-name').value = d.name;
+  document.getElementById('doc-type').value = d.doc_type;
+  document.getElementById('doc-content').value = d.content;
+  document.getElementById('doc-form-title').textContent = '✏️ Editing: ' + d.name;
+  document.getElementById('doc-save-btn').textContent = '💾 Save changes';
+  document.getElementById('doc-cancel-btn').style.display = '';
+  updateDocPlaceholder();
+  updateDocCount();
+  document.getElementById('doc-name').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 async function uploadDocument() {
@@ -3052,20 +3109,30 @@ async function uploadDocument() {
   const content = document.getElementById('doc-content').value.trim();
   const doc_type = document.getElementById('doc-type').value;
   if (!name || !content) { showToast('Please fill document name and content ❌'); return; }
+  const editing = _kbEditingId;
   try {
-    await api('/api/admin/documents', { method:'POST', body:JSON.stringify({ name, content, doc_type }) });
-    showToast('✅ Document uploaded! EduPing is now trained on ' + name);
-    document.getElementById('doc-name').value = '';
-    document.getElementById('doc-content').value = '';
+    await api('/api/admin/documents' + (editing ? '/' + editing : ''), {
+      method: editing ? 'PUT' : 'POST',
+      body: JSON.stringify({ name, content, doc_type })
+    });
+    showToast(editing ? '✅ Updated! EduPing will use the new version' : '✅ Saved! EduPing is now trained on ' + name);
+    resetDocForm();
     loadDocuments();
-  } catch(e) { showToast('Upload failed ❌'); }
+  } catch(e) {
+    let msg = 'Save failed';
+    try { msg = JSON.parse(e.message).error || msg; } catch(_) {}
+    showToast(msg + ' ❌');
+  }
 }
 
-async function deleteDocument(id, name) {
-  if (!confirm('Delete "' + name + '"? EduPing will no longer use this document.')) return;
+async function deleteDocument(i) {
+  const d = _kbDocs[i];
+  if (!d) return;
+  if (!confirm('Delete "' + d.name + '"? EduPing will no longer use this information.')) return;
   try {
-    await api('/api/admin/documents/' + id, { method:'DELETE' });
-    showToast(name + ' deleted');
+    await api('/api/admin/documents/' + d.id, { method:'DELETE' });
+    showToast(d.name + ' deleted');
+    if (_kbEditingId === d.id) resetDocForm();
     loadDocuments();
   } catch(e) { showToast('Error deleting ❌'); }
 }
