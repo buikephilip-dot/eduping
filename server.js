@@ -144,7 +144,7 @@ const TEMPLATE_HOMEWORK_REMINDER = process.env.TEMPLATE_HOMEWORK_REMINDER || 'ho
 const TEMPLATE_BEHAVIOUR_NOTICE = process.env.TEMPLATE_BEHAVIOUR_NOTICE || 'student_behaviour_notice';
 // Meta errors that mean the template or token itself is wrong, so every other recipient
 // would fail identically. A broadcast stops at the first one instead of repeating it hundreds of times.
-const WA_FATAL_CODES = [190, 132000, 132001, 132005, 132007, 132012, 132015, 132016];
+const WA_FATAL_CODES = [190, 131008, 132000, 132001, 132005, 132007, 132012, 132015, 132016];
 const TEMPLATE_ABSENCE_NOTICE = process.env.TEMPLATE_ABSENCE_NOTICE || 'student_absence_notice';
 function uuid() { return crypto.randomUUID(); }
 function maxAdminsForPlan(plan) { return plan === 'starter' ? 1 : 5; }
@@ -179,6 +179,8 @@ async function migrate() {
   await q(`ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS variable_labels JSONB DEFAULT '[]'`).catch(e => console.warn('[migrate] variable_labels:', e.message));
   await q(`ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS language_code TEXT DEFAULT 'en_US'`).catch(() => {});
   await q(`ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS trigger_key TEXT`).catch(() => {});
+  // The approved message text (with {{1}}, {{2}}... placeholders), used only to show a preview before sending.
+  await q(`ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS body_text TEXT`).catch(() => {});
   await q(`ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now()`).catch(() => {});
   // If the old has_variable column is there: stop it blocking new inserts, and carry any
   // existing "has a variable" templates over so they still send their one fill-in value.
@@ -3935,16 +3937,24 @@ app.get('/api/admin/whatsapp-templates', requireSchool, async (req, res) => {
 });
 app.post('/api/admin/whatsapp-templates', requireSchool, async (req, res) => {
   try {
-    const { label, template_name, language_code, has_variable, variable_labels, trigger_key } = req.body;
+    const { label, template_name, language_code, has_variable, variable_labels, trigger_key, body_text } = req.body;
     if (!label || !template_name) return bad(res, 'label and template_name required');
     // Accept either the new variable_labels array, or the older single has_variable
     // checkbox for backward compatibility with any existing registrations.
     const varLabels = Array.isArray(variable_labels) ? variable_labels : (has_variable ? ['Value'] : []);
     const row = await q(
-      `INSERT INTO whatsapp_templates (school_id, label, template_name, language_code, variable_labels, trigger_key) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [req.school.id, label, template_name, language_code || 'en_US', JSON.stringify(varLabels), trigger_key || null]
+      `INSERT INTO whatsapp_templates (school_id, label, template_name, language_code, variable_labels, trigger_key, body_text) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.school.id, label, template_name, language_code || 'en', JSON.stringify(varLabels), trigger_key || null, (body_text || '').trim() || null]
     );
     json(res, row.rows[0]);
+  } catch(err) { bad(res, err.message, 500); }
+});
+app.patch('/api/admin/whatsapp-templates/:id', requireSchool, async (req, res) => {
+  try {
+    const body_text = String(req.body.body_text || '').trim() || null;
+    const r = await q(`UPDATE whatsapp_templates SET body_text=$1 WHERE id=$2 AND school_id=$3 RETURNING *`, [body_text, req.params.id, req.school.id]);
+    if (!r.rowCount) return bad(res, 'Template not found', 404);
+    json(res, r.rows[0]);
   } catch(err) { bad(res, err.message, 500); }
 });
 app.delete('/api/admin/whatsapp-templates/:id', requireSchool, async (req, res) => {
@@ -3954,7 +3964,7 @@ app.delete('/api/admin/whatsapp-templates/:id', requireSchool, async (req, res) 
 
 app.post('/api/admin/broadcast', requireSchool, async (req, res) => {
   try {
-    const { message, target, class_name, template_id, variables } = req.body;
+    const { message, target, class_name, template_id, variables, phone: singlePhone } = req.body;
     const school = req.school;
     const from = school.twilio_number || process.env.TWILIO_DEFAULT_FROM;
     if (!from) return bad(res, 'WhatsApp number not configured');
@@ -3968,8 +3978,21 @@ app.post('/api/admin/broadcast', requireSchool, async (req, res) => {
       return bad(res, 'message required');
     }
 
+    // A template with {{n}} placeholders needs a non-empty value for every one, or Meta rejects each send.
+    if (template) {
+      let labels = template.variable_labels;
+      if (typeof labels === 'string') { try { labels = JSON.parse(labels); } catch { labels = []; } }
+      const needed = Array.isArray(labels) ? labels.length : 0;
+      const given = (variables || []).filter(v => String(v ?? '').trim()).length;
+      if (given < needed) return bad(res, `This template needs ${needed} value(s) — fill in every one before sending.`);
+    }
+
     let phones = [];
-    if (target === 'all_parents') {
+    if (target === 'single') {
+      const valid = splitPhones(singlePhone);
+      if (!valid.length) return bad(res, 'Enter a valid phone number (e.g. 08012345678 or +2348012345678)');
+      phones = valid;
+    } else if (target === 'all_parents') {
       const rows = await q(`SELECT DISTINCT parent_phone FROM students WHERE school_id=$1 AND parent_phone IS NOT NULL AND parent_phone != ''`, [school.id]);
       phones = rows.rows.map(r => r.parent_phone);
     } else if (target === 'staff') {
