@@ -160,6 +160,25 @@ async function migrate() {
   // Drop old unique constraint on twilio_number if it exists (allows empty values)
   await q(`ALTER TABLE schools DROP CONSTRAINT IF EXISTS schools_twilio_number_key`).catch(() => {});
 
+  // whatsapp_templates may already exist in production from an earlier version of this
+  // feature (single has_variable checkbox, no variable_labels). CREATE TABLE IF NOT EXISTS
+  // skips it in that case, so upgrade the existing table in place rather than assume fresh.
+  await q(`ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS variable_labels JSONB DEFAULT '[]'`).catch(e => console.warn('[migrate] variable_labels:', e.message));
+  await q(`ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS language_code TEXT DEFAULT 'en_US'`).catch(() => {});
+  await q(`ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS trigger_key TEXT`).catch(() => {});
+  await q(`ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now()`).catch(() => {});
+  // If the old has_variable column is there: stop it blocking new inserts, and carry any
+  // existing "has a variable" templates over so they still send their one fill-in value.
+  await q(`DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='whatsapp_templates' AND column_name='has_variable') THEN
+        ALTER TABLE whatsapp_templates ALTER COLUMN has_variable DROP NOT NULL;
+        ALTER TABLE whatsapp_templates ALTER COLUMN has_variable SET DEFAULT false;
+        UPDATE whatsapp_templates SET variable_labels = '["Value"]'::jsonb
+          WHERE has_variable = true AND (variable_labels IS NULL OR variable_labels = '[]'::jsonb);
+      END IF;
+    END $$;`).catch(e => console.warn('[migrate] has_variable backfill:', e.message));
+
   // WhatsApp Cloud API support — a school's "twilio_number" column can now hold either
   // a real Twilio number (e.g. +2347...) or a Meta Cloud API Phone Number ID (long digit
   // string, no +). isCloudNumber() below tells the two apart at send/route time.
@@ -2444,19 +2463,42 @@ app.post('/api/admin/students', requireSchool, async (req, res) => {
   } catch(err) { bad(res, err.message, 500); }
 });
 
-// A school's subject list — used to build the result-entry columns dynamically
-// (replacing the old hardcoded Maths/English/Science) and the CSV template.
-// Stored in schools.config, which already exists as a flexible JSONB column.
+// A school's subject list is PER CLASS — JSS1 and SS2 Science don't offer the same
+// subjects — so it's stored as { "JSS1A": [...], "SS2 Science": [...] } inside
+// schools.config.subjects_by_class, which already exists as a flexible JSONB column.
 app.get('/api/admin/subjects', requireSchool, async (req, res) => {
-  const config = req.school.config || {};
-  json(res, { subjects: Array.isArray(config.subjects) ? config.subjects : [] });
+  const { class_name } = req.query;
+  const byClass = req.school.config?.subjects_by_class || {};
+  if (class_name) {
+    json(res, { subjects: Array.isArray(byClass[class_name]) ? byClass[class_name] : [] });
+  } else {
+    json(res, { subjects_by_class: byClass });
+  }
 });
 app.put('/api/admin/subjects', requireSchool, async (req, res) => {
-  const { subjects } = req.body;
+  const { class_name, subjects } = req.body;
+  if (!class_name) return bad(res, 'class_name required — subjects are set per class');
   if (!Array.isArray(subjects)) return bad(res, 'subjects must be an array');
   const clean = subjects.map(s => String(s).trim()).filter(Boolean);
-  await q(`UPDATE schools SET config = COALESCE(config, '{}'::jsonb) || jsonb_build_object('subjects', $1::jsonb) WHERE id=$2`, [JSON.stringify(clean), req.school.id]);
-  json(res, { ok: true, subjects: clean });
+  const current = req.school.config?.subjects_by_class || {};
+  current[class_name] = clean;
+  await q(`UPDATE schools SET config = COALESCE(config, '{}'::jsonb) || jsonb_build_object('subjects_by_class', $1::jsonb) WHERE id=$2`, [JSON.stringify(current), req.school.id]);
+  json(res, { ok: true, class_name, subjects: clean });
+});
+
+// Assessment components (1st CA, Project, Exam, etc.) — usually the SAME structure
+// across every class in a school, so this one stays school-wide, not per class.
+const DEFAULT_ASSESSMENT_COMPONENTS = ['1st CA', 'Project', 'Mid Term Test', '2nd CA', 'Take Home', 'Exam'];
+app.get('/api/admin/assessment-components', requireSchool, async (req, res) => {
+  const comps = req.school.config?.assessment_components;
+  json(res, { components: Array.isArray(comps) && comps.length ? comps : DEFAULT_ASSESSMENT_COMPONENTS });
+});
+app.put('/api/admin/assessment-components', requireSchool, async (req, res) => {
+  const { components } = req.body;
+  if (!Array.isArray(components) || !components.length) return bad(res, 'components must be a non-empty array');
+  const clean = components.map(c => String(c).trim()).filter(Boolean);
+  await q(`UPDATE schools SET config = COALESCE(config, '{}'::jsonb) || jsonb_build_object('assessment_components', $1::jsonb) WHERE id=$2`, [JSON.stringify(clean), req.school.id]);
+  json(res, { ok: true, components: clean });
 });
 
 app.get('/api/admin/students/list', requireSchool, async (req, res) => {
