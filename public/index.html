@@ -990,7 +990,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
                   <option value="class">Specific Class</option>
                   <option value="fee_defaulters">Fee Defaulters Only</option>
                   <option value="absent_today">Today's Absent Parents</option>
+                  <option value="single">One Number</option>
                 </select>
+              </div>
+              <div class="form-group" id="broadcast-phone-group" style="display:none;">
+                <label class="form-label">Phone Number *</label>
+                <input type="tel" class="form-input" id="broadcast-phone" placeholder="e.g. 08012345678 or +2348012345678">
               </div>
               <div class="form-group" id="broadcast-class-group" style="display:none;">
                 <label class="form-label">Select Class</label>
@@ -1055,9 +1060,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-bg);color:var(--text
               <div id="whatsapp-templates-add-form" style="display:none;flex-direction:column;gap:8px;margin-bottom:12px;padding:10px;background:var(--bg-alt,#f7f7f7);border-radius:8px;">
                 <input class="form-input" id="wa-tpl-label" placeholder="Label (e.g. Welcome Back)">
                 <input class="form-input" id="wa-tpl-name" placeholder="Exact template name in Meta (e.g. welcome_back)">
-                <input class="form-input" id="wa-tpl-lang" placeholder="Language code (e.g. en_US)" value="en_US">
+                <input class="form-input" id="wa-tpl-lang" placeholder="Language code exactly as in WhatsApp Manager (e.g. en, en_US, en_GB)" value="en">
                 <input class="form-input" id="wa-tpl-varlabels" placeholder="Variables in order, comma-separated (e.g. Start date, End date, Resumption date) — leave blank if none">
                 <div style="font-size:11px;color:var(--text-muted);">Match the order of {{1}}, {{2}}, {{3}}... in your approved template body exactly.</div>
+                <textarea class="form-input" id="wa-tpl-body" rows="5" placeholder="Paste the approved message text here, keeping {{1}}, {{2}}... (optional — used to show a full preview before sending)"></textarea>
                 <select class="form-input" id="wa-tpl-trigger">
                   <option value="">Manual use only (send it myself from Broadcast)</option>
                   <option value="homework">Auto-use for Homework Alerts (when outside 24h window)</option>
@@ -5263,6 +5269,9 @@ async function updateBroadcastCount() {
   const countEl = document.getElementById('broadcast-preview-count');
   const classGroup = document.getElementById('broadcast-class-group');
   if (classGroup) classGroup.style.display = target === 'class' ? 'block' : 'none';
+  const phoneGroup = document.getElementById('broadcast-phone-group');
+  if (phoneGroup) phoneGroup.style.display = target === 'single' ? 'block' : 'none';
+  if (target === 'single') { if (countEl) countEl.textContent = '1 recipient'; return; }
 
   // Load classes into select if needed
   if (target === 'class') {
@@ -5306,11 +5315,13 @@ async function sendBroadcast() {
   const target = document.getElementById('broadcast-target')?.value;
   const cls = document.getElementById('broadcast-class')?.value;
   if (!msg) { showToast('Type a message first ❌'); return; }
+  const phone = document.getElementById('broadcast-phone')?.value?.trim();
+  if (target === 'single' && !phone) { showToast('Enter the phone number first ❌'); return; }
   const sending = document.getElementById('broadcast-sending');
   if (sending) sending.style.display = 'block';
   try {
     let endpoint = '/api/admin/broadcast';
-    const body = { message: msg, target, class_name: cls || undefined };
+    const body = { message: msg, target, class_name: cls || undefined, phone: target === 'single' ? phone : undefined };
     const res = await api(endpoint, { method: 'POST', body: JSON.stringify(body) });
     let toastMsg = '✅ Sent to ' + (res.sent||0) + '/' + (res.total||0);
     if (res.sent_via_template) toastMsg += ' (' + res.sent_via_template + ' via template — outside 24h window)';
@@ -5452,6 +5463,7 @@ async function loadWhatsappTemplates() {
       const varCount = (t.variable_labels || []).length;
       return '<div style="display:flex;gap:6px;align-items:center;">' +
         '<button class="qr-btn" style="flex:1;text-align:left;border-radius:8px;padding:10px 14px;" onclick="sendWhatsappTemplate(\'' + t.id + '\')">✅ ' + t.label + (varCount ? ' (' + varCount + ' field' + (varCount>1?'s':'') + ')' : ' (fixed text)') + (t.trigger_key === 'homework' ? ' · 📚 Auto: Homework' : '') + '</button>' +
+        '<button class="action-btn" style="padding:8px 10px;flex:none;" onclick="editTemplateBody(\'' + t.id + '\')" title="' + (t.body_text ? 'Edit message text (used for preview)' : 'Add message text to enable the preview') + '">' + (t.body_text ? '📝' : '➕📝') + '</button>' +
         '<button class="action-btn" style="padding:8px 10px;flex:none;" onclick="deleteWhatsappTemplate(\'' + t.id + '\')" title="Delete">🗑</button>' +
       '</div>';
     }).join('');
@@ -5468,17 +5480,18 @@ function showAddTemplateForm(show) {
 async function addWhatsappTemplate() {
   const label = document.getElementById('wa-tpl-label')?.value?.trim();
   const template_name = document.getElementById('wa-tpl-name')?.value?.trim();
-  const language_code = document.getElementById('wa-tpl-lang')?.value?.trim() || 'en_US';
+  const language_code = document.getElementById('wa-tpl-lang')?.value?.trim() || 'en';
   const varLabelsRaw = document.getElementById('wa-tpl-varlabels')?.value?.trim() || '';
   const variable_labels = varLabelsRaw ? varLabelsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
   const trigger_key = document.getElementById('wa-tpl-trigger')?.value || null;
   if (!label || !template_name) { showToast('Label and template name required ❌'); return; }
   try {
-    await api('/api/admin/whatsapp-templates', { method: 'POST', body: JSON.stringify({ label, template_name, language_code, variable_labels, trigger_key }) });
+    await api('/api/admin/whatsapp-templates', { method: 'POST', body: JSON.stringify({ label, template_name, language_code, variable_labels, trigger_key, body_text: document.getElementById('wa-tpl-body')?.value || '' }) });
     showToast('✅ Template registered!');
     document.getElementById('wa-tpl-label').value = '';
     document.getElementById('wa-tpl-name').value = '';
     document.getElementById('wa-tpl-varlabels').value = '';
+    if (document.getElementById('wa-tpl-body')) document.getElementById('wa-tpl-body').value = '';
     document.getElementById('wa-tpl-trigger').value = '';
     showAddTemplateForm(false);
     loadWhatsappTemplates();
@@ -5493,6 +5506,36 @@ async function deleteWhatsappTemplate(id) {
   } catch(e) { showToast('Failed to delete ❌'); }
 }
 
+// Fills {{1}}, {{2}}... in the template text with the values typed in, for the pre-send preview.
+function renderTemplatePreview(body, vars) {
+  return String(body).replace(/\{\{\s*(\d+)\s*\}\}/g, (m, n) => (vars[Number(n) - 1] !== undefined && vars[Number(n) - 1] !== '') ? vars[Number(n) - 1] : m);
+}
+
+// Small pop-up to paste/edit a registered template's message text (stored only to power the preview).
+function editTemplateBody(id) {
+  const t = (window._waTemplates || []).find(x => x.id === id);
+  if (!t) { showToast('Template not found — refresh and try again ❌'); return; }
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.innerHTML = '<div style="background:#fff;color:#222;border-radius:12px;padding:16px;width:100%;max-width:520px;display:flex;flex-direction:column;gap:10px;">' +
+    '<div style="font-weight:600;">Message text for "' + String(t.label).replace(/</g, '&lt;') + '"</div>' +
+    '<div style="font-size:12px;color:#666;">Paste the approved body exactly as in WhatsApp Manager, keeping {{1}}, {{2}}... This is only used to show a preview before sending.</div>' +
+    '<textarea id="tpl-body-edit" rows="8" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:8px;font:inherit;"></textarea>' +
+    '<div style="display:flex;gap:8px;justify-content:flex-end;"><button id="tpl-body-cancel" class="action-btn">Cancel</button><button id="tpl-body-save" class="broadcast-btn" style="max-width:120px;">Save</button></div></div>';
+  document.body.appendChild(overlay);
+  const ta = overlay.querySelector('#tpl-body-edit');
+  ta.value = t.body_text || '';
+  overlay.querySelector('#tpl-body-cancel').onclick = () => overlay.remove();
+  overlay.querySelector('#tpl-body-save').onclick = async () => {
+    try {
+      await api('/api/admin/whatsapp-templates/' + id, { method: 'PATCH', body: JSON.stringify({ body_text: ta.value }) });
+      overlay.remove();
+      showToast('✅ Message text saved');
+      loadWhatsappTemplates();
+    } catch (e) { showToast('Failed to save ❌'); }
+  };
+}
+
 // Sends the given approved template right now to the currently selected
 // audience (Send To dropdown), bypassing the 24h free-text window entirely.
 // Prompts once per variable, in order, so multi-variable templates (dates,
@@ -5503,20 +5546,39 @@ async function sendWhatsappTemplate(templateId) {
   const template = (window._waTemplates || []).find(t => t.id === templateId);
   if (!template) { showToast('Template not found — refresh and try again ❌'); return; }
 
+  const phone = document.getElementById('broadcast-phone')?.value?.trim();
+  if (target === 'single' && !phone) { showToast('Enter the phone number first ❌'); return; }
+
   const varLabels = template.variable_labels || [];
   const variables = [];
   for (const label of varLabels) {
-    const val = prompt('Fill in "' + label + '" for "' + template.label + '":');
-    if (val === null) { showToast('Cancelled'); return; } // user backed out
-    variables.push(val.trim());
+    let val;
+    do {
+      val = prompt('Fill in "' + label + '" for "' + template.label + '":');
+      if (val === null) { showToast('Cancelled'); return; } // user backed out
+      // Meta rejects line breaks, tabs and 4+ spaces in a variable, and rejects empty values
+      val = val.replace(/\s+/g, ' ').trim();
+      if (!val) alert('"' + label + '" can\'t be empty. Type a value (or "-" if it does not apply).');
+    } while (!val);
+    variables.push(val);
   }
 
-  if (!confirm('Send "' + template.label + '" to the selected audience (' + target + ')?' + (variables.length ? '\n\n' + varLabels.map((l,i) => l + ': ' + variables[i]).join('\n') : ''))) return;
+  const audienceNames = { all_parents: 'All parents', staff: 'All staff', fee_defaulters: 'Fee defaulters', absent_today: "Today's absent parents" };
+  const recipient = target === 'single' ? phone : target === 'class' ? 'Class ' + (cls || '') : (audienceNames[target] || target);
+  let preview;
+  if (template.body_text) {
+    preview = renderTemplatePreview(template.body_text, variables);
+  } else if (varLabels.length) {
+    preview = varLabels.map((l, i) => l + ': ' + variables[i]).join('\n') + '\n\n(Tap ➕📝 next to this template and paste its message text to see the full message here.)';
+  } else {
+    preview = '(Fixed-text template — no values to fill in.)';
+  }
+  if (!confirm('PREVIEW — ' + template.label + '\n\nTo: ' + recipient + '\n\n──────────────\n' + preview + '\n──────────────\n\nSend this now?')) return;
 
   const sending = document.getElementById('broadcast-sending');
   if (sending) sending.style.display = 'block';
   try {
-    const body = { template_id: templateId, target, class_name: cls || undefined, variables };
+    const body = { template_id: templateId, target, class_name: cls || undefined, variables, phone: target === 'single' ? phone : undefined };
     const res = await api('/api/admin/broadcast', { method: 'POST', body: JSON.stringify(body) });
     if (res.aborted) showToast('⛔ Stopped after the first failure, since every recipient would fail the same way: ' + (res.first_error || 'see server logs'));
     else showToast((res.failed ? '⚠️ ' : '✅ ') + 'Template sent to ' + (res.sent||0) + '/' + (res.total||0) + (res.failed ? ' — ' + res.failed + ' failed: ' + (res.first_error || 'see server logs') : ''));
